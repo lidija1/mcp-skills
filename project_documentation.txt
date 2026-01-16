@@ -1,0 +1,63 @@
+Project Documentation: SandboxPlaywright
+Overview
+SandboxPlaywright is a test automation framework built with Python, utilizing Playwright for browser automation and
+pytest as the test runner. It implements Behavior-Driven Development (BDD) using pytest-bdd and the Page Object Model
+(POM) pattern for maintainability.
+
+Technology Stack
+Language: Python
+Browser Automation: Playwright
+Test Runner: pytest with pytest-bdd
+Reporting: Allure
+Data Handling: pandas, openpyxl (Excel support)
+Configuration: python-dotenv for environment variables
+
+Project Structure
+
+The project is organized into logical components:
+1. ui/ - User Interface Automation
+Contains all code related to UI testing.
+features/: Gherkin feature files defining test scenarios.
+login.feature : Scenarios for user authentication.
+personalAuto.feature : Scenarios for Personal Auto policy creation (currently under development).
+pages/: Page Object Model implementations.
+base_page.py : Common methods shared across all pages.
+login_page.py : Encapsulates login page interactions (selectors and methods).
+new_quote_page.py, policy_page.py : Placeholders/Impl for quote and policy flows.
+
+2. api/ - API Automation
+Contains code for backend testing.
+
+clients/: HTTP clients for interacting with APIs.
+auth_client.py : Handling authentication tokens.
+base_client.py : Base wrapper for API requests.
+policy_client.py : Client for policy-related endpoints.
+
+3. utils/ - Utilities
+Helper functions and classes.
+excel_reader.py : robustness utility to read test data from Excel files (Pandas/OpenPyXL). Supports relative paths and header normalization.
+assertions.py, logger.py, waiters.py : Helper modules for logging, waiting, and assertions.
+
+4. testdata/
+Stores external data files (e.g., .xlsx files for data-driven testing).
+Implemented Features (Current State)
+-Login
+Feature:
+-ui/features/login.feature
+Page Object:
+-ui/pages/login_page.py
+Status: Fully implemented.
+Mechanism: Uses environment variables (PARTNER_NUM, USERNAME, PASSWORD) for credentials. Includes handling for the "Employee Portal" splash screen.
+Data-Driven Testing (Excel)
+Utility: utils/excel_reader.py
+Status: Implemented and recently debugged.
+Functionality: Capable of reading specific sheets and rows from Excel files (testdata/static/AutoData.xlsx),
+normalizing headers for consistent access.
+
+Personal Auto Policy (In Progress)
+Feature: ui/features/personalAuto.feature
+Status: Scaffolding exists. The Create a new personal auto policy scenario is defined but most steps are currently commented out. Data loading from Excel is active.
+
+Configuration
+pytest.ini: Configures test markers (@login, @auto, @smoke) and Allure reporting directories.
+Run Command: Tests are typically run via pytest, e.g., pytest -m login.

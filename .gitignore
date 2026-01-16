@@ -1,0 +1,32 @@
+# Environment files
+.env
+.env.local
+config/secrets.yaml
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+# Allure
+allure-results/
+allure-report/
+# Playwright
+playwright-report/
+test-results/
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+# OS
+.DS_Store
+Thumbs.db
+

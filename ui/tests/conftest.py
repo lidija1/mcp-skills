@@ -20,9 +20,9 @@ def shared_user_login(login_page):
     login_page.fill_credentials_from_env()
     login_page.click_login()
 
+
 @given(parsers.parse('the data is loaded "{excel_path}", "{sheet_name}", "{tc_id}"'), target_fixture="test_data")
 def load_excel_data(excel_path, sheet_name, tc_id):
-
     all_data = ExcelReader.get_excel_data(excel_path, sheet_name)
     # Filtriramo red po TC_ID koloni
     current_row = next(
@@ -44,6 +44,7 @@ def new_quote(new_quote_page):
     new_quote_page.click_agent_radio_button()
     new_quote_page.click_next_button()
 
+
 @when("I create a new customer")
 def create_new_customer(page, test_data):
     customer_page = CustomerPage(page)
@@ -63,3 +64,11 @@ def create_new_customer(page, test_data):
     page.click(customer_page.search_button)
     page.click(customer_page.create_new_customer_button)
     page.click(customer_page.next_button)
+    page.click(customer_page.skip_button)
+
+
+@when ("I provide PA information")
+def step_impl(quote_registration, test_data):
+    quote_registration.fill_form(test_data)
+    quote_registration.set_eff_date(test_data)
+    quote_registration.click_next()

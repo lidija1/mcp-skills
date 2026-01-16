@@ -1,6 +1,7 @@
 import pytest
 from ui.pages.login_page import LoginPage
 from ui.pages.new_quote_page import newQuote
+from ui.pages.quote_registration import QuoteRegistration
 from utils.excel_reader import ExcelReader
 from ui.pages.customer_page import CustomerPage
 
@@ -24,6 +25,10 @@ def excel_data():
 @pytest.fixture
 def customer_page(page):
     return CustomerPage(page)
+
+@pytest.fixture
+def quote_registration(page):
+    return QuoteRegistration(page)
 
 
 # Ovde možeš dodati i druge stranice kako ih budeš pravio

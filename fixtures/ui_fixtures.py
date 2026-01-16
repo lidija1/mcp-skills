@@ -2,6 +2,7 @@ import pytest
 from ui.pages.login_page import LoginPage
 from ui.pages.new_quote_page import newQuote
 from utils.excel_reader import ExcelReader
+from ui.pages.customer_page import CustomerPage
 
 @pytest.fixture
 def login_page(page):
@@ -19,6 +20,10 @@ def new_quote_page(page):
 def excel_data():
     path = "C:\Projekti\SandboxPlaywright\testdata\static\AutoData.xlsx"
     return ExcelReader.get_excel_data(path)
+
+@pytest.fixture
+def customer_page(page):
+    return CustomerPage(page)
 
 
 # Ovde možeš dodati i druge stranice kako ih budeš pravio

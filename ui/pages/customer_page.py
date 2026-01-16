@@ -1,0 +1,28 @@
+from ui.pages.base_page import BasePage
+
+
+class CustomerPage(BasePage):
+    def __init__(self, page):
+        super().__init__(page)
+        self.customer_type = "//div[text()='Customer Type']/../../../..//input[@value='Individual']"
+        self.first_name = "//input[@osviewid='PAI_1086048_OT_3380946_OI_1_BI_1129948_CI_16118048']"
+        self.last_name = "//input[@osviewid='PAI_1086048_OT_3380946_OI_1_BI_1129948_CI_16118248']"
+        self.dob = "//div[text()='Date of Birth']/../../../..//input"
+        self.email = "//div[text()='Email']/../../../..//input"
+        self.phone_number = "//div[text()='Phone']/../../../..//input"
+        self.zip_code = "//div[text()='ZIP Code']/../../../..//input"
+        self.address = "//div[text()='Address Line 1']/../../../..//input"
+        self.search_button = "//span[text()='>>> Search']"
+        self.create_new_customer_button = "//span[text()='>>> Create A New Customer']"
+        self.next_button = "//span[text()='   >>> next']"
+        self.skip_button = "//span[text()='>>> skip']"
+
+    def fill_customer_form(self, data):
+        self.page.fill(self.first_name, data["FIRSTNAME"])
+        self.page.fill(self.last_name, data["LASTNAME"])
+        self.page.fill(self.dob, data["DOB"])
+        self.page.fill(self.email, data["EMAIL"])
+        self.page.fill(self.phone_number, str(data["PHONENUM"]))
+        self.page.fill(self.zip_code, str(data["ZIP"]))
+        self.page.fill(self.address, data["ADDRESS"])
+

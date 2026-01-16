@@ -7,8 +7,8 @@ Feature: Personal Auto Creation
   Scenario Outline: Create a new personal auto policy
     Given the data is loaded "<ExcelData>", "<SHEET>", "<TC_ID>"
     When I create a new quote
-#    And I create a new customer
-#    And I provide PA information
+    When I create a new customer
+    And I provide PA information
 #    And I provide Driver Details
 #    Then I provide Vehicle Details
 #    And I provide policy term details

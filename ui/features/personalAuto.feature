@@ -8,7 +8,8 @@ Feature: Personal Auto Creation
     Given the data is loaded "<ExcelData>", "<SHEET>", "<TC_ID>"
     When I create a new quote
     When I create a new customer
-    When I provide PA information
+    When I provide quote registration details
+    When I provide quote summary PA info
 #    And I provide Driver Details
 #    Then I provide Vehicle Details
 #    And I provide policy term details

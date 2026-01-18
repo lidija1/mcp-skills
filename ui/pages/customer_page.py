@@ -19,13 +19,13 @@ class CustomerPage(BasePage):
         self.skip_button = "//span[text()='>>> skip']"
 
     def fill_customer_form(self, data):
-        self.page.fill(self.first_name, data["FIRSTNAME"])
+        self.type_text(self.first_name, data["FIRSTNAME"])
         self.page.fill(self.last_name, data["LASTNAME"])
         self.page.fill(self.dob, data["DOB"])
 
         self.page.fill(self.phone_number, str(data["PHONENUM"]))
         self.page.fill(self.zip_code, str(data["ZIP"]))
-        self.page.fill(self.address, data["ADDRESS"])
+        self.type_text(self.address, data["ADDRESS"])
 
     def enter_email(self, data):
         email_from_excel = data.get("EMAIL")

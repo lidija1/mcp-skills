@@ -32,8 +32,17 @@ def create_new_customer(customer_page, test_data):
     customer_page.click_skip()
 
 
-@when ("I provide PA information")
-def step_impl(quote_registration, test_data):
+@when ("I provide quote registration details")
+def step_quote_reg(quote_registration, test_data):
     quote_registration.fill_form(test_data)
     quote_registration.set_eff_date(test_data)
     quote_registration.click_next()
+
+
+@when("I provide quote summary PA info")
+def step_pa_info(quote_summary, test_data):
+    quote_summary.set_billing(test_data)
+    quote_summary.misleading_radio(test_data)
+    quote_summary.damage_radio(test_data)
+    quote_summary.click_save()
+    quote_summary.click_next_red()

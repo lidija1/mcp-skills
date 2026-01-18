@@ -15,6 +15,7 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+screenshots/
 # Allure
 allure-results/
 allure-report/

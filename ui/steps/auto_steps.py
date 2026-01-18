@@ -1,7 +1,5 @@
 from pytest_bdd import when
 
-from ui.pages.customer_page import CustomerPage
-
 
 @when("I create a new quote")
 def new_quote(new_quote_page):
@@ -16,7 +14,7 @@ def create_new_customer(customer_page, test_data):
 
 
     # Čekamo da polje First Name bude vidljivo
-    # page.wait_for_selector(customer_page.first_name, timeout=5000)  # 5s max
+    customer_page.wait_visible(customer_page.first_name, timeout=5000)  # 5s max
 
     # Popuni formu
     customer_page.fill_customer_form(test_data)
@@ -28,10 +26,10 @@ def create_new_customer(customer_page, test_data):
     # page.screenshot(path=f"screenshots/customer_filled_{timestamp}.png", full_page=True)
 
     # Klikovi
-    customer_page.click(customer_page.search_button)
-    customer_page.click(customer_page.create_new_customer_button)
-    customer_page.click(customer_page.next_button)
-    customer_page.click(customer_page.skip_button)
+    customer_page.click_search()
+    customer_page.click_create_new_customer()
+    customer_page.click_next()
+    customer_page.click_skip()
 
 
 @when ("I provide PA information")

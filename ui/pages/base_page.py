@@ -9,6 +9,11 @@ class BasePage:
         locator.wait_for(state="visible", timeout=timeout)
         return locator
 
+    def wait_clickable(self, selector: str, timeout: int = 15000):
+        locator = self.page.locator(selector)
+        locator.wait_for(state="attached", timeout=timeout)
+        return locator
+
     def type_text(self, selector: str, value: str, delay: int = 20):
         """Standard fill can be too fast for OneShield, using sequential press."""
         locator = self.wait_visible(selector)
@@ -16,5 +21,5 @@ class BasePage:
         locator.fill(value)
 
     def click_element(self, selector: str):
-        locator = self.wait_visible(selector)
+        locator = self.wait_clickable(selector)
         locator.click()

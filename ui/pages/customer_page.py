@@ -31,3 +31,17 @@ class CustomerPage(BasePage):
         email_from_excel = data.get("EMAIL")
         processed_email = process_email(email_from_excel)
         self.page.fill(self.email, processed_email)
+
+    def click_search(self):
+        self.click_element(self.search_button)
+
+    def click_create_new_customer(self):
+        self.click_element(self.create_new_customer_button)
+
+    def click_next(self):
+        self.click_element(self.next_button)
+
+    def click_skip(self):
+        self.click_element(self.skip_button)
+
+

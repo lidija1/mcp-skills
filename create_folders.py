@@ -24,7 +24,7 @@ def create_framework_structure():
         "fixtures/api_fixtures.py",
         "fixtures/ui_fixtures.py",
         "fixtures/db_fixtures.py",
-        "conftest.py",
+        "steps.py",
         "pytest.ini",
         "requirements.txt",
         ".gitignore"

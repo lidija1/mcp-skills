@@ -5,6 +5,8 @@ load_dotenv()
 # Lista putanja do tvojih fixture fajlova (bez .py ekstenzije)
 pytest_plugins = [
     "fixtures.ui_fixtures",
+    "ui.steps.common_steps",
+    "ui.steps.auto_steps",
     # "fixtures.api_fixtures",  <-- Kasnije kad dodaš API
 ]
 

@@ -1,5 +1,3 @@
-from jinja2.nodes import And
-from pytest_bdd.types import WHEN
 
 from utils.excel_reader import ExcelReader
 from pytest_bdd import given, parsers, when
@@ -54,6 +52,7 @@ def create_new_customer(page, test_data):
 
     # Popuni formu
     customer_page.fill_customer_form(test_data)
+    customer_page.enter_email(test_data)
 
     # Screenshot za proveru
     import time

@@ -1,4 +1,5 @@
 from ui.pages.base_page import BasePage
+from utils.email_util import process_email
 
 
 class CustomerPage(BasePage):
@@ -21,8 +22,12 @@ class CustomerPage(BasePage):
         self.page.fill(self.first_name, data["FIRSTNAME"])
         self.page.fill(self.last_name, data["LASTNAME"])
         self.page.fill(self.dob, data["DOB"])
-        self.page.fill(self.email, data["EMAIL"])
+
         self.page.fill(self.phone_number, str(data["PHONENUM"]))
         self.page.fill(self.zip_code, str(data["ZIP"]))
         self.page.fill(self.address, data["ADDRESS"])
 
+    def enter_email(self, data):
+        email_from_excel = data.get("EMAIL")
+        processed_email = process_email(email_from_excel)
+        self.page.fill(self.email, processed_email)

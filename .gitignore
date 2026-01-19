@@ -22,6 +22,7 @@ allure-report/
 # Playwright
 playwright-report/
 test-results/
+logs/
 # IDE
 .idea/
 .vscode/
@@ -31,3 +32,4 @@ test-results/
 .DS_Store
 Thumbs.db
 
+/FRAMEWORK_GUIDE.md

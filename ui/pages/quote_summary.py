@@ -14,7 +14,7 @@ class QuoteSummary(BasePage):
     def set_billing(self, data):
         self.page.fill(self.billing, data['BILLING METHOD'])
 
-    def misleading_radio(self, data: dict):
+    def misleading_radio(self, data):
         self.answer_question("Has anyone knowingly provided material, false, or misleading information ", data["FALSE INFO"])
 
     def damage_radio(self, data):

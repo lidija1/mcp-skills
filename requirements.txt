@@ -8,3 +8,4 @@ pytest-bdd
 pandas               # Za čitanje Excel fajlova
 openpyxl             # Engine za pandas da čita .xlsx fajlove
 pytest-html
+requests

@@ -1,63 +1,98 @@
-Project Documentation: SandboxPlaywright
-Overview
-SandboxPlaywright is a test automation framework built with Python, utilizing Playwright for browser automation and
-pytest as the test runner. It implements Behavior-Driven Development (BDD) using pytest-bdd and the Page Object Model
-(POM) pattern for maintainability.
+================================================================================
+                    SANDBOX PLAYWRIGHT PROJECT DOCUMENTATION
+================================================================================
+                        Last Updated: January 27, 2026,
+                        Status: Refactored & Optimized (JSON-First)
+================================================================================
 
-Technology Stack
-Language: Python
-Browser Automation: Playwright
-Test Runner: pytest with pytest-bdd
-Reporting: Allure
-Data Handling: pandas, openpyxl (Excel support)
-Configuration: python-dotenv for environment variables
+1. PROJECT OVERVIEW
+-------------------
+SandboxPlaywright is an enterprise-grade test automation framework designed for
+end-to-end testing of complex insurance workflows. The framework is built on
+Python, utilizing Playwright for browser automation and pytest-bdd for 
+Behavior-Driven Development. 
 
-Project Structure
+Recent architectural updates have transitioned the framework to a "JSON-First" 
+data model and unified the Page Object Model (POM) into a logical application-based 
+structure, removing legacy complexities.
 
-The project is organized into logical components:
-1. ui/ - User Interface Automation
-Contains all code related to UI testing.
-features/: Gherkin feature files defining test scenarios.
-login.feature : Scenarios for user authentication.
-personalAuto.feature : Scenarios for Personal Auto policy creation (currently under development).
-pages/: Page Object Model implementations.
-base_page.py : Common methods shared across all pages.
-login_page.py : Encapsulates login page interactions (selectors and methods).
-new_quote_page.py, policy_page.py : Placeholders/Impl for quote and policy flows.
+2. TECHNOLOGY STACK
+-------------------
+- Core: Python 3.x, Playwright (Sync API)
+- Test Runner: pytest
+- BDD: pytest-bdd
+- Reporting: Allure Framework
+- Data Management: Native JSON (Primary), pandas/openpyxl (Legacy Excel)
+- Path Handling: Pathlib (for cross-environment reliability)
+- Environment Config: python-dotenv
 
-2. api/ - API Automation
-Contains code for backend testing.
+3. ARCHITECTURE & DESIGN PATTERNS
+---------------------------------
+3.1 Unified Page Object Model (POM)
+The framework follows a strict POM, organized by functional modules:
+- Common: Shared components (Login, Customer Creation)
+- Auto: Insurance-specific workflow pages (Vehicle, Driver, Coverage)
 
-clients/: HTTP clients for interacting with APIs.
-auth_client.py : Handling authentication tokens.
-base_client.py : Base wrapper for API requests.
-policy_client.py : Client for policy-related endpoints.
+3.2 Data-Driven Testing (DDT)
+Data is decoupled from scripts. The framework supports highly performant JSON 
+loading which maps directly to Python dictionaries, integrated into the 
+pytest-bdd fixture lifecycle.
 
-3. utils/ - Utilities
-Helper functions and classes.
-excel_reader.py : robustness utility to read test data from Excel files (Pandas/OpenPyXL). Supports relative paths and header normalization.
-assertions.py, logger.py, waiters.py : Helper modules for logging, waiting, and assertions.
+3.3 Modern Locator Strategy
+Page objects prioritize native Playwright locators (ByRole, ByText, ByLabel) 
+ensuring tests are resilient to DOM changes compared to brittle XPaths.
 
-4. testdata/
-Stores external data files (e.g., .xlsx files for data-driven testing).
-Implemented Features (Current State)
--Login
-Feature:
--ui/features/login.feature
-Page Object:
--ui/pages/login_page.py
-Status: Fully implemented.
-Mechanism: Uses environment variables (PARTNER_NUM, USERNAME, PASSWORD) for credentials. Includes handling for the "Employee Portal" splash screen.
-Data-Driven Testing (Excel)
-Utility: utils/excel_reader.py
-Status: Implemented and recently debugged.
-Functionality: Capable of reading specific sheets and rows from Excel files (testdata/static/AutoData.xlsx),
-normalizing headers for consistent access.
+4. PROJECT STRUCTURE
+--------------------
+SandboxPlaywright/
+├── ui/
+│   ├── features/           # BDD Gherkin (.feature) files
+│   ├── pages/              # Unified POM Classes
+│   │   ├── common/         # Core application pages
+│   │   └── auto/           # Auto insurance specific pages
+│   └── steps/              # Modular step definitions
+│       ├── auth_steps.py   # Authentication logic
+│       ├── data_steps.py   # JSON/Excel data loading engine
+│       └── auto_workflow_steps.py # Business process orchestration
+├── testdata/
+│   └── static/             # AutoData.json (Primary), AutoData.xlsx
+├── utils/
+│   ├── json_reader.py      # Pathlib-based JSON DataLoader
+│   ├── excel_reader.py     # Legacy spreadsheet utility
+│   └── logger.py           # Allure-integrated logging system
+├── fixtures/               # Dependency injection & lifecycle mgmt
+├── logs/                   # Execution history
+├── conftest.py             # Global setup & Plugin registration
+└── pytest.ini              # Execution parameters & Markers
 
-Personal Auto Policy (In Progress)
-Feature: ui/features/personalAuto.feature
-Status: Scaffolding exists. The Create a new personal auto policy scenario is defined but most steps are currently commented out. Data loading from Excel is active.
+5. DATA MANAGEMENT (JSON STANDARDS)
+-----------------------------------
+The framework now utilizes CamelCase naming conventions in JSON to align with 
+modern API and data standards.
+- Entry point: `testCases` array.
+- Key Mapping:
+    - Primary: `FirstName`, `LastName`, `DOB`, `VehicleUse`.
+    - Format: Strings (to handle leading zeros in ZIPs/Phone Numbers).
+- Advantage: Performance is significantly higher than Excel-based parsing, 
+  and data is easily searchable via IDE.
 
-Configuration
-pytest.ini: Configures test markers (@login, @auto, @smoke) and Allure reporting directories.
-Run Command: Tests are typically run via pytest, e.g., pytest -m login.
+6. TEST EXECUTION & MARKERS
+---------------------------
+Execution is marker-driven:
+- `@smoke`: Critical core paths.
+- `@auto`: Full Personal Auto regression.
+- `@login`: Targeted authentication tests.
+
+Command Example: `pytest -m smoke --headed`
+
+7. REPORTING (ALLURE)
+---------------------
+Rich reporting is integrated via `pytest.ini`. Reports include:
+- Visual step-by-step breadcrumbs.
+- Automatic failure screenshots.
+- Embedded logic logs (DEBUG level in files, INFO in reports).
+- Execution data parameters matching the JSON record.
+
+Serve Report: `allure serve allure-results`
+
+================================================================================

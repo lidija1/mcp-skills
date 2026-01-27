@@ -1,8 +1,4 @@
-import pytest
-from pytest_bdd import scenario, given
-from playwright.sync_api import Page
-
-from ui.pages.login_page import LoginPage
+from pytest_bdd import scenario
 
 
 @scenario('../features/login.feature', 'Successfully login with valid credentials on OneShield')

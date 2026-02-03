@@ -1,8 +1,10 @@
 import re
+
 import allure
-import logging
 from playwright.sync_api import Page
+
 from utils.logger import setup_logger
+
 
 class BasePage:
     def __init__(self, page: Page):
@@ -25,7 +27,6 @@ class BasePage:
 
     @allure.step("Type text '{value}' into '{selector}'")
     def type_text(self, selector: str, value: str, delay: int = 5):
-        """Standard fill can be too fast for OneShield, using sequential press."""
         self.logger.info(f"Typing '{value}' into '{selector}'")
         locator = self.wait_visible(selector)
         locator.scroll_into_view_if_needed()
@@ -35,7 +36,7 @@ class BasePage:
         locator.clear()
         locator.press_sequentially(value, delay=delay)
 
-    def safe_fill(self, locator, value):  # DODAJ 'self' kao prvi parametar
+    def safe_fill(self, locator, value):
         locator.click()
         locator.fill("")
         locator.fill(value)
@@ -52,11 +53,25 @@ class BasePage:
         if not answer:
             return
         self.logger.info(f"Answering question '{group_name}' with '{answer}'")
-        # This is th method for radio buttons(i will need to add comments later)
+        # This is th method for radio buttons(I will need to add comments later)
         answer = str(answer).strip()
         group = self.page.get_by_role("radiogroup", name=re.compile(group_name, re.I))
         radio = group.get_by_label(re.compile(f"^{answer}$", re.I))
 
         radio.dispatch_event("click")
+
+    def read_summary(self, label_text: str) -> str:
+        """
+        Reads readonly/display value associated with a label.
+        Example use case: Policy Number, Status, Payment Method.
+        """
+        if not label_text:
+            return ""
+        self.logger.info(f"Reading display value for label '{label_text}'")
+        label_text = str(label_text).strip()
+        # use Playwright accessibility mapping (aria-labelledby)
+        element = self.page.get_by_label(label_text)
+        value = element.inner_text().strip()
+        return value
 
 

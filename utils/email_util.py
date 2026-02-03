@@ -3,13 +3,13 @@ import time
 
 def process_email(email: str) -> str:
     """
-    Menja {timestamp} placeholder sa trenutnim vremenom u milisekundama.
+    Replaces the placeholder "{timestamp}" in the email string with the current timestamp in milliseconds.
     """
-    if not email:  # Ovo menja email == null || email.isEmpty()
+    if not email:  # This changes email == null || email.isEmpty()
         return email
 
     if "{timestamp}" in email:
-        # time.time() daje sekunde, množenje sa 1000 daje milisekunde (kao Java)
+        # time.time() gives seconds, multiply by 1000 for milliseconds
         timestamp = str(int(time.time() * 1000))
         return email.replace("{timestamp}", timestamp)
 

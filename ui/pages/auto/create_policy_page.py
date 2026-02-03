@@ -1,5 +1,5 @@
 import time
-from ui.pages.base_page import BasePage
+from ui.pages.common.base_page import BasePage
 
 
 class CreatePolicyPage(BasePage):

@@ -1,6 +1,7 @@
 import time
 import allure
-from ui.pages.base_page import BasePage
+
+from ui.pages.common.base_page import BasePage
 
 
 class VehicleInfoPage(BasePage):
@@ -17,6 +18,8 @@ class VehicleInfoPage(BasePage):
         self.ownership = page.get_by_role("combobox", name="Ownership")
         self.save_button = page.get_by_role("button", name="save changes")
         self.tree_coverages_button = page.get_by_role("link", name="Coverages")
+        self.indicator_loading = page.locator(".x-loading-indicator")
+        self.x_loading_mask = page.locator(".x-mask")
 
     @allure.step("Fill vehicle info")
     def fill_vehicle_info(self, data):
@@ -35,27 +38,42 @@ class VehicleInfoPage(BasePage):
         """Select vehicle year."""
         year = data["Year"]
         self.logger.info(f"Setting year: {year}")
-        self.year_input.click()
-        self.page.locator(f"//li[text()='{year}']").click()
-        time.sleep(0.5)
+        # Definisanje očekivanja mrežnog odgovora
+        with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
+        # Akcija koja okida mrežni poziv
+            self.year_input.click()
+            self.page.locator(f"//li[text()='{year}']").click()
+
+        # Opciono: Provera da li je server vratio 'OK' status
+        response = response_info.value
+        if response.status != 200:
+            print(f"Warning: FieldProcessor returned status {response.status}")
+        # time.sleep(0.5)
 
     @allure.step("Set vehicle make")
     def set_make(self, data):
         """Select vehicle make."""
         make = data["Make"]
         self.logger.info(f"Setting make: {make}")
-        self.make.click()
-        self.page.locator(f"//li[text()='{make}']").click()
-        time.sleep(0.3)
+        with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
+            self.make.click()
+            self.page.locator(f"//li[text()='{make}']").click()
+        response = response_info.value
+        if response.status != 200:
+            print(f"Warning: FieldProcessor returned status {response.status}")
+
 
     @allure.step("Set vehicle model")
     def set_model(self, data):
         """Select vehicle model."""
         model = data["Model"]
         self.logger.info(f"Setting model: {model}")
-        self.model.click()
-        self.page.locator(f"//li[text()='{model}']").click()
-        time.sleep(0.3)
+        with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
+            self.model.click()
+            self.page.locator(f"//li[text()='{model}']").click()
+        response = response_info.value
+        if response.status != 200:
+            print(f"Warning: FieldProcessor returned status {response.status}")
 
     @allure.step("Set vehicle specification")
     def set_specification(self, data):

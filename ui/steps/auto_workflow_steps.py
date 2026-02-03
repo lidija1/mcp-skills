@@ -1,5 +1,9 @@
 """Auto insurance quote and policy workflow step definitions."""
+from datetime import datetime
+
 from pytest_bdd import when, given, then
+
+from utils.file_writer import save_summary_to_csv
 
 
 @when("i create a new quote")
@@ -54,7 +58,7 @@ def provide_driver_details(driver_info_page, test_data, log):
     """Fill driver information."""
     log.info("Filling driver details...")
     driver_info_page.fill_driver_info(test_data)
-    driver_info_page.click_vehicle_info_link(test_data)
+    driver_info_page.click_vehicle_info_link()
     log.info("Successfully filled driver details.")
 
 
@@ -77,8 +81,8 @@ def provide_policy_term_details(policy_term_page, test_data, log):
     log.info("Successfully filled policy term details.")
 
 
-@then("I create a policy from the quote")
-def create_policy_from_quote(create_policy_page, test_data, log):
+@when("I create a policy from the quote")
+def create_policy_from_quote(create_policy_page, log):
     """Create and bind a policy from the quote."""
     log.info("Creating policy from quote...")
     create_policy_page.click_issue()
@@ -86,3 +90,42 @@ def create_policy_from_quote(create_policy_page, test_data, log):
     create_policy_page.click_next()
     create_policy_page.click_bind()
     log.info("Successfully created and bound policy.")
+
+
+@then("I read and extract policy summary page details")
+def read_extract_summary(policy_summary_page, test_data, log):
+    """Extract details from the policy summary page."""
+    log.info("Extracting policy summary details...")
+    
+    details = {
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Policy Number": policy_summary_page.get_policy_number(),
+        "Program": policy_summary_page.get_program(),
+        "Customer Name": policy_summary_page.get_customer_name(),
+        "Status": policy_summary_page.get_status(),
+        "Payment Method": policy_summary_page.get_payment_method(),
+        "Primary Jurisdiction": policy_summary_page.get_jurisdiction(),
+        "Total Policy Premium": policy_summary_page.get_premium(),
+        "Payment Plan": policy_summary_page.get_payment_plan(),
+        "Employment Category": test_data.get("EmploymentCategory"),
+        "Vehicle Use": test_data.get("VehicleUse"),
+        "Ownership": test_data.get("Ownership"),
+        "Policy Coverage Option": test_data.get("PolicyCoverage")
+    }
+
+    path = save_summary_to_csv(details)
+    log.info("Data is saved to CSV file at: " + path)
+    
+    log.info("-" * 40)
+    log.info("POLICY SUMMARY DETAILS:")
+    for key, value in details.items():
+        log.info(f"{key}: {value}")
+    log.info("-" * 40)
+    
+    # Also print to stdout so it's visible in console output during -s run
+    print("\n" + "=" * 50)
+    print("POLICY SUMMARY REPORT")
+    print("=" * 50)
+    for key, value in details.items():
+        print(f"{key:20}: {value}")
+    print("=" * 50 + "\n")

@@ -1,4 +1,4 @@
-from ui.pages.base_page import BasePage
+from ui.pages.common.base_page import BasePage
 
 
 class DriverInfoPage(BasePage):
@@ -26,6 +26,6 @@ class DriverInfoPage(BasePage):
         self.answer_question("Certificate of Insurance Required?", data["SR22"])
         self.save_button.click()
 
-    def click_vehicle_info_link(self, data):
+    def click_vehicle_info_link(self):
         """Navigate to vehicle information page."""
         self.tree_vehicle_info.click()

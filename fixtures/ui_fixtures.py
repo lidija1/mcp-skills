@@ -1,5 +1,7 @@
 """UI page object fixtures for pytest-bdd tests."""
 import pytest
+
+from ui.pages.homeowner.quote_summary import HomeownerQuoteSummary
 from utils.excel_reader import ExcelReader
 from utils.json_reader import DataLoader
 
@@ -15,11 +17,18 @@ from ui.pages.auto.driver_info_page import DriverInfoPage
 from ui.pages.auto.vehicle_info_page import VehicleInfoPage
 from ui.pages.auto.policy_term_page import PolicyTermPage
 from ui.pages.auto.create_policy_page import CreatePolicyPage
+from ui.pages.common.policy_summary_page import PolicySummary
 
 
 # ============================================================================
 # Common Page Fixtures
 # ============================================================================
+
+@pytest.fixture
+def policy_summary_page(page):
+    """Policy summary page for data extraction."""
+    return PolicySummary(page)
+
 
 @pytest.fixture
 def login_page(page):
@@ -95,3 +104,4 @@ def json_data():
     """Load test data from JSON file."""
     path = "testdata/static/AutoData.json"
     return DataLoader.get_data(path)
+

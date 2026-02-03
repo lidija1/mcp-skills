@@ -6,7 +6,6 @@ from pytest_bdd import given
 def user_login(login_page, log):
     """
     Log in the user with credentials from environment variables.
-    This step is shared across all features that require authentication.
     """
     log.info("Starting login process...")
     login_page.navigate()

@@ -31,9 +31,17 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
-policy_summmary
-reports
+policy_summary/
+.policy_summary/
+reports/
+.reports/
+
 .screenshots/
 
 
 /FRAMEWORK_GUIDE.md
+
+# Ignore specific file types if they are generated
+*.png
+*.csv
+*.html

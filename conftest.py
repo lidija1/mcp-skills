@@ -28,12 +28,14 @@ def log():
 # -------------------------
 @pytest.fixture(scope="session")
 def browser_name(request):
-    browser = request.config.getoption("--browser")
-
+    browser = request.config.getoption("--browser", default="chromium")
     if isinstance(browser, list):
-        return browser[0]
+        if len(browser) > 0:
+            return browser[0]
+        return "chromium"
 
-    return browser
+
+    return browser if browser else "chromium"
 
 
 # -------------------------

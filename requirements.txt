@@ -12,3 +12,4 @@ requests
 matplotlib
 allure-python-commons
 behave
+pytest-timeout

@@ -32,7 +32,10 @@ logs/
 .DS_Store
 Thumbs.db
 policy_summary/
-reports
+.policy_summary/
+reports/
+.reports/
+
 .screenshots/
 
 

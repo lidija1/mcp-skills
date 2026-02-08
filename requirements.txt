@@ -2,11 +2,11 @@ pytest
 playwright
 pytest-playwright
 allure-pytest
-python-dotenv        # Za učitavanje .env fajlova (partner_num, username...)
-pytest-xdist         # Za paralelno izvršavanje testova (bitno za stabilnost)
+python-dotenv
+pytest-xdist
 pytest-bdd
-pandas               # Za čitanje Excel fajlova
-openpyxl             # Engine za pandas da čita .xlsx fajlove
+pandas
+openpyxl
 pytest-html
 requests
 matplotlib

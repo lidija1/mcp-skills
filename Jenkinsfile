@@ -5,8 +5,8 @@ pipeline {
         PARTNER_NUM = '0'
         // Ovde definišeš environment varijable koje su ti u .env fajlu
         AUTH = credentials('oneshield-login') 
-        USERNAMEE = '${env.AUTH_USR}'
-        PASSWORD = '${env.AUTH_PSW}'
+        USERNAMEE = "${env.AUTH_USR}"
+        PASSWORD = "${env.AUTH_PSW}"
     }
 
     stages {

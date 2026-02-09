@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         PARTNER_NUM = '0'
-        // Ovde definišeš environment varijable koje su ti u .env fajlu
+        // Here you can set any other environment variables you need for your tests
         AUTH = credentials('oneshield-login') 
         USERNAMEE = "${env.AUTH_USR}"
         PASSWORD = "${env.AUTH_PSW}"
@@ -12,7 +12,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // Jenkins će automatski povući kod sa GitHub-a
+                // JenJenkins automatcly check the code from the repository, but you can explicitly define it if needed
                 checkout scm
             }
         }
@@ -41,7 +41,7 @@ pipeline {
 
     post {
         always {
-            // Generisanje Allure reporta
+            // Generating Allure Report
             allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
         }
     }

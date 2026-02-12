@@ -125,15 +125,40 @@ def pytest_sessionfinish():
 def pytest_runtest_makereport(item, call):
     """
     Hook to capture screenshot on failure and attach it to Allure report.
+    Everytime when test outcome is not passed, take screenshot and attach to Allure report.
     """
     outcome = yield
     report = outcome.get_result()
 
+    # Capture screenshot if test failed (report.failed = True means test did not pass)
     if report.when == "call" and report.failed:
-        page = item.funcargs.get("page")
+        page = None
+
+        # Try to get the page fixture from funcargs
+        if hasattr(item, 'funcargs') and 'page' in item.funcargs:
+            page = item.funcargs.get("page")
+
+        # If not found in funcargs, try to get it from the fixture request
+        if not page and hasattr(item, '_request'):
+            try:
+                page = item._request.getfixturevalue("page")
+            except Exception:
+                pass
+
+        # Capture and attach screenshot if page is available
         if page:
-            allure.attach(
-                page.screenshot(full_page=True),
-                name=f"failure_{item.name}",
-                attachment_type=allure.attachment_type.PNG
-            )
+            try:
+                # Take screenshot as bytes (no need to save to file)
+                screenshot_bytes = page.screenshot(full_page=True)
+
+                # Attach screenshot directly from bytes in Allure report
+                allure.attach(
+                    screenshot_bytes,
+                    name=f"Failure_{item.name}",
+                    attachment_type=allure.attachment_type.PNG
+                )
+                print(f"\n📸 Screenshot captured for failed test: {item.name}")
+            except Exception as e:
+                print(f"\n⚠️ Failed to capture screenshot for {item.name}: {str(e)}")
+        else:
+            print(f"\n⚠️ Page fixture not available for screenshot in test: {item.name}")

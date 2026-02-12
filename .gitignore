@@ -39,8 +39,6 @@ Thumbs.db
 .screenshots/
 
 
-/FRAMEWORK_GUIDE.md
-
 # Ignore specific file types if they are generated
 *.png
 *.csv

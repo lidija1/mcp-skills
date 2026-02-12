@@ -14,3 +14,4 @@ allure-python-commons
 behave
 pytest-timeout
 pytest-cov
+flake8  # Code quality checker for Jenkins pipeline

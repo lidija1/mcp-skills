@@ -1,4 +1,4 @@
-pytest
+pytest  # Latest available version as of February 2026
 playwright
 pytest-playwright
 allure-pytest
@@ -6,10 +6,11 @@ python-dotenv
 pytest-xdist
 pytest-bdd
 pandas
-openpyxl
+openpyxl>=2.4.2
 pytest-html
-requests
+requests>=2.32.4
 matplotlib
 allure-python-commons
 behave
 pytest-timeout
+pytest-cov

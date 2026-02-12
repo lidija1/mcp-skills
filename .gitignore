@@ -31,9 +31,9 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
-policy_summary/
+
 .policy_summary/
-reports/
+
 .reports/
 
 .screenshots/
@@ -45,3 +45,12 @@ reports/
 *.png
 *.csv
 *.html
+
+# Ignore policy summary directory
+policy_summary/
+
+# Ignore reports directory
+reports/
+
+# Ignore specific report file
+report.html

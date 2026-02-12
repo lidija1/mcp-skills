@@ -3,6 +3,7 @@ pipeline {
 
     parameters {
         string(name: 'BROWSER', defaultValue: 'chromium', description: 'Browser to run the tests on (chromium, firefox, webkit)')
+        string(name: 'TEST_PATH', defaultValue: 'ui/', description: 'Path to the test file or directory to run')
     }
 
     environment {
@@ -23,12 +24,14 @@ pipeline {
 
         stage('Setup Environment') {
             steps {
-                bat """
+                // Set up Python virtual environment and install dependencies
+                // Install Playwright and Chromium browser
+                bat '''
                 python -m venv venv
                 call venv\\Scripts\\activate
                 pip install -r requirements.txt
                 playwright install chromium
-                """
+                '''
             }
         }
 
@@ -36,21 +39,23 @@ pipeline {
             steps {
                 // Run tests and generate Allure results
                 // Use the BROWSER parameter to specify the browser to run the tests on
+                // Use the TEST_PATH parameter to specify which tests to run
                 // Example: Set BROWSER to 'firefox' in Jenkins UI to run tests on Firefox
-                bat """
+                bat '''
                 call venv\\Scripts\\activate
-                if exist allure-results (rd /s /q allure-results) // Remove old Allure results if they exist
-                pytest %TEST_PATH% --browser=%BROWSER% --alluredir=allure-results // Run tests with the specified browser and save results to Allure directory
-                """
+                if exist allure-results (rd /s /q allure-results)
+                pytest %TEST_PATH% --browser=%BROWSER% --alluredir=allure-results
+                '''
             }
         }
 
         stage('Generate Coverage Report') {
             steps {
-                bat """
+                // Generate test coverage report in HTML format
+                bat '''
                 call venv\\Scripts\\activate
                 pytest --cov=./ --cov-report=html
-                """
+                '''
             }
         }
     }

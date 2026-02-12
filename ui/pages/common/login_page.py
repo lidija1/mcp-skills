@@ -50,3 +50,5 @@ class LoginPage(BasePage):
         """Click the login button."""
         self.logger.info("Clicking login button")
         self.login_btn.click()
+
+

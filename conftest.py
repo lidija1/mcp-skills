@@ -29,11 +29,16 @@ def log():
 @pytest.fixture(scope="session")
 def browser_name(request):
     browser = request.config.getoption("--browser", default="chromium")
-    if isinstance(browser, list):
-        if len(browser) > 0:
-            return browser[0]
-        return "chromium"
+    valid_browsers = ["chromium", "firefox", "webkit"]
 
+    if isinstance(browser, list):
+        if len(browser) > 0 and browser[0] in valid_browsers:
+            return browser[0]
+        else:
+            pytest.fail(f"Invalid browser specified in list: {browser}")
+
+    if browser not in valid_browsers:
+        pytest.fail(f"Invalid browser specified: {browser}. Valid options are: {valid_browsers}")
 
     return browser if browser else "chromium"
 
@@ -132,4 +137,3 @@ def pytest_runtest_makereport(item, call):
                 name=f"failure_{item.name}",
                 attachment_type=allure.attachment_type.PNG
             )
-

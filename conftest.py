@@ -66,7 +66,7 @@ def browser(playwright, browser_name):
         raise ValueError(f"Unsupported browser: {browser_name}")
 
     browser = browser_type.launch(
-        headless=True,
+        headless=False,
         slow_mo=100
     )
 

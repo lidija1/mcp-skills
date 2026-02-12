@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'BROWSER', defaultValue: 'chromium', description: 'Browser to run the tests on (chromium, firefox, webkit)')
+    }
+
     environment {
         PARTNER_NUM = '0'
         // Here you can set any other environment variables you need for your tests
@@ -30,10 +34,13 @@ pipeline {
 
         stage('Run Tests') {
             steps {
+                // Run tests and generate Allure results
+                // Use the BROWSER parameter to specify the browser to run the tests on
+                // Example: Set BROWSER to 'firefox' in Jenkins UI to run tests on Firefox
                 bat """
                 call venv\\Scripts\\activate
-                if exist allure-results (rd /s /q allure-results)
-                pytest --alluredir=allure-results
+                if exist allure-results (rd /s /q allure-results) // Remove old Allure results if they exist
+                pytest %TEST_PATH% --browser=%BROWSER% --alluredir=allure-results // Run tests with the specified browser and save results to Allure directory
                 """
             }
         }

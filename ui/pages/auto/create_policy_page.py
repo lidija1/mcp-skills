@@ -11,9 +11,23 @@ class CreatePolicyPage(BasePage):
         self.next_button = page.get_by_role("button", name=">>> next")
         self.bind_button = page.get_by_role("button", name=">>> bind", exact=True)
 
+    def policy_creation_steps(self):
+        """Execute steps to create a policy."""
+        self.click_issue()
+        self.wait_for_loader_to_disappear()
+        self.click_next()
+        self.wait_for_loader_to_disappear()
+        self.click_next()
+        self.wait_for_loader_to_disappear()
+        self.click_bind()
+        self.wait_for_loader_to_disappear()
+
     def click_issue(self):
         """Request policy issue."""
         self.request_issue.click()
+
+    def wait_for_loader_to_disappear(self):
+        self.spinner_wait("#ajax-sub-pre-loading")
 
     def click_next(self):
         """Proceed to next step."""

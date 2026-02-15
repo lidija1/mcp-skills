@@ -11,6 +11,13 @@ class NewQuotePage(BasePage):
         self.agent_radio_button = "//span[@osviewid='PAI_304805_OT_63_OI_2_BI_381805_RS']"
         self.next_button = page.get_by_role("button", name=">>> next")
 
+    def new_quote_steps(self):
+        """Execute steps to create a new quote."""
+        self.click_quotes_button()
+        self.click_new_quote_button()
+        self.click_agent_radio_button()
+        self.click_next_button()
+
     def click_quotes_button(self):
         """Navigate to quotes section."""
         self.quotes_button.click()

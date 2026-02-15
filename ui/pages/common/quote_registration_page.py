@@ -12,6 +12,14 @@ class QuoteRegistrationPage(BasePage):
         self.program = page.get_by_role("combobox", name="Program*")
         self.next_button = page.get_by_role("button", name="Next")
 
+    def quote_registration_steps(self, data):
+        """Perform quote registration steps."""
+        self.fill_producer(data)
+        self.fill_program(data)
+        self.set_effective_date(data)
+        self.click_next()
+        self.wait_for_loader_to_disappear()
+
     def fill_producer(self, data):
         """Fill producer field."""
         self.producer.fill(data["Producer"])
@@ -30,3 +38,6 @@ class QuoteRegistrationPage(BasePage):
     def click_next(self):
         """Proceed to next step."""
         self.next_button.click()
+
+    def wait_for_loader_to_disappear(self):
+        self.spinner_wait("#ajax-sub-pre-loading")

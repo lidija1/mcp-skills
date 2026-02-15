@@ -10,9 +10,21 @@ class QuoteSummaryPage(BasePage):
         self.billing = page.get_by_role("combobox", name="Billing Method*")
         self.save_button = page.get_by_role("button", name="save changes")
 
+    def summary_steps(self, data):
+        """Perform quote summary steps."""
+        self.set_billing(data)
+        self.wait_for_loader_to_disappear()
+        self.set_misleading_info(data)
+        self.set_damage_info(data)
+        self.click_save()
+        self.click_driver_info_link(data)
+
     def set_billing(self, data):
         """Set billing method."""
         self.billing.fill(data['BillingMethod'])
+
+    def wait_for_loader_to_disappear(self):
+        self.spinner_wait("#ajax-sub-pre-loading")
 
     def set_misleading_info(self, data):
         """Answer question about false/misleading information."""

@@ -1,6 +1,9 @@
 import os
 import allure
+from playwright.sync_api import expect
+
 from ui.pages.common.base_page import BasePage
+
 
 
 class LoginPage(BasePage):
@@ -28,12 +31,16 @@ class LoginPage(BasePage):
         self.logger.info("Clicking splash screen button")
         self.click_element(self.employee_portal)
 
+    def wait_for_login_page(self):
+        """Wait for the login page to be ready."""
+        self.logger.info("Waiting for login page to be ready")
+        expect(self.partner_num).to_be_visible(timeout=10000)  # Wait for partner number field
+        self.logger.info("Login page is ready")
+
     @allure.step("Fill credentials from Environment Variables")
     def fill_credentials_from_env(self):
         """Fill login credentials from environment variables."""
-        # OneShield often needs a small pause after splash
-        self.logger.info("Starting to fill credentials")
-        self.page.wait_for_timeout(4000)
+
         
         partner = os.getenv('PARTNER_NUM', 'default_val')
         user = os.getenv('USERNAMEE', 'default_val')

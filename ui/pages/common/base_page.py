@@ -4,6 +4,7 @@ import allure
 from playwright.sync_api import Page
 
 from utils.logger import setup_logger
+from playwright.sync_api import TimeoutError as PWTimeout
 
 
 class BasePage:
@@ -73,5 +74,15 @@ class BasePage:
         element = self.page.get_by_label(label_text)
         value = element.inner_text().strip()
         return value
+
+    def spinner_wait(self, selector: str, timeout: int = 60000):
+        """Wait for a loading spinner to disappear."""
+        self.logger.info(f"Waiting for spinner '{selector}' to disappear")
+        try:
+            self.page.wait_for_selector(selector, state="hidden", timeout=timeout)
+        except PWTimeout:
+
+            raise AssertionError('TEST FAILED: Loading mask is still visible after timeout')
+        self.logger.info('Spinner has disappeared')
 
 

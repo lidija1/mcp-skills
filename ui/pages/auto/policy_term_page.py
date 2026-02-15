@@ -10,12 +10,20 @@ class PolicyTermPage(BasePage):
         self.coverage = page.get_by_role("combobox", name="Policy Coverage Option*")
         self.rate_quote_button = page.get_by_role("button", name=">>> Rate Quote")
 
+    def policy_term_steps(self, data):
+        """Perform policy term steps."""
+        self.set_coverage(data)
+        self.wait_for_loader_to_disappear()
+        self.click_rate()
+
     def set_coverage(self, data):
         """Set policy coverage option."""
         coverage = data["PolicyCoverage"]
-        self.coverage.fill(coverage)
-        self.page.keyboard.press("Enter")  # Sometimes needed after fill on combobox
-        time.sleep(0.5)
+        self.coverage.click()
+        self.page.locator(f"//li[text()='{coverage}']").click()
+
+    def wait_for_loader_to_disappear(self):
+        self.spinner_wait("#ajax-sub-pre-loading")
 
     def click_rate(self):
         """Rate the quote."""

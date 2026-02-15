@@ -32,6 +32,7 @@ class VehicleInfoPage(BasePage):
         self.set_vehicle_use(data)
         self.set_ownership(data)
         self.click_save()
+        self.click_coverages_link()
 
     @allure.step("Set vehicle year")
     def set_year(self, data):

@@ -54,7 +54,7 @@ class BasePage:
         if not answer:
             return
         self.logger.info(f"Answering question '{group_name}' with '{answer}'")
-        # This is th method for radio buttons(I will need to add comments later)
+        # This is the method for radio buttons
         answer = str(answer).strip()
         group = self.page.get_by_role("radiogroup", name=re.compile(group_name, re.I))
         radio = group.get_by_label(re.compile(f"^{answer}$", re.I))

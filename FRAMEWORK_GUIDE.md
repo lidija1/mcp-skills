@@ -53,7 +53,7 @@ Page Objects (ui/pages/)
     ↓  (use BasePage helpers)
 Playwright Sync API
     ↓
-Browser (Chromium / Firefox / WebKit / Chrome / Edge)
+Browser (Chromium / Firefox / WebKit)
 ```
 
 ### Data Flow
@@ -92,6 +92,7 @@ AutoData.json  →  DataLoader  →  test_data dict  →  Step Definitions  → 
 ```
 pytest
 playwright
+pytest-playwright
 allure-pytest
 python-dotenv
 pytest-xdist
@@ -107,8 +108,6 @@ pytest-timeout
 pytest-cov
 flake8
 ```
-
-> **Note:** `pytest-playwright` is **not** used. The framework manages Playwright lifecycle directly via `conftest.py`, which allows custom browser options including Chrome and Edge channels.
 
 ---
 
@@ -500,9 +499,9 @@ The root `conftest.py` manages the entire Playwright lifecycle:
 | Fixture | Scope | Description |
 |---|---|---|
 | `log` | session | Logger instance via `setup_logger("PlaywrightTest")` |
-| `browser_name` | session | Reads `--browser` CLI option (default: `chromium`). Valid: `chromium`, `firefox`, `webkit`, `chrome`, `msedge` |
+| `browser_name` | session | Reads `--browser` CLI option (default: `chromium`) |
 | `playwright` | session | Playwright instance (context manager) |
-| `browser` | session | Launched browser (headless=False, slow_mo=100). For `chrome`/`msedge`, uses Chromium engine with the corresponding channel |
+| `browser` | session | Launched browser (headless=False, slow_mo=100) |
 | `context` | function | Fresh browser context per test (full-screen viewport) |
 | `page` | function | Fresh page per test |
 | `data` | function | Alias for `test_data` (from data_steps.py) |
@@ -714,8 +713,6 @@ pytest -m regression
 pytest --browser chromium
 pytest --browser firefox
 pytest --browser webkit
-pytest --browser chrome     # Uses system-installed Google Chrome
-pytest --browser msedge     # Uses system-installed Microsoft Edge
 
 # Run with verbose output
 pytest -v
@@ -729,12 +726,6 @@ pytest ui/tests/test_auto_workflow.py -k "TC_ID_0001"
 ```bash
 # Smoke tests, headed, on Firefox, with Allure
 pytest -m smoke --headed --browser firefox --alluredir=allure-results
-
-# Run login tests on Edge
-pytest -m login --browser msedge
-
-# Run smoke tests on Chrome
-pytest -m smoke --browser chrome
 
 # Full auto regression, parallel (4 workers)
 pytest -m auto -n 4
@@ -926,7 +917,7 @@ The `Jenkinsfile` defines a declarative pipeline with these stages:
 
 | Parameter | Default | Description |
 |---|---|---|
-| `BROWSER` | `chromium` | Browser engine (`chromium`, `firefox`, `webkit`, `chrome`, `msedge`) |
+| `BROWSER` | `chromium` | Browser engine (`chromium`, `firefox`, `webkit`) |
 | `TEST_PATH` | `ui/` | Directory or file to test |
 
 ### Credentials

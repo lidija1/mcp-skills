@@ -73,11 +73,11 @@ class HomeownerQuoteSummary(BasePage):
         self.save_button.click()
 
     def click_city_info_link(self, data):
-        """Navigate to homeowners info page."""
+        """Navigate to driver information page."""
         city = data["City"]
         city_info_link = self.page.get_by_role("link", name=re.compile(city, re.IGNORECASE))
         city_info_link.click()
 
-    def click_homeowners_info_link(self):
+    def click_homeowners_info_link(self, data):
         homeowners_info_link = self.page.get_by_role("link", name="homeowners | location coverage")
         homeowners_info_link.click()

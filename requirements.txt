@@ -1,5 +1,6 @@
 pytest  # Latest available version as of February 2026
 playwright
+pytest-playwright
 allure-pytest
 python-dotenv
 pytest-xdist

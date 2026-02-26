@@ -10,7 +10,7 @@ def save_summary_to_csv(details, folder_name="policy_summary"):
     file_path = os.path.join(folder_name, "policy_reports.csv")
     file_exists = os.path.isfile(file_path)
 
-    # Writing to CSV (mode 'a' - append, so that we don't overwrite existing data)
+    # 2. Writing in CVS (mode 'a' - append, so that we don't overwrite existing data)
     with open(file_path, mode='a', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=details.keys())
 

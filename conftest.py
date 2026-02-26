@@ -17,6 +17,17 @@ pytest_plugins = [
     ]
 
 # -------------------------
+# Register custom command-line options
+# -------------------------
+def pytest_addoption(parser):
+    parser.addoption(
+        "--browser",
+        action="store",
+        default="chromium",
+        help="Specify the browser to use: chromium, firefox, webkit, chrome, or msedge"
+    )
+
+# -------------------------
 # Logger
 # -------------------------
 @pytest.fixture(scope="session")
@@ -29,7 +40,7 @@ def log():
 @pytest.fixture(scope="session")
 def browser_name(request):
     browser = request.config.getoption("--browser", default="chromium")
-    valid_browsers = ["chromium", "firefox", "webkit"]
+    valid_browsers = ["chromium", "firefox", "webkit", "chrome", "msedge"]
 
     if isinstance(browser, list):
         if len(browser) > 0 and browser[0] in valid_browsers:

@@ -24,6 +24,7 @@ pytest_plugins = [
     "ui.steps.auth_steps",
     "ui.steps.data_steps",
     "ui.steps.auto_workflow_steps",
+    "ui.steps.customer_validation_steps",
     ]
 
 # -------------------------

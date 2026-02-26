@@ -1,0 +1,61 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Test results and reports
+allure-results/
+allure-report/
+reports/
+report.html
+screenshots/
+logs/
+*.log
+
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# pytest cache
+.pytest_cache/
+
+# Environment files (should be mounted or passed at runtime)
+.env
+.env.local
+
+# Documentation (optional - uncomment if not needed in container)
+# README.md
+# *.md
+
+# CI/CD files
+Jenkinsfile
+.github/
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Policy summary and other generated files
+policy_summary/
+

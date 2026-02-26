@@ -2,7 +2,7 @@ import os
 
 
 def create_framework_structure():
-    # Glavna lista foldera i fajlova na osnovu tvoje strukture
+    # Main list of folders and files based on your structure
     structure = [
         "config/environments.yaml",
         "config/secrets.yaml",
@@ -31,24 +31,24 @@ def create_framework_structure():
     ]
 
     for path in structure:
-        # Razdvajamo putanju od imena fajla
+        # Separate path from file name
         directory = os.path.dirname(path)
 
-        # Kreiramo folder ako ne postoji
+        # Create folder if it doesn't exist
         if directory and not os.path.exists(directory):
             os.makedirs(directory)
-            print(f"Kreiran folder: {directory}")
+            print(f"Created folder: {directory}")
 
-        # Kreiramo prazan fajl
+        # Create empty file
         if not os.path.exists(path):
             with open(path, "w", encoding="utf-8") as f:
                 if path.endswith(".py") and "pages" in path:
                     f.write("# Page Object Model Class\n")
                 elif "requirements.txt" in path:
                     f.write("pytest\nplaywright\npytest-playwright\nallure-pytest\n")
-            print(f"Kreiran fajl: {path}")
+            print(f"Created file: {path}")
 
-    print("\n✅ Struktura frameworka je uspešno kreirana!")
+    print("\n✅ Framework structure successfully created!")
 
 
 if __name__ == "__main__":

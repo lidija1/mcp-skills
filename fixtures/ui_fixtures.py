@@ -60,7 +60,7 @@ def quote_registration_page(page):
 
 @pytest.fixture
 def quote_summary_page(page):
-    """Quote summary page insurance."""
+    """Quote summary page for auto insurance."""
     return QuoteSummaryPage(page)
 
 

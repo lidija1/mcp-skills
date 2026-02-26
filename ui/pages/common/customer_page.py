@@ -1,6 +1,7 @@
 import time
 
 import allure
+from playwright.sync_api import expect
 
 from ui.pages.common.base_page import BasePage
 from utils.email_util import process_email
@@ -18,7 +19,10 @@ class CustomerPage(BasePage):
         self.email = page.get_by_role("textbox", name="Email")
         self.phone_number = page.get_by_role("textbox", name="Phone")
         self.zip_code = page.get_by_role("textbox", name="ZIP Code")
+        self.state = page.get_by_role("combobox", name="State")
+        self.city = page.get_by_role("combobox", name="City")
         self.address = page.get_by_role("textbox", name="Address Line 1")
+        self.click_outside = page.get_by_text("Search for a customer")
         self.search_button = page.get_by_role("button", name=">>> Search")
         self.create_new_customer = page.get_by_role("button", name=">>> Create A New Customer")
         self.next_button = page.get_by_role("button", name=">>> next")
@@ -31,6 +35,8 @@ class CustomerPage(BasePage):
         self.zip_code_input(data)
         self.customer_type_input(data)
         self.address_input(data)
+        self.state_input(data)
+        self.city_input(data)
         self.dob_input(data)
         self.phone_number_input(data)
         self.enter_email(data)

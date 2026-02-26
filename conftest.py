@@ -56,19 +56,31 @@ def playwright():
 # -------------------------
 @pytest.fixture(scope="session")
 def browser(playwright, browser_name):
-    browser_type = {
-        "chromium": playwright.chromium,
-        "firefox": playwright.firefox,
-        "webkit": playwright.webkit,
-    }.get(browser_name)
+    # Chrome and Edge are Chromium channels, not separate engines
+    channel_map = {
+        "chrome": "chrome",
+        "msedge": "msedge",
+    }
+
+    if browser_name in channel_map:
+        browser_type = playwright.chromium
+        channel = channel_map[browser_name]
+    else:
+        browser_type = {
+            "chromium": playwright.chromium,
+            "firefox": playwright.firefox,
+            "webkit": playwright.webkit,
+        }.get(browser_name)
+        channel = None
 
     if not browser_type:
         raise ValueError(f"Unsupported browser: {browser_name}")
 
-    browser = browser_type.launch(
-        headless=False,
-        slow_mo=100
-    )
+    launch_args = {"headless": True, "slow_mo": 100}
+    if channel:
+        launch_args["channel"] = channel
+
+    browser = browser_type.launch(**launch_args)
 
     yield browser
     browser.close()

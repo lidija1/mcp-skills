@@ -70,7 +70,11 @@ class CustomerPage(BasePage):
 
     @allure.step("Select Customer Type")
     def customer_type_input(self, data):
-        self.customer_type.fill(data["CustomerType"])
+        with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
+            self.customer_type.fill(data["CustomerType"])
+        response = response_info.value
+        if response.status != 200:
+            self.logger.info(f"Warning: FieldProcessor returned status {response.status}")
 
     @allure.step("Enter Date of Birth")
     def dob_input(self, data):

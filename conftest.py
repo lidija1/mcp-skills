@@ -26,6 +26,19 @@ def pytest_addoption(parser):
         default="chromium",
         help="Specify the browser to use: chromium, firefox, webkit, chrome, or msedge"
     )
+    parser.addoption(
+        "--headed",
+        action="store_true",
+        default=False,
+        help="Run tests in headed mode (show browser window)"
+    )
+    parser.addoption(
+        "--slow-mo",
+        action="store",
+        default=0,
+        type=int,
+        help="Slow down operations by specified milliseconds"
+    )
 
 # -------------------------
 # Logger
@@ -66,7 +79,7 @@ def playwright():
 # Browser instance (per session)
 # -------------------------
 @pytest.fixture(scope="session")
-def browser(playwright, browser_name):
+def browser(playwright, browser_name, request):
     # Chrome and Edge are Chromium channels, not separate engines
     channel_map = {
         "chrome": "chrome",
@@ -87,7 +100,11 @@ def browser(playwright, browser_name):
     if not browser_type:
         raise ValueError(f"Unsupported browser: {browser_name}")
 
-    launch_args = {"headless": True, "slow_mo": 100}
+    # Get headed and slow_mo options from command line
+    headed = request.config.getoption("--headed")
+    slow_mo = request.config.getoption("--slow-mo")
+
+    launch_args = {"headless": not headed, "slow_mo": slow_mo}
     if channel:
         launch_args["channel"] = channel
 
@@ -127,21 +144,21 @@ def data(test_data):
 # Session finish hook
 # -------------------------
 
-def pytest_sessionfinish():
-    """
-    This method is executed automatically at the end of the tests.
-    """
-    print("\n" + "=" * 30)
-    print("Generating business report...")
-
-    try:
-        # Calling the function to generate the trend chart
-        generate_trend_chart("policy_summary/policy_reports.csv")
-        print("Graph is generated successfully!")
-    except Exception as e:
-        print(f"Error generating graph: {e}")
-
-    print("=" * 30)
+# def pytest_sessionfinish():
+#     """
+#     This method is executed automatically at the end of the tests.
+#     """
+#     print("\n" + "=" * 30)
+#     print("Generating business report...")
+#
+#     try:
+#         # Calling the function to generate the trend chart
+#         generate_trend_chart("policy_summary/policy_reports.csv")
+#         print("Graph is generated successfully!")
+#     except Exception as e:
+#         print(f"Error generating graph: {e}")
+#
+#     print("=" * 30)
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -154,14 +171,26 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
 
     # Capture screenshot if test failed (report.failed = True means test did not pass)
+    # Skip screenshot for API tests (marked with @pytest.mark.api)
     if report.when == "call" and report.failed:
+        # Check if test is marked as API test
+        is_api_test = any(mark.name == 'api' for mark in item.iter_markers())
+
+        if is_api_test:
+            # Skip screenshot for API tests
+            return
+
         page = None
 
         # Try to get the page fixture from funcargs
+        # First, check if 'page' is directly available in funcargs (common for UI tests)
+        # Funcargs is a dictionary of fixture values that are available for the test function.
+        # If 'page' is one of the fixtures used in the test, it will be present in funcargs.
         if hasattr(item, 'funcargs') and 'page' in item.funcargs:
             page = item.funcargs.get("page")
 
         # If not found in funcargs, try to get it from the fixture request
+        # Some tests might not use 'page' directly as a fixture but might have it available through the request object.
         if not page and hasattr(item, '_request'):
             try:
                 page = item._request.getfixturevalue("page")
@@ -183,5 +212,3 @@ def pytest_runtest_makereport(item, call):
                 print(f"\n📸 Screenshot captured for failed test: {item.name}")
             except Exception as e:
                 print(f"\n⚠️ Failed to capture screenshot for {item.name}: {str(e)}")
-        else:
-            print(f"\n⚠️ Page fixture not available for screenshot in test: {item.name}")

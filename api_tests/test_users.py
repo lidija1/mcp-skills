@@ -10,18 +10,18 @@ BASE_URL = "https://jsonplaceholder.typicode.com"
 @allure.feature("User Management")
 @pytest.mark.api
 def test_get_single_user():
-    # Send request
+    # Slanje zahteva
     response = requests.get(f"{BASE_URL}/users/1")
 
-    # Extract data
+    # Izvlačenje podataka
     data = response.json()
 
-    # Print JSON data
+    # Ispis JSON podataka
     print("\n===== JSON Response =====")
     print(json.dumps(data, indent=2))
     print("========================\n")
 
-    # Validation (Interrogating the Response)
+    # Validacija (Interrogating the Response)
     assert response.status_code == 200
     assert "id" in data
     assert data["id"] == 1
@@ -37,7 +37,7 @@ def test_create_user():
     }
     response = requests.post(f"{BASE_URL}/users", json=payload)
 
-    # Print JSON data
+    # Ispis JSON podataka
     data = response.json()
     print("\n===== POST Response =====")
     print(json.dumps(data, indent=2))

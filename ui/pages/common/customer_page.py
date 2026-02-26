@@ -19,8 +19,8 @@ class CustomerPage(BasePage):
         self.email = page.get_by_role("textbox", name="Email")
         self.phone_number = page.get_by_role("textbox", name="Phone")
         self.zip_code = page.get_by_role("textbox", name="ZIP Code")
-        self.state = page.get_by_role("combobox", name="State")
-        self.city = page.get_by_role("combobox", name="City")
+        # self.state = page.get_by_role("combobox", name="State")
+        self.city = page.get_by_role("textbox", name="City")
         self.address = page.get_by_role("textbox", name="Address Line 1")
         self.click_outside = page.get_by_text("Search for a customer")
         self.search_button = page.get_by_role("button", name=">>> Search")
@@ -35,7 +35,7 @@ class CustomerPage(BasePage):
         self.zip_code_input(data)
         self.customer_type_input(data)
         self.address_input(data)
-        self.state_input(data)
+        # self.state_input(data)
         self.city_input(data)
         self.dob_input(data)
         self.phone_number_input(data)
@@ -62,9 +62,9 @@ class CustomerPage(BasePage):
         if response.status != 200:
             self.logger.info(f"Warning: FieldProcessor returned status {response.status}")
 
-    @allure.step("Select State")
-    def state_input(self, data):
-        self.state.fill(data["State"])
+    # @allure.step("Select State")
+    # def state_input(self, data):
+    #     self.state.fill(data["State"])
 
     @allure.step("Select City")
     def city_input(self, data):

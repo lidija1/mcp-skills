@@ -209,6 +209,6 @@ def pytest_runtest_makereport(item, call):
                     name=f"Failure_{item.name}",
                     attachment_type=allure.attachment_type.PNG
                 )
-                print(f"\n📸 Screenshot captured for failed test: {item.name}")
+                print(f"\n Screenshot captured for failed test: {item.name}")
             except Exception as e:
-                print(f"\n⚠️ Failed to capture screenshot for {item.name}: {str(e)}")
+                print(f"\n Failed to capture screenshot for {item.name}: {str(e)}")

@@ -23,12 +23,15 @@ A modern, scalable Python automation framework built for end-to-end testing of e
 10. [Logging](#10-logging)
 11. [Screenshot Capture on Failure](#11-screenshot-capture-on-failure)
 12. [Business Reporting (Policy Reporter)](#12-business-reporting-policy-reporter)
-13. [CI/CD — Jenkins Pipeline](#13-cicd--jenkins-pipeline)
-14. [Configuration Files Reference](#14-configuration-files-reference)
-15. [Utility Modules Reference](#15-utility-modules-reference)
-16. [Coding Standards & Best Practices](#16-coding-standards--best-practices)
-17. [Troubleshooting](#17-troubleshooting)
-18. [Extending the Framework](#18-extending-the-framework)
+13. [API Testing](#13-api-testing)
+14. [Performance Testing](#14-performance-testing)
+15. [Docker Support](#15-docker-support)
+16. [CI/CD — Jenkins Pipeline](#16-cicd--jenkins-pipeline)
+17. [Configuration Files Reference](#17-configuration-files-reference)
+18. [Utility Modules Reference](#18-utility-modules-reference)
+19. [Coding Standards & Best Practices](#19-coding-standards--best-practices)
+20. [Troubleshooting](#20-troubleshooting)
+21. [Extending the Framework](#21-extending-the-framework)
 
 ---
 
@@ -84,15 +87,15 @@ AutoData.json  →  DataLoader  →  test_data dict  →  Step Definitions  → 
 | Test Timeout | pytest-timeout | Latest | Prevents tests from hanging |
 | Code Quality | flake8 | Latest | Linting for CI pipeline |
 | Visualization | matplotlib | Latest | Policy premium trend charts |
-| HTTP Client | requests | >=2.32.4 | API calls (if needed) |
+| HTTP Client | requests | >=2.32.4 | API testing & HTTP calls |
 | CI/CD | Jenkins | — | Automated pipeline execution |
+| Containerization | Docker | — | Reproducible test environments |
 
 ### Full `requirements.txt`
 
 ```
 pytest
 playwright
-pytest-playwright
 allure-pytest
 python-dotenv
 pytest-xdist
@@ -109,6 +112,8 @@ pytest-cov
 flake8
 ```
 
+> **Note:** `pytest-playwright` was removed — the framework manages the Playwright lifecycle directly via `conftest.py` fixtures.
+
 ---
 
 ## 3. Project Structure
@@ -120,6 +125,9 @@ SandboxPlaywright/
 ├── pytest.ini                   # Pytest configuration (markers, addopts, logging)
 ├── requirements.txt             # Python dependencies
 ├── Jenkinsfile                  # CI/CD pipeline definition
+├── Dockerfile                   # Docker containerization for test execution
+├── .dockerignore                # Files excluded from Docker build context
+├── .gitignore                   # Git ignore rules
 ├── create_folders.py            # Scaffold script for initial project setup
 ├── .env                         # Environment variables (not committed to git)
 │
@@ -141,7 +149,7 @@ SandboxPlaywright/
 │   │   ├── __init__.py
 │   │   ├── common/              # Shared across all insurance products
 │   │   │   ├── base_page.py     # Abstract base with reusable helpers
-│   │   │   ├── login_page.py    # Splash screen & credential entry
+│   │   │   ├── login_page.py    # Splash screen, credentials & perf methods
 │   │   │   ├── customer_page.py # Customer creation & search
 │   │   │   ├── new_quote_page.py# Quote initiation
 │   │   │   ├── quote_registration_page.py  # Producer, date, program
@@ -161,8 +169,23 @@ SandboxPlaywright/
 │   │   └── auto_workflow_steps.py # All auto policy workflow steps
 │   └── tests/                   # pytest-bdd scenario files (test entry points)
 │       ├── test_login.py        # Wires login.feature to pytest
-│       ├── test_auto_workflow.py# Wires personal_auto.feature to pytest
-│       └── test_screenshot_verify.py  # Screenshot verification (reserved)
+│       └── test_auto_workflow.py# Wires personal_auto.feature to pytest
+│
+├── api_tests/                   # API test module
+│   ├── conftest.py              # API session fixture (requests.Session)
+│   ├── test_users.py            # JSONPlaceholder user API tests
+│   ├── test_bin.py              # httpbin.org practice tests
+│   ├── kupujem_prodajem_test.py # KupujemProdajem search API tests
+│   ├── GUIDE_API_TESTING.md     # API testing guide
+│   └── ASSERTION_GUIDE.md       # API assertion patterns reference
+│
+├── performance_tests/           # Performance test module
+│   ├── __init__.py
+│   ├── conftest.py              # Performance fixtures (metrics, assertions, thresholds)
+│   ├── performance_config.py    # Thresholds per environment (DEV/STAGING/PROD)
+│   ├── test_login_performance.py# Login page performance test suite
+│   └── guides/
+│       └── PERFORMANCE_GUIDE.md # Performance testing guide
 │
 ├── testdata/
 │   ├── auth_state.json          # Saved browser authentication state
@@ -179,7 +202,8 @@ SandboxPlaywright/
 │   ├── email_util.py            # Timestamp-based email uniqueness
 │   ├── file_writer.py           # CSV summary writer (append mode)
 │   ├── policy_reporter.py       # matplotlib charts for policy trends
-│   ├── screenshot_helper.py     # Screenshot utilities (reserved)
+│   ├── performance_metrics.py   # Performance data collector (timers, browser APIs)
+│   ├── performance_assertions.py# Performance threshold validators
 │   ├── waiters.py               # Custom wait strategies (reserved)
 │   └── assertions.py            # Custom assertion helpers (reserved)
 │
@@ -321,6 +345,7 @@ class DriverInfoPage(BasePage):
 | `click_element` | `(selector)` | Waits for clickable then clicks |
 | `answer_question` | `(group_name, answer)` | Selects a radio button within a named radio group using `dispatch_event("click")` |
 | `read_summary` | `(label_text)` | Reads a display-only value associated with a label (for extraction) |
+| `spinner_wait` | `(selector, timeout=60000)` | Waits for a loading spinner/mask to disappear; raises `AssertionError` on timeout |
 
 All methods are decorated with `@allure.step` and include logger calls for full traceability.
 
@@ -501,10 +526,20 @@ The root `conftest.py` manages the entire Playwright lifecycle:
 | `log` | session | Logger instance via `setup_logger("PlaywrightTest")` |
 | `browser_name` | session | Reads `--browser` CLI option (default: `chromium`) |
 | `playwright` | session | Playwright instance (context manager) |
-| `browser` | session | Launched browser (headless=False, slow_mo=100) |
+| `browser` | session | Launched browser (headed/headless via `--headed`, slow_mo via `--slow-mo`) |
 | `context` | function | Fresh browser context per test (full-screen viewport) |
 | `page` | function | Fresh page per test |
 | `data` | function | Alias for `test_data` (from data_steps.py) |
+
+**Custom CLI Options** — registered via `pytest_addoption` in `conftest.py`:
+
+| Option | Default | Description |
+|---|---|---|
+| `--browser` | `chromium` | Browser engine: `chromium`, `firefox`, `webkit`, `chrome`, `msedge` |
+| `--headed` | `False` | Show the browser window during test execution |
+| `--slow-mo` | `0` | Slow down every Playwright operation by N milliseconds |
+
+**Chrome & Edge Support:** The `--browser chrome` and `--browser msedge` options use Chromium channels to launch the locally installed Google Chrome or Microsoft Edge browsers respectively, rather than Playwright's bundled Chromium.
 
 **Plugin registration** — step definition modules are imported via:
 
@@ -713,6 +748,11 @@ pytest -m regression
 pytest --browser chromium
 pytest --browser firefox
 pytest --browser webkit
+pytest --browser chrome       # System-installed Google Chrome
+pytest --browser msedge       # System-installed Microsoft Edge
+
+# Run with slow motion (debug)
+pytest --headed --slow-mo 500
 
 # Run with verbose output
 pytest -v
@@ -763,6 +803,10 @@ addopts =
 | `@pytest.mark.regression` | Full regression suite |
 | `@pytest.mark.login` | Login-specific tests |
 | `@pytest.mark.homeowner` | Homeowner insurance tests |
+| `@pytest.mark.validation` | Validation and error handling tests |
+| `@pytest.mark.api` | API tests (screenshots skipped on failure) |
+| `@pytest.mark.performance` | Performance measurement tests |
+| `@pytest.mark.stress` | Stress and load tests |
 
 ---
 
@@ -853,9 +897,11 @@ Screenshots are automatically captured when a test fails, via the `pytest_runtes
 ### How It Works
 
 1. The hook intercepts the test report after the `call` phase
-2. If `report.failed` is `True`, it retrieves the `page` fixture
-3. Takes a full-page screenshot as bytes (`page.screenshot(full_page=True)`)
-4. Attaches the screenshot directly to the Allure report as a PNG
+2. If `report.failed` is `True`, it checks whether the test is marked `@pytest.mark.api`
+3. **API tests are skipped** — no screenshot is attempted for API tests (no browser page exists)
+4. For UI tests, retrieves the `page` fixture from `item.funcargs` or `item._request`
+5. Takes a full-page screenshot as bytes (`page.screenshot(full_page=True)`)
+6. Attaches the screenshot directly to the Allure report as a PNG
 
 ### What Gets Captured
 
@@ -865,6 +911,7 @@ Screenshots are automatically captured when a test fails, via the `pytest_runtes
 
 ### Fallback Behavior
 
+- **API tests** (`@pytest.mark.api`) — screenshot capture is skipped entirely
 - If `page` fixture is not available (e.g., test failed during setup), a warning is printed
 - No file is saved to disk — the screenshot exists only in the Allure report as an attachment
 
@@ -900,7 +947,232 @@ The `auto_workflow_steps.py` → `read_extract_summary` step extracts:
 
 ---
 
-## 13. CI/CD — Jenkins Pipeline
+## 13. API Testing
+
+The framework includes a standalone API testing module in `api_tests/` for testing REST APIs using the `requests` library.
+
+### Module Structure
+
+```
+api_tests/
+├── conftest.py              # Session-scoped requests.Session with headers/cookies
+├── test_users.py            # JSONPlaceholder API tests (GET/POST)
+├── test_bin.py              # httpbin.org practice tests (response time, debugging)
+├── kupujem_prodajem_test.py # KupujemProdajem search API integration test
+├── GUIDE_API_TESTING.md     # Detailed guide for the KP API test
+└── ASSERTION_GUIDE.md       # Comprehensive assertion patterns reference
+```
+
+### API Session Fixture
+
+The `api_tests/conftest.py` defines an `api_session` fixture (scope: session) that creates a pre-configured `requests.Session` with:
+- Custom headers (`accept`, `user-agent`, `x-kp-channel`, `x-kp-session`, `x-kp-signature`)
+- Session cookies for maintaining state
+- Automatic cleanup (`s.close()`) after tests complete
+
+### Test Files
+
+| File | API | Tests |
+|---|---|---|
+| `test_users.py` | JSONPlaceholder | GET single user, POST create user. Validates status codes, response fields. Uses `@allure.feature` decorator. |
+| `test_bin.py` | httpbin.org | GET spec, response time measurement, request/response debugging, real data from JSONPlaceholder |
+| `kupujem_prodajem_test.py` | KupujemProdajem | Search for products ("stripovi"), parse ad listings, print names and prices |
+
+### Running API Tests
+
+```bash
+# Run all API tests
+pytest api_tests/ -v
+
+# Run by marker
+pytest -m api -v
+
+# Run specific test with output visible
+pytest api_tests/test_users.py -v -s
+```
+
+### Key Design Decisions
+
+- All API tests use `@pytest.mark.api` — this marker tells the screenshot hook to **skip screenshot capture** (no browser page exists)
+- API tests do not depend on Playwright fixtures (`page`, `context`, `browser`)
+- The `api_session` fixture with session scope ensures cookies and connections are reused across tests
+- API guides (`GUIDE_API_TESTING.md`, `ASSERTION_GUIDE.md`) provide assertion patterns for status codes, headers, response body, data types, and field validation
+
+---
+
+## 14. Performance Testing
+
+The framework includes a performance testing module that measures real browser performance metrics and validates them against environment-specific thresholds.
+
+### Module Structure
+
+```
+performance_tests/
+├── conftest.py              # Performance fixtures
+├── performance_config.py    # Thresholds & environment config
+├── test_login_performance.py# Login page performance suite (8 tests)
+└── guides/
+    └── PERFORMANCE_GUIDE.md # Comprehensive guide
+
+utils/
+├── performance_metrics.py   # Metrics collector
+└── performance_assertions.py# Threshold validators
+```
+
+### Architecture
+
+```
+Test → Page Object *_with_metrics() methods
+  → PerformanceMetrics (timers + window.performance API)
+    → PerformanceAssertions (validates against thresholds)
+      → PerformanceThresholds (per-environment config)
+        → Allure Report (JSON metrics attachment)
+```
+
+### Environment-Specific Thresholds
+
+Controlled by the `TEST_ENV` environment variable (defaults to `dev`):
+
+| Metric | DEV | STAGING | PRODUCTION |
+|---|---|---|---|
+| Page load time | 5000ms | 3000ms | 2000ms |
+| Splash button click | 2000ms | 1500ms | 1000ms |
+| Form element visibility | 2000ms | 1500ms | 1000ms |
+| Login button click | 3000ms | 2500ms | 2000ms |
+| DNS lookup | 1000ms | 800ms | 500ms |
+| TCP connection | 2000ms | 1500ms | 1000ms |
+| TTFB | 2000ms | 1500ms | 1000ms |
+| Max resources | 100 | 80 | 60 |
+| Max resource size | 5000KB | 4000KB | 3000KB |
+
+### Performance Test Suite (`test_login_performance.py`)
+
+| Test | What It Measures |
+|---|---|
+| `test_login_page_load_time` | Full page load (navigationStart → loadEventEnd) |
+| `test_navigation_metrics` | DNS, TCP, TTFB individually |
+| `test_resource_loading_performance` | Resource count and total transfer size |
+| `test_splash_button_click_responsiveness` | Splash button response time |
+| `test_form_element_visibility_performance` | Time for login form fields to appear |
+| `test_login_form_interaction_performance` | Time to fill all credential fields |
+| `test_login_submission_performance` | Login button click to response |
+| `test_login_page_load_under_repeated_access` | Load consistency + caching effectiveness (3 iterations) |
+
+### Performance-Enabled Page Objects
+
+`LoginPage` includes `*_with_metrics()` variants of key methods:
+
+| Method | Collects |
+|---|---|
+| `navigate_with_metrics(metrics)` | Page load time, navigation timing, resource loading |
+| `click_splash_button_with_metrics(metrics)` | Splash button click duration |
+| `wait_for_login_page_with_metrics(metrics)` | Element visibility timing |
+| `fill_credentials_from_env_with_metrics(metrics)` | Form fill duration |
+| `click_login_with_metrics(metrics)` | Login submission duration |
+
+### Performance Fixtures
+
+| Fixture | Returns | Description |
+|---|---|---|
+| `performance_metrics` | `PerformanceMetrics` | Fresh collector per test, auto-attaches to Allure |
+| `performance_assertions` | `PerformanceAssertions` | Threshold validator with Allure integration |
+| `performance_thresholds` | `PerformanceThresholds` class | Access threshold configuration |
+| `test_environment` | `Environment` enum | Current env from `TEST_ENV` variable |
+
+### Running Performance Tests
+
+```bash
+# Run all performance tests
+pytest performance_tests/ -v --headed
+
+# Run by marker
+pytest -m performance -v
+
+# Run stress tests
+pytest -m stress -v
+
+# Set environment for stricter thresholds
+$env:TEST_ENV = "production"
+pytest -m performance -v
+```
+
+### Adding Performance Methods to New Page Objects
+
+To add performance measurement to any page object:
+
+```python
+from utils.performance_metrics import PerformanceMetrics
+
+class MyPage(BasePage):
+    def do_something_with_metrics(self, metrics: PerformanceMetrics):
+        metrics.start_timer("my_operation")
+        # ... perform the action ...
+        elapsed = metrics.stop_timer("my_operation")
+        self.logger.info(f"Operation completed in {elapsed:.2f}ms")
+```
+
+> **Full guide:** See `performance_tests/guides/PERFORMANCE_GUIDE.md` for complete documentation.
+
+---
+
+## 15. Docker Support
+
+The framework includes a `Dockerfile` for running tests in isolated, reproducible containers.
+
+### Dockerfile Overview
+
+```dockerfile
+FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN playwright install --with-deps
+COPY . .
+RUN mkdir -p reports logs screenshots allure-results
+ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+CMD ["pytest", "--html=reports/report.html", "--self-contained-html", "--alluredir=allure-results", "-v"]
+```
+
+**Key features:**
+- Uses the official Playwright Python base image (Ubuntu Jammy)
+- Two-stage `COPY` for better Docker layer caching (requirements first, then code)
+- Pre-creates output directories (`reports`, `logs`, `screenshots`, `allure-results`)
+- Sets `PYTHONUNBUFFERED=1` for real-time log output
+
+### Building and Running
+
+```bash
+# Build the image
+docker build -t playwright-tests .
+
+# Run all tests (default CMD)
+docker run --rm playwright-tests
+
+# Run specific marker
+docker run --rm playwright-tests pytest -m api -v
+
+# Run with environment variables
+docker run --rm -e PARTNER_NUM=0 -e USERNAMEE=user -e PASSWORD=pass playwright-tests
+
+# Extract reports after run
+docker run --rm -v ${PWD}/reports:/app/reports playwright-tests
+```
+
+### `.dockerignore`
+
+The `.dockerignore` excludes unnecessary files from the build context:
+- Python cache (`__pycache__/`, `*.pyc`)
+- Virtual environments (`.venv/`, `venv/`)
+- Test results and reports (`allure-results/`, `reports/`, `logs/`)
+- IDE settings (`.idea/`, `.vscode/`)
+- Git directory (`.git/`)
+- Environment files (`.env` — should be mounted or passed at runtime)
+- CI/CD files (`Jenkinsfile`)
+
+---
+
+## 16. CI/CD — Jenkins Pipeline
 
 ### Pipeline Stages
 
@@ -954,7 +1226,7 @@ post {
 
 ---
 
-## 14. Configuration Files Reference
+## 17. Configuration Files Reference
 
 ### `pytest.ini`
 
@@ -964,8 +1236,10 @@ post {
 | `python_classes` | `Test*` | Test class discovery pattern |
 | `python_functions` | `test_*` | Test function discovery pattern |
 | `bdd_features_base_dir` | `ui/features/` | Root for `.feature` file resolution |
-| `markers` | `auto`, `smoke`, `regression`, `login`, `homeowner` | Custom test markers |
+| `markers` | `auto`, `smoke`, `regression`, `login`, `homeowner`, `validation`, `api`, `performance`, `stress` | Custom test markers |
 | `addopts` | see [CLI Reference](#8-execution--cli-reference) | Default command-line options |
+| `--browser` | `msedge` (current default) | Default browser (configurable via comment/uncomment) |
+| `--slow-mo` | `100` | Default slow motion delay in ms |
 | `log_cli` | `true` | Enable real-time console logging |
 | `log_cli_level` | `INFO` | Console log verbosity |
 
@@ -979,7 +1253,7 @@ Reserved for sensitive configuration. Currently empty — secrets are managed vi
 
 ---
 
-## 15. Utility Modules Reference
+## 18. Utility Modules Reference
 
 ### `utils/json_reader.py` — `DataLoader`
 
@@ -1045,15 +1319,47 @@ logger.info("Something happened")
 logger.debug("Detailed debug info")
 ```
 
+### `utils/performance_metrics.py` — `PerformanceMetrics`
+
+Collects browser performance data via `window.performance` API and manual timers:
+
+```python
+metrics = PerformanceMetrics("test_name")
+metrics.start_timer("operation")
+# ... do something ...
+elapsed = metrics.stop_timer("operation")  # returns ms
+
+# Browser APIs
+metrics.measure_page_load_time(page)     # loadEventEnd - navigationStart
+metrics.measure_navigation(page)         # DNS, TCP, TTFB, Download, DOM
+metrics.measure_resource_loading(page)   # all resource entries
+metrics.measure_element_visibility(page, locator)  # time to visible
+metrics.attach_metrics_to_allure()       # JSON summary in report
+```
+
+### `utils/performance_assertions.py` — `PerformanceAssertions`
+
+Validation methods with Allure integration:
+
+```python
+assertions = PerformanceAssertions()
+assertions.assert_page_load_time(actual_ms, threshold_ms)
+assertions.assert_element_visibility_time(actual_ms, threshold_ms)
+assertions.assert_navigation_metric(value_ms, "DNS", threshold_ms)
+assertions.assert_resource_count(count, max_count)
+assertions.assert_total_resource_size(bytes, max_kb)
+```
+
+Each method raises `AssertionError` with details attached to Allure on failure.
+
 ### Reserved (Empty) Modules
 
 - `utils/waiters.py` — For custom wait strategies beyond Playwright's built-in waits
 - `utils/assertions.py` — For domain-specific assertion helpers
-- `utils/screenshot_helper.py` — For advanced screenshot utilities
 
 ---
 
-## 16. Coding Standards & Best Practices
+## 19. Coding Standards & Best Practices
 
 ### Locators
 
@@ -1104,7 +1410,7 @@ logger.debug("Detailed debug info")
 
 ---
 
-## 17. Troubleshooting
+## 20. Troubleshooting
 
 ### Common Issues
 
@@ -1120,19 +1426,26 @@ logger.debug("Detailed debug info")
 | Excel `TC_ID` column not found | Wrong `header_row` in ExcelReader | Set `header_row` matching your Excel layout |
 | Duplicate log entries | Logger handlers accumulating | `setup_logger` already guards against this |
 | `POM classes not receiving data` | Forgot `target_fixture="test_data"` in data step | Ensure `@given` decorator includes `target_fixture` |
+| API test tries screenshot | Missing `@pytest.mark.api` marker | Add `@pytest.mark.api` to all API tests |
+| Chrome/Edge not launching | Browser not installed on system | `--browser chrome`/`msedge` requires the browser to be installed locally |
+| Performance thresholds too strict | Wrong `TEST_ENV` value | Set `$env:TEST_ENV = "dev"` for relaxed thresholds |
+| `x-kp-signature` expired (API tests) | Session token rotated | Update signature in `api_tests/conftest.py` from browser DevTools |
+| Spinner timeout (`spinner_wait`) | Loading mask stuck | Check network for pending requests; increase timeout parameter |
 
 ### Debugging Tips
 
 1. **Run headed**: `pytest --headed` to see the browser
-2. **Slow down**: `slow_mo=500` is set in browser launch (adjustable in `conftest.py`)
+2. **Slow down**: `pytest --headed --slow-mo 500` (adjustable via CLI)
 3. **Single test**: `pytest -k "TC_ID_0001"` to isolate
 4. **Check logs**: Look in `logs/test_run_*.log` for DEBUG-level detail
 5. **Allure steps**: Failed step is highlighted in the Allure report with the exact error
 6. **Network waits**: `VehicleInfoPage` uses `page.expect_response("**/FieldProcessorServlet*")` — check network tab if this times out
+7. **Performance metrics**: Check the JSON attachment in Allure for raw timing data
+8. **API debugging**: Use `-s` flag to see `print()` output from API tests
 
 ---
 
-## 18. Extending the Framework
+## 21. Extending the Framework
 
 ### Adding a New Insurance Product (e.g., Commercial Auto)
 
@@ -1146,19 +1459,21 @@ logger.debug("Detailed debug info")
 8. **Add test data**: New JSON file or new section in existing data
 9. **Add marker**: Register in `pytest.ini` under `markers`
 
-### Adding API Tests (Future)
+### Adding New API Tests
 
-The project structure has placeholders from the scaffold (`create_folders.py`):
+API tests live in `api_tests/`. To add a new API test:
 
-```
-api/
-├── clients/
-│   ├── base_client.py
-│   ├── policy_client.py
-│   └── auth_client.py
-├── schemas/
-└── tests/
-```
+1. Create a new test file in `api_tests/` (e.g., `test_policies_api.py`)
+2. Mark all tests with `@pytest.mark.api`
+3. Use the `api_session` fixture for pre-configured HTTP sessions, or `requests` directly for simple calls
+4. No Playwright fixtures needed — API tests are browser-independent
+
+### Adding Performance Tests for New Pages
+
+1. Add `*_with_metrics()` methods to the page object
+2. Create a test class in `performance_tests/` with `@pytest.mark.performance`
+3. Add new threshold keys to `performance_config.py` if needed
+4. Use the `performance_metrics`, `performance_assertions`, and `test_environment` fixtures
 
 ### Using Saved Authentication State
 
@@ -1171,4 +1486,4 @@ context = browser.new_context(storage_state="testdata/auth_state.json")
 
 ---
 
-**Last Updated**: February 12, 2026
+**Last Updated**: February 27, 2026

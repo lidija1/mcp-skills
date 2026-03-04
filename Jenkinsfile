@@ -45,7 +45,6 @@ pipeline {
                 // Example: Set BROWSER to 'firefox' in Jenkins UI to run tests on Firefox
                 bat '''
                 call venv\\Scripts\\activate
-                set PYTHONPATH=%CD%
                 if exist allure-results (rd /s /q allure-results)
                 pytest %TEST_PATH% --browser=%BROWSER% --alluredir=allure-results
                 '''
@@ -57,7 +56,6 @@ pipeline {
                 // Generate test coverage report in HTML format
                 bat '''
                 call venv\\Scripts\\activate
-                set PYTHONPATH=%CD%
                 pytest --cov=./ --cov-report=html
                 '''
             }

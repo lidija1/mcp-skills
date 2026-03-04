@@ -3,8 +3,6 @@ import pytest
 import requests
 import json
 
-from ui.steps.auth_steps import user_login
-
 BASE_URL = "https://jsonplaceholder.typicode.com"
 
 @allure.feature("User Management")

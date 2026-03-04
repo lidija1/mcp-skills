@@ -50,6 +50,7 @@ policy_summary/
 
 # Ignore reports directory
 reports/
+reports/traces/
 
 # Ignore specific report file
 report.html

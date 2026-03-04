@@ -1,19 +1,21 @@
 import pytest
 import allure
+from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
 from utils.logger import setup_logger
-from utils.policy_reporter import generate_trend_chart
 
 load_dotenv()
 
 # Plugin list for fixtures and step definitions
 pytest_plugins = [
-    "fixtures.ui_fixtures",
-    "ui.steps.auth_steps",
-    "ui.steps.data_steps",
-    "ui.steps.auto_workflow_steps",
+    "ui.fixtures",
+    "ui.steps.common.auth_steps",
+    "ui.steps.common.data_steps",
+    "ui.steps.auto.auto_workflow_steps",
+    "ui.steps.homeowner_steps",
+    "ui.steps.common.customer_validation_steps",
     ]
 
 # -------------------------
@@ -39,6 +41,13 @@ def pytest_addoption(parser):
         type=int,
         help="Slow down operations by specified milliseconds"
     )
+    parser.addoption(
+        "--pw-trace",
+        action="store",
+        default="off",
+        choices=["off", "on"],
+        help="Playwright tracing mode: off or on"
+    )
 
 # -------------------------
 # Logger
@@ -55,11 +64,11 @@ def browser_name(request):
     browser = request.config.getoption("--browser", default="chromium")
     valid_browsers = ["chromium", "firefox", "webkit", "chrome", "msedge"]
 
-    if isinstance(browser, list):
-        if len(browser) > 0 and browser[0] in valid_browsers:
-            return browser[0]
-        else:
-            pytest.fail(f"Invalid browser specified in list: {browser}")
+    # if isinstance(browser, list):
+    #     if len(browser) > 0 and browser[0] in valid_browsers:
+    #         return browser[0]
+    #     else:
+    #         pytest.fail(f"Invalid browser specified in list: {browser}")
 
     if browser not in valid_browsers:
         pytest.fail(f"Invalid browser specified: {browser}. Valid options are: {valid_browsers}")
@@ -117,11 +126,24 @@ def browser(playwright, browser_name, request):
 # Context (per test)
 # -------------------------
 @pytest.fixture(scope="function")
-def context(browser):
+def context(browser, request):
     context = browser.new_context(
         viewport=None  # full screen
     )
+
+    trace_mode = request.config.getoption("--pw-trace")
+    if trace_mode != "off":
+        context.tracing.start(screenshots=True, snapshots=True, sources=True)
+
     yield context
+
+    if trace_mode != "off":
+        traces_dir = Path("reports") / "traces"
+        traces_dir.mkdir(parents=True, exist_ok=True)
+        test_name = request.node.nodeid.replace("::", "__").replace("/", "_").replace("\\", "_")
+        trace_path = traces_dir / f"{test_name}.zip"
+        context.tracing.stop(path=str(trace_path))
+
     context.close()
 
 # -------------------------
@@ -169,6 +191,7 @@ def pytest_runtest_makereport(item, call):
     """
     outcome = yield
     report = outcome.get_result()
+    setattr(item, f"rep_{report.when}", report)
 
     # Capture screenshot if test failed (report.failed = True means test did not pass)
     # Skip screenshot for API tests (marked with @pytest.mark.api)

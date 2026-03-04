@@ -20,6 +20,7 @@ RUN mkdir -p reports logs screenshots allure-results
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV PYTHONPATH=/app
 
 # Run pytest with appropriate flags
 # Note: Headless mode is controlled in conftest.py or test code, not here

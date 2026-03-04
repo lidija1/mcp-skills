@@ -18,7 +18,23 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                deleteDir()
                 checkout scm
+            }
+        }
+
+        stage('Preflight Source Check') {
+            steps {
+                bat '''
+                if not exist ui\\__init__.py (
+                  echo ERROR: Missing ui\\__init__.py in Jenkins workspace. Verify files are committed and pushed.
+                  exit /b 1
+                )
+                if not exist ui\\fixtures.py (
+                  echo ERROR: Missing ui\\fixtures.py in Jenkins workspace. Verify files are committed and pushed.
+                  exit /b 1
+                )
+                '''
             }
         }
 

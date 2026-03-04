@@ -1,6 +1,6 @@
 from pytest_bdd import scenario
 
-@scenario('../features/personal_auto.feature', 'Create a new personal auto policy')
+@scenario('../features/auto/personal_auto.feature', 'Create a new personal auto policy')
 def test_personal_auto_workflow():
     """
     This test runs the 'Personal Auto Creation' feature.

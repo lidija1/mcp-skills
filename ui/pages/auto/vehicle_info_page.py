@@ -39,7 +39,7 @@ class VehicleInfoPage(BasePage):
         """Select vehicle year."""
         year = data["Year"]
         self.logger.info(f"Setting year: {year}")
-        # Definisanje očekivanja mrežnog odgovora
+        # Define expected network response
         with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
         # Akcija koja okida mrežni poziv
             self.year_input.click()
@@ -83,7 +83,6 @@ class VehicleInfoPage(BasePage):
         self.logger.info(f"Setting specification: {specification}")
         self.specification.click()
         self.page.locator(f"//li[text()='{specification}']").click()
-        time.sleep(0.3)
 
     @allure.step("Set vehicle use")
     def set_vehicle_use(self, data):
@@ -92,7 +91,6 @@ class VehicleInfoPage(BasePage):
         self.logger.info(f"Setting vehicle use: {vehicle_use}")
         self.vehicle_use.click()
         self.page.locator(f"//li[text()='{vehicle_use}']").click()
-        time.sleep(0.3)
 
     @allure.step("Set vehicle ownership")
     def set_ownership(self, data):
@@ -100,7 +98,6 @@ class VehicleInfoPage(BasePage):
         ownership = data["Ownership"]
         self.logger.info(f"Setting ownership: {ownership}")
         self.ownership.fill(ownership)
-        time.sleep(0.3)
 
     @allure.step("Click save")
     def click_save(self):

@@ -14,8 +14,8 @@ class QuoteRegistrationPage(BasePage):
 
     def quote_registration_steps(self, data):
         """Perform quote registration steps."""
-        self.fill_producer(data)
         self.fill_program(data)
+        self.fill_producer(data)
         self.set_effective_date(data)
         self.click_next()
         self.wait_for_loader_to_disappear()
@@ -26,7 +26,8 @@ class QuoteRegistrationPage(BasePage):
 
     def fill_program(self, data):
         """Fill program field."""
-        self.program.fill(data["Program"])
+        self.program.click()
+        self.page.get_by_role("option", name=data["Program"], exact=True).click()
 
     def set_effective_date(self, data):
         """Set effective date with offset from current date."""

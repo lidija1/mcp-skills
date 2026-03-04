@@ -8,7 +8,8 @@ from utils.logger import setup_logger
 
 load_dotenv()
 
-# Plugin list for fixtures and step definitions
+# Register plugins and fixtures with pytest
+# Using string-based plugin registration ensures pytest properly discovers and registers all fixtures
 pytest_plugins = [
     "ui.fixtures",
     "ui.steps.common.auth_steps",
@@ -16,7 +17,8 @@ pytest_plugins = [
     "ui.steps.auto.auto_workflow_steps",
     "ui.steps.homeowner_steps",
     "ui.steps.common.customer_validation_steps",
-    ]
+]
+
 
 # -------------------------
 # Register custom command-line options

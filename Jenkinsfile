@@ -25,7 +25,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 bat '''
-                docker build -t %DOCKER_IMAGE% .
+                docker build --no-cache -t %DOCKER_IMAGE% .
                 '''
             }
         }

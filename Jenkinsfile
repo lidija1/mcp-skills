@@ -8,7 +8,8 @@ pipeline {
 
     environment {
         PARTNER_NUM = '0'
-        // Here you can set any other environment variables you need for your tests
+        DOCKER_IMAGE = "sandbox-playwright:${env.BUILD_NUMBER}"
+        CONTAINER_NAME = "sandbox-playwright-tests-${env.BUILD_NUMBER}"
         AUTH = credentials('oneshield-login')
         USERNAMEE = "${env.AUTH_USR}"
         PASSWORD = "${env.AUTH_PSW}"
@@ -17,46 +18,36 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // JenJenkins automatcly check the code from the repository, but you can explicitly define it if needed
                 checkout scm
             }
         }
 
-        stage('Setup Environment') {
+        stage('Build Docker Image') {
             steps {
-                // Set up Python virtual environment and install dependencies
-                // Install Playwright and Chromium browser
-                // Clean venv to avoid stale packages (e.g., pytest-playwright)
                 bat '''
-                if exist venv (rd /s /q venv)
-                python -m venv venv
-                call venv\\Scripts\\activate
-                pip install -r requirements.txt
-                playwright install chromium
+                docker build -t %DOCKER_IMAGE% .
                 '''
             }
         }
 
-        stage('Run Tests') {
+        stage('Run Tests in Docker') {
             steps {
-                // Run tests and generate Allure results
-                // Use the BROWSER parameter to specify the browser to run the tests on
-                // Use the TEST_PATH parameter to specify which tests to run
-                // Example: Set BROWSER to 'firefox' in Jenkins UI to run tests on Firefox
                 bat '''
-                call venv\\Scripts\\activate
+                if exist reports (rd /s /q reports)
                 if exist allure-results (rd /s /q allure-results)
-                pytest %TEST_PATH% --browser=%BROWSER% --alluredir=allure-results
-                '''
-            }
-        }
-
-        stage('Generate Coverage Report') {
-            steps {
-                // Generate test coverage report in HTML format
-                bat '''
-                call venv\\Scripts\\activate
-                pytest --cov=./ --cov-report=html
+                if exist screenshots (rd /s /q screenshots)
+                mkdir reports
+                mkdir allure-results
+                mkdir screenshots
+                docker rm -f %CONTAINER_NAME% >nul 2>&1
+                docker run --name %CONTAINER_NAME% ^
+                  -e PARTNER_NUM=%PARTNER_NUM% ^
+                  -e USERNAMEE=%USERNAMEE% ^
+                  -e PASSWORD=%PASSWORD% ^
+                  -v "%WORKSPACE%\\reports:/app/reports" ^
+                  -v "%WORKSPACE%\\allure-results:/app/allure-results" ^
+                  -v "%WORKSPACE%\\screenshots:/app/screenshots" ^
+                  %DOCKER_IMAGE% pytest %TEST_PATH% --browser=%BROWSER%
                 '''
             }
         }
@@ -64,8 +55,18 @@ pipeline {
 
     post {
         always {
-            // Generating Allure Report
+            bat '''
+            docker rm -f %CONTAINER_NAME% >nul 2>&1
+            '''
+
+            archiveArtifacts artifacts: 'reports/**/*, screenshots/**/*', allowEmptyArchive: true
             allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
+        }
+
+        cleanup {
+            bat '''
+            docker rmi %DOCKER_IMAGE% >nul 2>&1
+            '''
         }
     }
 }

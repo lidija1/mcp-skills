@@ -1451,7 +1451,7 @@ Each method raises `AssertionError` with details attached to Allure on failure.
 
 1. **Create page directory**: `ui/pages/commercial/`
 2. **Create page objects**: Inherit from `BasePage`, define locators and methods
-3. **Create fixtures**: Add to `fixtures/ui_fixtures.py`
+3. **Create fixtures**: Add to `ui/fixtures.py`
 4. **Create steps**: `ui/steps/commercial_steps.py`
 5. **Register steps**: Add to `pytest_plugins` list in `conftest.py`
 6. **Create feature file**: `ui/features/commercial_auto.feature`

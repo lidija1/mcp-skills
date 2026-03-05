@@ -4,11 +4,13 @@ pipeline {
     parameters {
         string(name: 'BROWSER', defaultValue: 'chromium', description: 'Browser to run the tests on (chromium, firefox, webkit)')
         string(name: 'TEST_PATH', defaultValue: 'ui/', description: 'Path to the test file or directory to run')
+        booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: 'Force rebuild Docker image even if it exists')
     }
 
     environment {
         PARTNER_NUM = '0'
-        DOCKER_IMAGE = "sandbox-playwright:${env.BUILD_NUMBER}"
+        // Use stable image name - only rebuild when needed
+        DOCKER_IMAGE = "sandbox-playwright:latest"
         CONTAINER_NAME = "sandbox-playwright-tests-${env.BUILD_NUMBER}"
         AUTH = credentials('oneshield-login')
         USERNAMEE = "${env.AUTH_USR}"
@@ -23,26 +25,54 @@ pipeline {
             }
         }
 
-        stage('Preflight Source Check') {
+        stage('Build Docker Image') {
+            when {
+                anyOf {
+                    // Build if FORCE_BUILD is checked
+                    expression { return params.FORCE_BUILD }
+                    // Build if image doesn't exist
+                    expression {
+                        def imageExists = bat(script: 'docker images -q sandbox-playwright:latest', returnStdout: true).trim()
+                        return imageExists == ''
+                    }
+                    // Build if Dockerfile changed (compare hash)
+                    expression {
+                        def currentHash = bat(script: '@certutil -hashfile Dockerfile MD5 | findstr /v "hash"', returnStdout: true).trim()
+                        def storedHash = ''
+                        try {
+                            storedHash = readFile('.docker_hash').trim()
+                        } catch (Exception e) {
+                            storedHash = ''
+                        }
+                        return currentHash != storedHash
+                    }
+                }
+            }
             steps {
                 bat '''
-                if not exist ui\\__init__.py (
-                  echo ERROR: Missing ui\\__init__.py in Jenkins workspace. Verify files are committed and pushed.
-                  exit /b 1
-                )
-                if not exist ui\\fixtures.py (
-                  echo ERROR: Missing ui\\fixtures.py in Jenkins workspace. Verify files are committed and pushed.
-                  exit /b 1
-                )
+                echo Building Docker image...
+                docker build -t %DOCKER_IMAGE% .
                 '''
+                // Save hash for future comparison
+                script {
+                    def hash = bat(script: '@certutil -hashfile Dockerfile MD5 | findstr /v "hash"', returnStdout: true).trim()
+                    writeFile file: '.docker_hash', text: hash
+                }
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Skip Build Notice') {
+            when {
+                allOf {
+                    expression { return !params.FORCE_BUILD }
+                    expression {
+                        def imageExists = bat(script: 'docker images -q sandbox-playwright:latest', returnStdout: true).trim()
+                        return imageExists != ''
+                    }
+                }
+            }
             steps {
-                bat '''
-                docker build --no-cache -t %DOCKER_IMAGE% .
-                '''
+                echo 'Docker image already exists - skipping build (use FORCE_BUILD to rebuild)'
             }
         }
 
@@ -78,11 +108,7 @@ pipeline {
             archiveArtifacts artifacts: 'reports/**/*, screenshots/**/*', allowEmptyArchive: true
             allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
         }
-
-        cleanup {
-            bat '''
-            docker rmi %DOCKER_IMAGE% >nul 2>&1
-            '''
-        }
+        // Image is preserved for reuse - not deleted
+        // To force a fresh build, use FORCE_BUILD parameter
     }
 }

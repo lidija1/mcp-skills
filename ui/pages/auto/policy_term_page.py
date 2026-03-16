@@ -1,4 +1,3 @@
-import time
 from ui.pages.common.base_page import BasePage
 
 
@@ -19,12 +18,12 @@ class PolicyTermPage(BasePage):
     def set_coverage(self, data):
         """Set policy coverage option."""
         coverage = data["PolicyCoverage"]
-        self.coverage.click()
-        self.page.locator(f"//li[text()='{coverage}']").click()
+        self.smart_click(self.coverage)
+        self.smart_click(self.page.locator(f"//li[text()='{coverage}']"))
 
     def wait_for_loader_to_disappear(self):
         self.spinner_wait("#ajax-sub-pre-loading")
 
     def click_rate(self):
         """Rate the quote."""
-        self.rate_quote_button.click()
+        self.smart_click(self.rate_quote_button)

@@ -20,11 +20,11 @@ class NewQuotePage(BasePage):
 
     def click_quotes_button(self):
         """Navigate to quotes section."""
-        self.quotes_button.click()
+        self.smart_click(self.quotes_button)
 
     def click_new_quote_button(self):
         """Initiate new quote creation."""
-        self.new_quotes_button.click()
+        self.smart_click(self.new_quotes_button)
 
     def click_agent_radio_button(self):
         """Select agent option."""
@@ -32,4 +32,4 @@ class NewQuotePage(BasePage):
 
     def click_next_button(self):
         """Proceed to next step."""
-        self.next_button.click()
+        self.smart_click(self.next_button)

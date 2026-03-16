@@ -29,7 +29,7 @@ class LoginPage(BasePage):
     def click_splash_button(self):
         """Click the employee portal button on splash screen."""
         self.logger.info("Clicking splash screen button")
-        self.click_element(self.employee_portal)
+        self.smart_click(self.employee_portal)
 
     def wait_for_login_page(self):
         """Wait for the login page to be ready."""
@@ -41,23 +41,22 @@ class LoginPage(BasePage):
     def fill_credentials_from_env(self):
         """Fill login credentials from environment variables."""
 
-        
+
         partner = os.getenv('PARTNER_NUM', 'default_val')
         user = os.getenv('USERNAMEE', 'default_val')
-        
+
         self.logger.info(f"Filling credentials for Partner: {partner}, User: {user}")
-        self.partner_num.fill(partner)
-        self.username_field.fill(user)
-        self.password_field.fill(os.getenv('PASSWORD', 'default_val'))
-        
+        self.smart_fill(self.partner_num, partner)
+        self.smart_fill(self.username_field, user)
+        self.smart_fill(self.password_field, os.getenv('PASSWORD', 'default_val'))
+
         self.page.wait_for_timeout(500)
 
     @allure.step("Submit login")
     def click_login(self):
         """Click the login button."""
         self.logger.info("Clicking login button")
-        self.login_btn.click()
-
+        self.smart_click(self.login_btn)
 
     # ========================================================================
     # Performance Testing Methods

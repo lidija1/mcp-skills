@@ -8,11 +8,31 @@ from utils.logger import setup_logger
 
 load_dotenv()
 
+
+# -------------------------
+# Session configuration for parallel test support
+# -------------------------
+def pytest_configure(config):
+    """Initialize session storage for test results (supports parallel execution)."""
+    # Use config object to store results - this survives parallel worker processes
+    config.test_results = []
+    config.addinivalue_line("markers", "parallel: mark test as able to run in parallel")
+
+
+def pytest_collection_finish(session):
+    """Log the number of tests collected."""
+    total_items = len(session.items)
+    print(f"\n[PYTEST COLLECTION] Total tests collected: {total_items}")
+
+
+# -------------------------
 # Register plugins and fixtures with pytest
+# -------------------------
 # Using string-based plugin registration ensures pytest properly discovers and registers all fixtures
 pytest_plugins = [
     "ui.fixtures",
     "ui.steps.common.auth_steps",
+    "ui.steps.common.login_validation_steps",
     "ui.steps.common.data_steps",
     "ui.steps.auto.auto_workflow_steps",
     "ui.steps.homeowner_steps",
@@ -22,7 +42,7 @@ pytest_plugins = [
 
 # -------------------------
 # Register custom command-line options
-# -------------------------
+# -------------------------# -------------------------
 def pytest_addoption(parser):
     parser.addoption(
         "--browser",
@@ -193,7 +213,6 @@ def pytest_runtest_makereport(item, call):
     """
     outcome = yield
     report = outcome.get_result()
-    setattr(item, f"rep_{report.when}", report)
 
     # Capture screenshot if test failed (report.failed = True means test did not pass)
     # Skip screenshot for API tests (marked with @pytest.mark.api)

@@ -1,4 +1,3 @@
-import time
 from ui.pages.common.base_page import BasePage
 
 
@@ -24,16 +23,15 @@ class CreatePolicyPage(BasePage):
 
     def click_issue(self):
         """Request policy issue."""
-        self.request_issue.click()
+        self.smart_click(self.request_issue)
 
     def wait_for_loader_to_disappear(self):
         self.spinner_wait("#ajax-sub-pre-loading")
 
     def click_next(self):
         """Proceed to next step."""
-        self.next_button.click()
-        time.sleep(1)
+        self.smart_click(self.next_button)
 
     def click_bind(self):
         """Bind the policy."""
-        self.bind_button.click()
+        self.smart_click(self.bind_button)

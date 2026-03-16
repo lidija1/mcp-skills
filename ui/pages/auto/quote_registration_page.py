@@ -22,23 +22,24 @@ class QuoteRegistrationPage(BasePage):
 
     def fill_producer(self, data):
         """Fill producer field."""
-        self.producer.fill(data["Producer"])
+        self.smart_fill(self.producer, data["Producer"])
 
     def fill_program(self, data):
         """Fill program field."""
-        self.program.click()
-        self.page.get_by_role("option", name=data["Program"], exact=True).click()
+        self.smart_click(self.program)
+        self.smart_click(self.page.get_by_role("option", name=data["Program"], exact=True))
+        self.page.expect_response("**/FieldProcessorServlet*")
 
     def set_effective_date(self, data):
         """Set effective date with offset from current date."""
         offset_days = int(data.get("EffDateOffset", 0))
         target_date = datetime.now() + timedelta(days=offset_days)
         formatted_date = target_date.strftime("%m/%d/%Y")
-        self.effective_date.fill(formatted_date)
+        self.smart_fill(self.effective_date, formatted_date)
 
     def click_next(self):
         """Proceed to next step."""
-        self.next_button.click()
+        self.smart_click(self.next_button)
 
     def wait_for_loader_to_disappear(self):
         self.spinner_wait("#ajax-sub-pre-loading")

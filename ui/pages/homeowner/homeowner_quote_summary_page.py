@@ -14,9 +14,9 @@ class HomeOwnerQuoteSummaryPage(BasePage):
 
     def summary_steps(self, data):
         """Perform quote summary steps."""
+        self.set_program(data)
         self.set_billing(data)
         self.wait_for_loader_to_disappear()
-        self.set_program(data)
         self.set_day_care(data)
         self.set_underground_oil_tank(data)
         self.set_residence_rented(data)
@@ -29,13 +29,13 @@ class HomeOwnerQuoteSummaryPage(BasePage):
 
     def set_billing(self, data):
         """Set billing method."""
-        self.billing.fill(data['BillingMethod'])
+        self.smart_fill(self.billing, data["BillingMethod"])
 
     def wait_for_loader_to_disappear(self):
         self.spinner_wait("#ajax-sub-pre-loading")
 
     def set_program(self, data):
-        """Set program type."""
+        """Set program type."""  
         self.program.click()
         self.page.get_by_role("option", name=data['ProgramType'], exact=True).click()
 
@@ -76,17 +76,17 @@ class HomeOwnerQuoteSummaryPage(BasePage):
 
     def set_save(self):
         """Save changes."""
-        self.save_button.click()
+        self.smart_click(self.save_button)
 
     def click_city_info_link(self, data):
         """Navigate to HO information page."""
         city = data["City"]
         city_info_link = self.page.get_by_role("link", name=re.compile(city, re.IGNORECASE))
-        city_info_link.click()
+        self.smart_click(city_info_link)
 
     def click_homeowners_link(self, data):
         """Navigate to coverage options"""
         program = data["Program"]
         program_link = self.page.get_by_role("link", name=re.compile(program, re.IGNORECASE))
-        program_link.click()
+        self.smart_click(program_link)
 

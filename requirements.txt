@@ -15,3 +15,4 @@ pytest-timeout
 pytest-cov
 flake8  # Code quality checker for Jenkins pipeline
 oracledb
+django-report-builder

@@ -21,7 +21,7 @@ class QuoteSummaryPage(BasePage):
 
     def set_billing(self, data):
         """Set billing method."""
-        self.billing.fill(data['BillingMethod'])
+        self.smart_fill(self.billing, data['BillingMethod'])
 
     def wait_for_loader_to_disappear(self):
         self.spinner_wait("#ajax-sub-pre-loading")
@@ -42,10 +42,10 @@ class QuoteSummaryPage(BasePage):
 
     def click_save(self):
         """Save changes."""
-        self.save_button.click()
+        self.smart_click(self.save_button)
 
     def click_driver_info_link(self, data):
         """Navigate to driver information page."""
         first_name = data["FirstName"]
         driver_info_link = self.page.get_by_role("link", name=re.compile(first_name, re.IGNORECASE))
-        driver_info_link.click()
+        self.smart_click(driver_info_link)

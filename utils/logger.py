@@ -1,6 +1,35 @@
 import logging  # Import the standard logging library
+import os
+import re
 from pathlib import Path  # Import Path for modern and easier file system interactions
 from datetime import datetime  # Import datetime to timestamp our log files
+
+
+class _CredentialMaskFilter(logging.Filter):
+    """Replaces known credential values with *** in log records."""
+
+    def __init__(self):
+        super().__init__()
+        self._secret_pattern = None
+
+    def _build_pattern(self):
+        secrets = [
+            v for v in [
+                os.getenv("USERNAMEE"),
+                os.getenv("PASSWORD"),
+            ] if v
+        ]
+        if not secrets:
+            return None
+        escaped = [re.escape(s) for s in secrets]
+        return re.compile("|".join(escaped))
+
+    def filter(self, record):
+        if self._secret_pattern is None:
+            self._secret_pattern = self._build_pattern() or re.compile(r"(?!)")
+        record.msg = self._secret_pattern.sub("***", str(record.msg))
+        return True
+
 
 def setup_logger(name="PlaywrightTest"):
     # Define the directory where logs will be stored
@@ -36,6 +65,9 @@ def setup_logger(name="PlaywrightTest"):
 
     # Add the file handler to the logger
     logger.addHandler(fh)
+
+    # Attach credential masking filter so secrets never reach log files
+    logger.addFilter(_CredentialMaskFilter())
 
     # Return the configured logger instance
     return logger

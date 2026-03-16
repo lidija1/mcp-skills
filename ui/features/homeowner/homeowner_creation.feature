@@ -11,6 +11,7 @@ Feature: Homeowner Creation
     When I provide quote registration details
     When I provide quote summary HO info
     When I provide location coverage info
+    When I create a policy from the quote
 
 
 

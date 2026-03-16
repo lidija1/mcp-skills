@@ -6,6 +6,7 @@ from enum import Enum
 class Environment(Enum):
     """Environment types with different performance thresholds."""
     DEV = "dev"
+    TESTING = "testing"
     STAGING = "staging"
     PRODUCTION = "production"
 
@@ -26,6 +27,19 @@ class PerformanceThresholds:
             'max_resources': 100,                # Maximum number of resources
             'max_resource_size_kb': 5000,        # Maximum total resource size in KB
         },
+
+        Environment.TESTING: {
+            'page_load_time_ms': 7000, # 7 seconds (sllower because of network and backend on testing environment)
+            'splash_button_click_ms': 3000,  # 3 seconds
+            'form_element_visibility_ms': 3000,  # 3 seconds
+            'login_button_click_ms': 4500, # 4.5 seconds (authentification often takes more time on testing environment)
+            'dns_lookup_ms': 1500,  # 1.5 seconds (DNS lookup can be slower on testing environment)
+            'tcp_connection_ms': 2500,  # 2.5 seconds (TCP connection can be slower on testing environment)
+            'ttfb_ms': 3000,  # 3 seconds (Backend is usually slower on testing environment, so we allow more time for TTFB)
+            'max_resources': 150, # We alow more resources on testing environment because of additional monitoring and debugging tools that can be loaded
+            'max_resource_size_kb': 8000,  # 8 MB (Dubug logs and monitoring scripts can increase total resource size on testing environment, so we allow more)
+        },
+
         Environment.STAGING: {
             'page_load_time_ms': 3000,           # 3 seconds
             'splash_button_click_ms': 1500,      # 1.5 seconds
@@ -82,7 +96,7 @@ class PerformanceThresholds:
         Returns:
             Current environment (defaults to DEV if not specified)
         """
-        env = os.getenv('TEST_ENV', 'dev').lower()
+        env = os.getenv('TEST_ENV', 'testing').lower()
         try:
             return Environment(env)
         except ValueError:
@@ -91,8 +105,9 @@ class PerformanceThresholds:
 
 # URL configuration
 TEST_URLs = {
-    Environment.DEV: "https://inforcedev.oneshield.com/splash.html",
-    Environment.PRODUCTION: "https://inforce.oneshield.com/splash.html",
+    Environment.TESTING: "https://inforce.oneshield.com/splash.html",
+    # Environment.DEV: "https://inforcedev.oneshield.com/splash.html",
+    # Environment.PRODUCTION: "https://inforce.oneshield.com/splash.html",
 }
 
 

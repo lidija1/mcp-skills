@@ -29,27 +29,27 @@ class DriverInfoPage(BasePage):
 
     def set_gender(self, data):
         """Set gender field."""
-        self.gender.fill(data["Gender"])
+        self.smart_fill(self.gender, data["Gender"])
 
     def set_marital_status(self, data):
         """Set marital status field."""
-        self.marital_status.fill(data["MaritalStatus"])
+        self.smart_fill(self.marital_status, data["MaritalStatus"])
 
     def set_driver_status(self, data):
         """Set driver status field."""
-        self.driver_status.fill(data["DriverStatus"])
+        self.smart_fill(self.driver_status, data["DriverStatus"])
 
     def set_employment_category(self, data):
         """Set employment category field."""
-        self.employment.fill(data["EmploymentCategory"])
+        self.smart_fill(self.employment, data["EmploymentCategory"])
 
     def set_occupation(self, data):
         """Set occupation field."""
-        self.occupation.fill(data["Occupation"])
+        self.smart_fill(self.occupation, data["Occupation"])
 
     def set_license_status(self, data):
         """Set license status field."""
-        self.licence.fill(data["LicenseStatus"])
+        self.smart_fill(self.licence, data["LicenseStatus"])
 
     def set_sr22_required(self, data):
         """Answer SR22 required question."""
@@ -57,8 +57,8 @@ class DriverInfoPage(BasePage):
 
     def set_save_button(self):
         """Click save button."""
-        self.save_button.click()
+        self.smart_click(self.save_button)
 
     def click_vehicle_info_link(self):
         """Navigate to vehicle information page."""
-        self.tree_vehicle_info.click()
+        self.smart_click(self.tree_vehicle_info)

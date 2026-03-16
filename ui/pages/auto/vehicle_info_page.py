@@ -1,4 +1,3 @@
-import time
 import allure
 
 from ui.pages.common.base_page import BasePage
@@ -42,8 +41,8 @@ class VehicleInfoPage(BasePage):
         # Define expected network response
         with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
         # Akcija koja okida mrežni poziv
-            self.year_input.click()
-            self.page.locator(f"//li[text()='{year}']").click()
+            self.smart_click(self.year_input)
+            self.smart_click(self.page.locator(f"//li[text()='{year}']"))
 
         # Opciono: Provera da li je server vratio 'OK' status
         response = response_info.value
@@ -57,8 +56,8 @@ class VehicleInfoPage(BasePage):
         make = data["Make"]
         self.logger.info(f"Setting make: {make}")
         with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
-            self.make.click()
-            self.page.locator(f"//li[text()='{make}']").click()
+            self.smart_click(self.make)
+            self.smart_click(self.page.locator(f"//li[text()='{make}']"))
         response = response_info.value
         if response.status != 200:
             print(f"Warning: FieldProcessor returned status {response.status}")
@@ -70,8 +69,8 @@ class VehicleInfoPage(BasePage):
         model = data["Model"]
         self.logger.info(f"Setting model: {model}")
         with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
-            self.model.click()
-            self.page.locator(f"//li[text()='{model}']").click()
+            self.smart_click(self.model)
+            self.smart_click(self.page.locator(f"//li[text()='{model}']"))
         response = response_info.value
         if response.status != 200:
             print(f"Warning: FieldProcessor returned status {response.status}")
@@ -81,32 +80,32 @@ class VehicleInfoPage(BasePage):
         """Select vehicle specification."""
         specification = data["Spec"]
         self.logger.info(f"Setting specification: {specification}")
-        self.specification.click()
-        self.page.locator(f"//li[text()='{specification}']").click()
+        self.smart_click(self.specification)
+        self.smart_click(self.page.locator(f"//li[text()='{specification}']"))
 
     @allure.step("Set vehicle use")
     def set_vehicle_use(self, data):
         """Select vehicle use type."""
         vehicle_use = data["VehicleUse"]
         self.logger.info(f"Setting vehicle use: {vehicle_use}")
-        self.vehicle_use.click()
-        self.page.locator(f"//li[text()='{vehicle_use}']").click()
+        self.smart_click(self.vehicle_use)
+        self.smart_click(self.page.locator(f"//li[text()='{vehicle_use}']"))
 
     @allure.step("Set vehicle ownership")
     def set_ownership(self, data):
         """Select ownership type."""
         ownership = data["Ownership"]
         self.logger.info(f"Setting ownership: {ownership}")
-        self.ownership.fill(ownership)
+        self.smart_fill(self.ownership, ownership)
 
     @allure.step("Click save")
     def click_save(self):
         """Save vehicle information."""
         self.logger.info("Clicking save button")
-        self.save_button.click()
+        self.smart_click(self.save_button)
 
     @allure.step("Click coverages link")
     def click_coverages_link(self):
         """Navigate to coverages page."""
         self.logger.info("Navigating to coverages")
-        self.tree_coverages_button.click()
+        self.smart_click(self.tree_coverages_button)

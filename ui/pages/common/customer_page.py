@@ -43,24 +43,23 @@ class CustomerPage(BasePage):
         self.click_search()
         self.click_create_new_customer()
         self.click_next()
-        self.skip_button.click()
+        self.smart_click(self.skip_button)
         self.wait_for_loader_to_disappear()
 
     @allure.step("Enter First Name")
     def first_name_input(self, data):
-        self.first_name.fill(data["FirstName"])
+        self.smart_fill(self.first_name, data["FirstName"])
 
     @allure.step("Enter Last Name")
     def last_name_input(self, data):
-        self.last_name.fill(data["LastName"])
+        self.smart_fill(self.last_name, data["LastName"])
 
     @allure.step("Enter ZIP Code")
     def zip_code_input(self, data):
-        with self.page.expect_response("**/FieldProcessorServlet*") as response_info:
-            self.zip_code.fill(data["ZIP"])
-        response = response_info.value
-        if response.status != 200:
-            self.logger.info(f"Warning: FieldProcessor returned status {response.status}")
+        self.smart_fill(self.zip_code, data["ZIP"])
+        self.page.expect_response("**/FieldProcessorServlet*")
+
+
 
     # @allure.step("Select State")
     # def state_input(self, data):
@@ -68,51 +67,51 @@ class CustomerPage(BasePage):
 
     @allure.step("Select City")
     def city_input(self, data):
-        self.city.fill(data["City"])
+        self.smart_fill(self.city, data["City"])
 
     @allure.step("Enter Address")
     def address_input(self, data):
-        self.address.fill(data["Address"])
+        self.smart_fill(self.address, data["Address"])
 
     @allure.step("Select Customer Type")
     def customer_type_input(self, data):
-        self.customer_type.fill(data["CustomerType"])
+        self.smart_fill(self.customer_type, data["CustomerType"])
         
 
     @allure.step("Enter Date of Birth")
     def dob_input(self, data):
-        self.dob.fill(data["DOB"])
+        self.smart_fill(self.dob, data["DOB"])
 
     @allure.step("Enter Phone Number")
     def phone_number_input(self, data):
-        self.phone_number.fill(data["PhoneNum"])
+        self.smart_fill(self.phone_number, data["PhoneNum"])
 
     @allure.step("Enter Email")
     def enter_email(self, data):
         """Enter and process email address."""
         email_from_excel = data.get("Email")
         processed_email = process_email(email_from_excel)
-        self.email.fill(processed_email)
+        self.smart_fill(self.email, processed_email)
 
     @allure.step("Search for Customer")
     def click_search(self):
         """Search for existing customer."""
-        self.search_button.click()
+        self.smart_click(self.search_button)
 
     @allure.step("Create New Customer Button")
     def click_create_new_customer(self):
         """Create a new customer."""
-        self.create_new_customer.click()
+        self.smart_click(self.create_new_customer)
 
     @allure.step("Click Next")
     def click_next(self):
         """Proceed to next step."""
-        self.next_button.click()
+        self.smart_click(self.next_button)
 
     @allure.step("Skip Current Step")
     def click_skip(self):
         """Skip current step."""
-        self.skip_button.click()
+        self.smart_click(self.skip_button)
 
     def wait_for_loader_to_disappear(self):
         self.spinner_wait("#ajax-sub-pre-loading")
@@ -141,7 +140,7 @@ class CustomerPage(BasePage):
     def enter_email_without_processing(self, data):
         """Enter email address exactly as provided in test data."""
         email = data.get("Email", "")
-        self.email.fill(email)
+        self.smart_fill(self.email, email)
 
     @allure.step("Get Email Validation Error")
     def get_email_validation_error(self):

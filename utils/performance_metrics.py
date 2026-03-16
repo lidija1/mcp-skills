@@ -45,6 +45,7 @@ class PerformanceMetrics:
             return 0
 
         elapsed = (time.time() - self.timers[name]) * 1000
+        self.timers[name] = elapsed  # Store elapsed ms so callers can read it back
         self.logger.info(f"Timer '{name}' stopped: {elapsed:.2f}ms")
         return elapsed
 

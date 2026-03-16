@@ -1,98 +1,366 @@
 ================================================================================
-                    SANDBOX PLAYWRIGHT PROJECT DOCUMENTATION
+                    SANDBOX PLAYWRIGHT - PROJECT DOCUMENTATION
 ================================================================================
-                        Last Updated: January 27, 2026,
-                        Status: Refactored & Optimized (JSON-First)
+  Last Updated : March 13, 2026
+  Status       : Active — Dockerized, BDD, Marker-Driven
 ================================================================================
 
+
+================================================================================
 1. PROJECT OVERVIEW
--------------------
+================================================================================
+
 SandboxPlaywright is an enterprise-grade test automation framework designed for
-end-to-end testing of complex insurance workflows. The framework is built on
-Python, utilizing Playwright for browser automation and pytest-bdd for 
-Behavior-Driven Development. 
+end-to-end testing of insurance platform workflows (OneShield). It supports UI,
+API, and performance testing within a single unified pytest project.
 
-Recent architectural updates have transitioned the framework to a "JSON-First" 
-data model and unified the Page Object Model (POM) into a logical application-based 
-structure, removing legacy complexities.
+Key goals:
+  - Reliable cross-browser UI automation via Playwright
+  - Human-readable test scenarios via pytest-bdd (Gherkin)
+  - Clean data separation via JSON test data files
+  - Rich reporting via Allure + pytest-html
+  - Consistent execution locally and in Docker containers
+  - Credential safety in both logs and Allure reports
 
-2. TECHNOLOGY STACK
--------------------
-- Core: Python 3.x, Playwright (Sync API)
-- Test Runner: pytest
-- BDD: pytest-bdd
-- Reporting: Allure Framework
-- Data Management: Native JSON (Primary), pandas/openpyxl (Legacy Excel)
-- Path Handling: Pathlib (for cross-environment reliability)
-- Environment Config: python-dotenv
-
-3. ARCHITECTURE & DESIGN PATTERNS
----------------------------------
-3.1 Unified Page Object Model (POM)
-The framework follows a strict POM, organized by functional modules:
-- Common: Shared components (Login, Customer Creation)
-- Auto: Insurance-specific workflow pages (Vehicle, Driver, Coverage)
-
-3.2 Data-Driven Testing (DDT)
-Data is decoupled from scripts. The framework supports highly performant JSON 
-loading which maps directly to Python dictionaries, integrated into the 
-pytest-bdd fixture lifecycle.
-
-3.3 Modern Locator Strategy
-Page objects prioritize native Playwright locators (ByRole, ByText, ByLabel) 
-ensuring tests are resilient to DOM changes compared to brittle XPaths.
-
-4. PROJECT STRUCTURE
---------------------
-SandboxPlaywright/
-├── ui/
-│   ├── features/           # BDD Gherkin (.feature) files
-│   ├── pages/              # Unified POM Classes
-│   │   ├── common/         # Core application pages
-│   │   └── auto/           # Auto insurance specific pages
-│   └── steps/              # Modular step definitions
-│       ├── auth_steps.py   # Authentication logic
-│       ├── data_steps.py   # JSON/Excel data loading engine
-│       └── auto_workflow_steps.py # Business process orchestration
-├── testdata/
-│   └── static/             # AutoData.json (Primary), AutoData.xlsx
-├── utils/
-│   ├── json_reader.py      # Pathlib-based JSON DataLoader
-│   ├── excel_reader.py     # Legacy spreadsheet utility
-│   └── logger.py           # Allure-integrated logging system
-├── fixtures/               # Dependency injection & lifecycle mgmt
-├── logs/                   # Execution history
-├── conftest.py             # Global setup & Plugin registration
-└── pytest.ini              # Execution parameters & Markers
-
-5. DATA MANAGEMENT (JSON STANDARDS)
------------------------------------
-The framework now utilizes CamelCase naming conventions in JSON to align with 
-modern API and data standards.
-- Entry point: `testCases` array.
-- Key Mapping:
-    - Primary: `FirstName`, `LastName`, `DOB`, `VehicleUse`.
-    - Format: Strings (to handle leading zeros in ZIPs/Phone Numbers).
-- Advantage: Performance is significantly higher than Excel-based parsing, 
-  and data is easily searchable via IDE.
-
-6. TEST EXECUTION & MARKERS
----------------------------
-Execution is marker-driven:
-- `@smoke`: Critical core paths.
-- `@auto`: Full Personal Auto regression.
-- `@login`: Targeted authentication tests.
-
-Command Example: `pytest -m smoke --headed`
-
-7. REPORTING (ALLURE)
----------------------
-Rich reporting is integrated via `pytest.ini`. Reports include:
-- Visual step-by-step breadcrumbs.
-- Automatic failure screenshots.
-- Embedded logic logs (DEBUG level in files, INFO in reports).
-- Execution data parameters matching the JSON record.
-
-Serve Report: `allure serve allure-results`
 
 ================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+  | Component            | Library / Tool                      |
+  |----------------------|-------------------------------------|
+  | Browser automation   | playwright (Sync API)               |
+  | Test runner          | pytest                              |
+  | BDD engine           | pytest-bdd (Gherkin .feature files) |
+  | Parallel execution   | pytest-xdist                        |
+  | Reporting            | allure-pytest, allure-python-commons|
+  | HTML report          | pytest-html                         |
+  | Environment config   | python-dotenv (reads .env)          |
+  | API testing          | requests                            |
+  | Data (primary)       | JSON (stdlib json)                  |
+  | Data (legacy)        | pandas + openpyxl (Excel)           |
+  | Data visualization   | matplotlib (trend charts)           |
+  | Containerization     | Docker + Docker Compose             |
+  | CI/CD                | Jenkins (Jenkinsfile)               |
+
+
+================================================================================
+3. ARCHITECTURE
+================================================================================
+
+The framework is built on three complementary design patterns:
+
+  POM (Page Object Model)
+    - Every application page is a Python class under ui/pages/
+    - All locators and interactions are encapsulated inside the page class
+    - All pages inherit from BasePage (ui/pages/common/base_page.py)
+
+  BDD (Behavior-Driven Development)
+    - Tests are written in Gherkin (.feature files under ui/features/)
+    - Step definitions are Python functions under ui/steps/
+    - pytest-bdd wires them together; test entry points live in ui/tests/
+
+  DDT (Data-Driven Testing)
+    - Test data lives in JSON files under testdata/static/
+    - A TC_ID value in the Gherkin scenario selects the correct data row
+    - The test_data dict is injected via pytest fixtures
+
+
+  High-Level Request Flow:
+  ┌──────────────────┐
+  │  .feature file   │  (Gherkin scenario)
+  └────────┬─────────┘
+           │ parsed by pytest-bdd
+  ┌────────▼─────────┐
+  │ Step Definitions │  (ui/steps/)
+  └────────┬─────────┘
+           │ page fixtures via DI
+  ┌────────▼─────────┐
+  │  Page Objects    │  (ui/pages/)
+  └────────┬─────────┘
+           │ extends BasePage
+  ┌────────▼─────────┐
+  │  Playwright API  │
+  └────────┬─────────┘
+           │
+  ┌────────▼─────────┐
+  │    Browser       │  (Chromium / Firefox / WebKit / Chrome / Edge)
+  └──────────────────┘
+
+
+================================================================================
+4. DIRECTORY STRUCTURE
+================================================================================
+
+SandboxPlaywright/
+├── conftest.py                  Root fixtures, CLI options, screenshot hook
+├── pytest.ini                   Markers, discovery, default addopts
+├── requirements.txt             Python dependencies
+├── Dockerfile                   Test execution image
+├── docker-compose.yml           Multi-suite execution profiles
+├── Jenkinsfile                  CI/CD pipeline
+├── .env                         Credentials - NEVER commit this file
+│
+├── config/
+│   ├── environments.yaml        Per-environment URLs and settings
+│   └── secrets.yaml             Sensitive config (git-ignored)
+│
+├── ui/
+│   ├── fixtures.py              Page object fixture instantiation
+│   │
+│   ├── features/                Gherkin .feature files
+│   │   ├── auto/
+│   │   │   └── personal_auto.feature
+│   │   ├── common/
+│   │   │   ├── login.feature
+│   │   │   ├── login_validation.feature
+│   │   │   └── customer_validation.feature
+│   │   └── homeowner/
+│   │       └── homeowner_creation.feature
+│   │
+│   ├── pages/                   Page Object Model classes
+│   │   ├── common/
+│   │   │   ├── base_page.py     Abstract base with smart wrappers
+│   │   │   ├── login_page.py
+│   │   │   ├── customer_page.py
+│   │   │   ├── new_quote_page.py
+│   │   │   └── policy_summary_page.py
+│   │   ├── auto/
+│   │   │   ├── quote_registration_page.py
+│   │   │   ├── quote_summary_page.py
+│   │   │   ├── driver_info_page.py
+│   │   │   ├── vehicle_info_page.py
+│   │   │   ├── policy_term_page.py
+│   │   │   └── create_policy_page.py
+│   │   └── homeowner/
+│   │       ├── homeowner_quote_summary_page.py
+│   │       └── homeowner_coverage_page.py
+│   │
+│   ├── steps/                   BDD step definitions
+│   │   ├── common/
+│   │   │   ├── auth_steps.py
+│   │   │   ├── data_steps.py
+│   │   │   ├── login_validation_steps.py
+│   │   │   └── customer_validation_steps.py
+│   │   ├── auto/
+│   │   │   └── auto_workflow_steps.py
+│   │   └── homeowner_steps.py
+│   │
+│   └── tests/                   pytest-bdd scenario entry points
+│       ├── test_auto_workflow.py
+│       ├── test_login.py
+│       ├── test_login_validation.py
+│       ├── test_customer_validation.py
+│       └── test_homeowner.py
+│
+├── api_tests/
+│   ├── conftest.py              Session-scoped requests.Session fixture
+│   ├── test_users.py
+│   ├── test_bin.py
+│   ├── kupujem_prodajem_test.py
+│   ├── GUIDE_API_TESTING.md
+│   └── ASSERTION_GUIDE.md
+│
+├── performance_tests/
+│   ├── conftest.py
+│   ├── performance_config.py    Per-environment thresholds
+│   ├── test_login_performance.py
+│   └── guides/
+│       └── PERFORMANCE_GUIDE.md
+│
+├── testdata/
+│   ├── auth_state.json          Saved browser auth state
+│   └── static/
+│       ├── AutoData.json        Primary auto workflow data
+│       ├── AutoData.xlsx        Legacy Excel fallback
+│       ├── CustomerValidationData.json
+│       └── HomeData.json
+│
+├── utils/
+│   ├── logger.py                File logger + credential masking filter
+│   ├── json_reader.py           DataLoader (Pathlib JSON reader)
+│   ├── excel_reader.py          ExcelReader (pandas)
+│   ├── email_util.py            Timestamp-based unique email generator
+│   ├── file_writer.py           CSV summary append writer
+│   ├── policy_reporter.py       matplotlib trend chart generator
+│   ├── performance_metrics.py   Login/page performance collector
+│   └── performance_assertions.py  Threshold validator
+│
+├── logs/                        One log file per test session
+├── screenshots/                 Failure screenshot storage
+├── reports/                     pytest-html output
+├── allure-results/              Allure raw result data
+└── allure-report/               Generated Allure HTML report
+
+
+================================================================================
+5. ENVIRONMENT CONFIGURATION
+================================================================================
+
+The framework reads from a .env file at startup via dotenv.load_dotenv().
+
+Required keys:
+
+  PARTNER_NUM=0
+  USERNAMEE=your_username
+  PASSWORD=your_password
+
+Notes:
+  - USERNAMEE uses double E to avoid clashing with the Windows USERNAME variable
+  - .env is listed in .gitignore and must never be committed
+  - For Docker: pass the file with --env-file .env or env_file in compose
+
+
+================================================================================
+6. TEST EXECUTION
+================================================================================
+
+Local execution:
+
+  pytest                          Run all tests (uses pytest.ini addopts)
+  pytest -m auto                  Run auto-marked tests
+  pytest -m validation            Run validation-marked tests
+  pytest -m api                   Run API tests
+  pytest -m smoke                 Run smoke tests
+  pytest -m auto -n 4             Run auto tests with 4 parallel workers
+
+Browser options:
+
+  pytest --browser=chromium       Default (Playwright bundled Chromium)
+  pytest --browser=chrome         System Google Chrome
+  pytest --browser=msedge         System Edge
+  pytest --browser=firefox
+  pytest --browser=webkit
+  pytest --headed                 Show browser window
+  pytest --slow-mo=100            100 ms delay between actions
+  pytest --pw-trace=on            Enable Playwright trace recording
+
+Active markers (defined in pytest.ini):
+
+  auto, homeowner, smoke, regression, login, validation, api, performance,
+  stress, empty-fields, invalid-credentials, format-validation, whitespace,
+  case-sensitivity, length, security, ui, navigation, error-messages,
+  special-chars, format, edge-case, accessibility, post-login
+
+
+================================================================================
+7. REPORTING
+================================================================================
+
+  Report         Location                      How to open
+  -------------- ----------------------------- ---------------------------------
+  Allure         allure-results/ (raw data)    allure serve allure-results
+  Allure HTML    allure-report/                Open index.html in browser
+  pytest-html    reports/pytest_report.html    Open directly in browser
+  Traces         reports/traces/*.zip          Open with allure or PW viewer
+  Logs           logs/test_run_<ts>.log        Open in any text editor
+
+Allure report content per test:
+  - Step-by-step execution breadcrumbs (@allure.step)
+  - On-failure: PNG screenshot (attached in-memory, no file write)
+  - On smart wrapper failure: JSON element metadata attachment
+  - Masked Allure parameters for username and password fields
+
+
+================================================================================
+8. CREDENTIAL SAFETY
+================================================================================
+
+Two layers of protection exist:
+
+  1. Log masking (utils/logger.py)
+     -  _CredentialMaskFilter is attached to every logger instance
+     -  Reads USERNAMEE and PASSWORD from env at first log write
+     -  Replaces any occurrence of those values in message text with ***
+
+  2. Allure parameter masking (ui/steps/common/login_validation_steps.py)
+     -  Uses allure.dynamic.parameter(..., mode=ParameterMode.MASKED)
+     -  Requires import from allure_commons.types import ParameterMode
+     -  NOTE: allure.mask_parameters() does not exist in the Python library
+
+
+================================================================================
+9. DOCKER
+================================================================================
+
+Build image:
+  docker build -t playwright-tests:latest .
+
+Run a specific suite with .env credentials:
+  docker run --rm --env-file .env playwright-tests:latest pytest -m auto -n 4 -v
+
+Note: direct docker run loses artifacts when the container exits. Use Compose
+for persistent output volumes.
+
+
+================================================================================
+10. DOCKER COMPOSE
+================================================================================
+
+Services defined in docker-compose.yml:
+
+  Service            Marker          Workers    Notes
+  ----------------   ----------      -------    ---------
+  tests-auto         -m auto         -n 4
+  tests-validation   -m validation   -n 5
+  tests-api          -m api          none
+
+Each service:
+  - Builds from Dockerfile
+  - Loads .env via env_file
+  - Mounts reports/, allure-results/, screenshots/, logs/ as host volumes
+
+Run commands:
+
+  docker compose run --rm tests-auto
+  docker compose run --rm tests-validation
+  docker compose run --rm tests-api
+
+Windows CMD sequential:
+  docker compose run --rm tests-auto & docker compose run --rm tests-validation
+
+IMPORTANT:
+  - Use --rm (double dash). Single dash -rm will error.
+  - Semicolon ; does not work in Windows CMD. Use & instead.
+
+
+================================================================================
+11. CI/CD — JENKINS
+================================================================================
+
+Pipeline defined in: Jenkinsfile
+
+Typical stages:
+  1. Checkout source
+  2. Install Python dependencies
+  3. Execute test suite (marker-based)
+  4. Publish Allure report
+  5. Archive artifacts (reports, logs, screenshots)
+
+
+================================================================================
+12. KNOWN ISSUES & SOLUTIONS
+================================================================================
+
+Problem: AttributeError: module 'allure' has no attribute 'mask_parameters'
+Fix:     Use allure.dynamic.parameter("field", value, mode=ParameterMode.MASKED)
+         with: from allure_commons.types import ParameterMode
+
+Problem: unknown shorthand flag: 'r' in -rm
+Fix:     Use --rm (two dashes): docker compose run --rm <service>
+
+Problem: exec: ";": executable file not found in $PATH
+Fix:     Use & in Windows CMD, or run commands on separate lines
+
+Problem: Credentials appear in logs or Allure
+Fix:     - Confirm _CredentialMaskFilter is active in utils/logger.py
+         - Confirm allure.dynamic.parameter masking is in login step definitions
+         - Confirm .env is being loaded (dotenv loaded in conftest.py)
+
+Problem: Allure report not generated
+Fix:     Run: allure serve allure-results
+         Or:  allure generate allure-results --clean -o allure-report
+
+
+================================================================================
+

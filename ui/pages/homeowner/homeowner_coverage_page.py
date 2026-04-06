@@ -45,6 +45,7 @@ class HomeownerCoveragePage(BasePage):
         self.set_refused_in_the_past(data)
         self.set_denied_coverage(data)
         self.click_save()
+        self.wait_for_loader_to_disappear()
         self.click_rate_quote()
 
     def set_coverage(self, data):

@@ -1,8 +1,11 @@
 """Performance test fixtures and configuration."""
 import pytest
-from utils.performance_metrics import PerformanceMetrics
-from utils.performance_assertions import PerformanceAssertions
-from performance_tests.performance_config import PerformanceThresholds, Environment
+from playwright.sync_api import expect
+
+from performance_tests.performance_metrics import PerformanceMetrics
+from performance_tests.performance_assertions import PerformanceAssertions
+from performance_tests.performance_config import PerformanceThresholds
+from ui.pages.common.performance.new_quote_performance_page import NewQuotePerformancePage
 
 
 @pytest.fixture
@@ -47,4 +50,19 @@ def test_environment():
         Current Environment
     """
     return PerformanceThresholds.get_current_environment()
+
+
+@pytest.fixture
+def logged_in_for_new_quote(login_page, page):
+    """Authenticate and land on the post-login page where Quotes is available."""
+    login_page.navigate()
+    login_page.click_splash_button()
+    login_page.wait_for_login_page()
+    login_page.fill_credentials_from_env()
+    login_page.click_login()
+
+    quote_page = NewQuotePerformancePage(page)
+    expect(quote_page.quotes_button).to_be_visible(timeout=20000)
+    return quote_page
+
 

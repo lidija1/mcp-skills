@@ -2,6 +2,13 @@
 .env
 .env.local
 config/secrets.yaml
+
+# Claude Code local settings (may contain API keys or sensitive paths)
+.claude/settings.local.json
+.claude/settings.json
+
+# Playwright MCP session artifacts (screenshots, snapshots, logs — may contain PII)
+.playwright-mcp/
 # Python
 __pycache__/
 *.py[cod]

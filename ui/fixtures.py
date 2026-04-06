@@ -17,10 +17,23 @@ from ui.pages.auto.driver_info_page import DriverInfoPage
 from ui.pages.auto.vehicle_info_page import VehicleInfoPage
 from ui.pages.auto.policy_term_page import PolicyTermPage
 from ui.pages.auto.create_policy_page import CreatePolicyPage
+from ui.pages.auto.uw_referral_page import UWReferralPage
 
 # Homeowner insurance page fixtures
 from ui.pages.homeowner.homeowner_quote_summary_page import HomeOwnerQuoteSummaryPage
 from ui.pages.homeowner.homeowner_coverage_page import HomeownerCoveragePage
+
+# Cyber insurance page fixtures
+from ui.pages.cyber.cyber_quote_page import CyberQuotePage
+from ui.pages.cyber.cyber_premium_summary_page import CyberPremiumSummaryPage
+
+# Workers Compensation page fixtures
+from ui.pages.wc.wc_quote_page import WCQuotePage
+
+# Common workflow pages (shared across LOBs)
+from ui.pages.common.delivery_preferences_page import DeliveryPreferencesPage
+from ui.pages.common.billing_plan_page import BillingPlanPage
+from ui.pages.common.verify_billing_page import VerifyBillingPage
 
 
 
@@ -100,6 +113,12 @@ def create_policy_page(page):
     """Create policy page for binding quotes."""
     return CreatePolicyPage(page)
 
+
+@pytest.fixture
+def uw_referral_page(page):
+    """UW Referral page — asserts underwriting condition type and message."""
+    return UWReferralPage(page)
+
 # ============================================================================
 # Data Fixtures
 # ============================================================================
@@ -130,3 +149,42 @@ def homeowner_quote_summary_page(page):
 def homeowner_coverage_page(page):
     return HomeownerCoveragePage(page)
 
+
+# ============================================================================
+# Cyber Insurance Page Fixtures
+# ============================================================================
+
+@pytest.fixture
+def cyber_quote_page(page):
+    """Cyber quote details page — business info, coverages, eligibility."""
+    return CyberQuotePage(page)
+
+@pytest.fixture
+def cyber_premium_summary_page(page):
+    """Cyber premium summary page — read-only rated premium details."""
+    return CyberPremiumSummaryPage(page)
+
+@pytest.fixture
+def delivery_preferences_page(page):
+    """Delivery preferences page — document delivery settings (common)."""
+    return DeliveryPreferencesPage(page)
+
+@pytest.fixture
+def billing_plan_page(page):
+    """Billing plan page — payment plan selection (common)."""
+    return BillingPlanPage(page)
+
+@pytest.fixture
+def verify_billing_page(page):
+    """Verify billing choices page — final bind confirmation (common)."""
+    return VerifyBillingPage(page)
+
+
+# ============================================================================
+# Workers Compensation Page Fixtures
+# ============================================================================
+
+@pytest.fixture
+def wc_quote_page(page):
+    """WC quote details page — LOB-specific fields (to be filled after UI inspection)."""
+    return WCQuotePage(page)

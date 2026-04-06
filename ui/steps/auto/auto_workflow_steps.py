@@ -1,7 +1,8 @@
 """Auto insurance quote and policy workflow step definitions."""
 from datetime import datetime
 
-from pytest_bdd import when, given, then
+import allure
+from pytest_bdd import when, given, then, parsers
 
 from utils.file_writer import save_summary_to_csv
 
@@ -68,6 +69,72 @@ def create_policy_from_quote(create_policy_page, log):
     log.info("Creating policy from quote...")
     create_policy_page.policy_creation_steps()
     log.info("Successfully created and bound policy.")
+
+
+@when("I complete quote summary and save")
+def complete_quote_summary_and_save(quote_summary_page, test_data, log):
+    """
+    Fill quote summary fields (billing, FalseInfo, DamageInfo) and save.
+
+    Used in UW hard-stop scenarios where saving the quote summary immediately
+    redirects to the UW referral page before driver/vehicle data is entered.
+    Unlike 'I provide quote summary PA info', this step does NOT attempt to
+    navigate to the driver info tree link afterward.
+    """
+    log.info("Completing quote summary (UW hard-stop path) — saving without driver navigation...")
+    quote_summary_page.summary_steps_save_only(test_data)
+    log.info("Quote summary saved — expecting UW referral page.")
+
+
+@when("I select coverage and rate the quote")
+def select_coverage_and_rate(page, policy_term_page, test_data, log):
+    """
+    Select the policy coverage tier and click Rate Quote, then expect UW referral.
+
+    Handles three trigger points where UW can fire during the rating workflow:
+      1. UW already visible before coverage — some profiles redirect to the UW
+         referral page immediately after vehicle info (e.g. Leased + SR-22).
+      2. UW fires when landing on the coverage page — Rate Quote button is absent
+         because the page already shows a UW condition (e.g. driver age).
+      3. UW fires on Rate Quote click — the standard soft-referral flow.
+
+    In cases 1 and 2 the step exits early; the following Then assertion step
+    validates the UW condition on whichever page is currently active.
+    """
+    uw_indicator = page.locator("text=underwriting referral")
+
+    # Case 1 — UW page already shown before we even attempt coverage selection
+    if uw_indicator.is_visible(timeout=2000):
+        log.info("UW referral page already visible before coverage step — skipping rate.")
+        return
+
+    try:
+        log.info("Selecting coverage and rating quote...")
+        policy_term_page.policy_term_steps(test_data)
+        log.info("Quote rated — expecting UW referral page.")
+    except Exception as exc:
+        # Case 2 — UW fired on the coverage page (e.g. Rate Quote button absent
+        # because UW hard-stop or referral was shown at page load time)
+        if uw_indicator.is_visible(timeout=5000):
+            log.info("UW referral page appeared during coverage step — proceeding to assertion.")
+            return
+        raise exc
+
+
+@then(parsers.parse('the UW referral page shows a "{uw_type}" condition containing "{expected_condition}"'))
+def assert_uw_referral_condition(uw_referral_page, uw_type, expected_condition, log):
+    """
+    Assert that the UW referral page is visible and contains a row in the
+    underwriting issues grid matching the expected type and condition keyword.
+
+    Args:
+        uw_type: 'Hard-Stop' or 'Underwriting' — must match the Type column exactly.
+        expected_condition: Substring to search for inside the Condition column.
+    """
+    log.info(f"Asserting UW condition | type='{uw_type}' | contains='{expected_condition}'")
+    with allure.step(f"Verify UW rule: [{uw_type}] — '{expected_condition}'"):
+        uw_referral_page.assert_uw_condition(uw_type, expected_condition)
+    log.info("UW condition assertion passed.")
 
 
 @then("I read and extract policy summary page details")

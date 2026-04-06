@@ -3,6 +3,9 @@
 **Last updated:** March 13, 2026
 **Status:** Active
 
+**Companion guides:**
+- Lighthouse: `lighthouse/LIGHTHOUSE_GUIDE.md`
+
 ---
 
 ## Table of Contents

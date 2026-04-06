@@ -206,12 +206,14 @@ class BasePage:
                 # Step 7: Fill the value
                 locator.fill(value, timeout=timeout)
 
-                locator.press("Enter")
+                tag = locator.evaluate("el => el.tagName.toLowerCase()")
+                if tag != "textarea":
+                    locator.press("Enter")
 
                 # Step 8: Verify fill if requested
                 if verify_fill:
-                    actual_value = locator.input_value()
-                    if actual_value != value:
+                    actual_value = locator.input_value().strip()
+                    if actual_value != value.strip():
                         raise AssertionError(
                             f"Fill verification failed: expected '{value}', got '{actual_value}'"
                         )

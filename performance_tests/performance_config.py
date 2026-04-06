@@ -26,6 +26,11 @@ class PerformanceThresholds:
             'ttfb_ms': 2000,                     # 2 seconds (Time To First Byte)
             'max_resources': 100,                # Maximum number of resources
             'max_resource_size_kb': 5000,        # Maximum total resource size in KB
+            'quotes_button_click_ms': 2000,
+            'new_quote_button_click_ms': 3000,
+            'agent_radio_click_ms': 1500,
+            'next_button_click_ms': 4000,
+            'new_quote_form_visibility_ms': 3000,
         },
 
         Environment.TESTING: {
@@ -38,6 +43,12 @@ class PerformanceThresholds:
             'ttfb_ms': 3000,  # 3 seconds (Backend is usually slower on testing environment, so we allow more time for TTFB)
             'max_resources': 150, # We alow more resources on testing environment because of additional monitoring and debugging tools that can be loaded
             'max_resource_size_kb': 8000,  # 8 MB (Dubug logs and monitoring scripts can increase total resource size on testing environment, so we allow more)
+            'quotes_button_click_ms': 2000, # 2 seconds
+            'new_quote_button_click_ms': 3000,
+            'agent_radio_click_ms': 1500,
+            'next_button_click_ms': 4000,
+            'new_quote_form_visibility_ms': 3000,
+
         },
 
         Environment.STAGING: {

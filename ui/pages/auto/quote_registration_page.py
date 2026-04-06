@@ -14,8 +14,8 @@ class QuoteRegistrationPage(BasePage):
 
     def quote_registration_steps(self, data):
         """Perform quote registration steps."""
-        self.fill_program(data)
         self.fill_producer(data)
+        self.fill_program(data)
         self.set_effective_date(data)
         self.click_next()
         self.wait_for_loader_to_disappear()
@@ -25,10 +25,19 @@ class QuoteRegistrationPage(BasePage):
         self.smart_fill(self.producer, data["Producer"])
 
     def fill_program(self, data):
-        """Fill program field."""
-        self.smart_click(self.program)
-        self.smart_click(self.page.get_by_role("option", name=data["Program"], exact=True))
-        self.page.expect_response("**/FieldProcessorServlet*")
+        """Fill program field.
+
+        Uses click + exact option match instead of smart_fill + Enter.
+        Typing 'Homeowner' highlights 'Homeowners Association' first (prefix
+        match), so Enter would select the wrong item. exact=True on the option
+        role prevents that ambiguity. expect_response waits for the server
+        reload triggered by the program selection.
+        """
+        value = data["Program"]
+        self.program.scroll_into_view_if_needed()
+        self.program.click()
+        with self.page.expect_response("**/FieldProcessorServlet*"):
+            self.page.get_by_role("option", name=value, exact=True).click()
 
     def set_effective_date(self, data):
         """Set effective date with offset from current date."""

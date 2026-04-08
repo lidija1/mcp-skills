@@ -1,36 +1,49 @@
 {
   "mcpServers": {
     "auto-scenario-generator": {
-      "command": "C:/Projects/SandboxPlaywright/.venv/Scripts/python.exe",
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
       "args": ["-m", "mcp_tools.scenario_generator.server"],
-      "cwd": "C:/Projects/SandboxPlaywright"
-    },
-    "form-intelligence": {
-      "command": "C:/Projects/SandboxPlaywright/.venv/Scripts/python.exe",
-      "args": ["-m", "mcp_tools.form_intelligence.server"],
-      "cwd": "C:/Projects/SandboxPlaywright",
-      "env": {
-        "PROBE_ALLOWED_ORIGINS": "https://inforcedev.oneshield.com"
-      }
-    },
-    "accessibility": {
-      "command": "C:/Projects/SandboxPlaywright/.venv/Scripts/python.exe",
-      "args": ["-m", "mcp_tools.accessibility.server"],
-      "cwd": "C:/Projects/SandboxPlaywright"
-    },
-    "policy-flow-generator": {
-      "command": "C:/Projects/SandboxPlaywright/.venv/Scripts/python.exe",
-      "args": ["-m", "mcp_tools.policy_flow_generator.server"],
-      "cwd": "C:/Projects/SandboxPlaywright",
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
       "env": {
         "AI_PROVIDER": "openai",
         "PYTHONUTF8": "1"
       }
     },
+    "form-intelligence": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.form_intelligence.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "PROBE_ALLOWED_ORIGINS": "https://inforcedev.oneshield.com"
+      }
+    },
+    "accessibility": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.accessibility.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP"
+    },
+    "policy-flow-generator": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.policy_flow_generator.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "AI_PROVIDER": "openai",
+        "PYTHONUTF8": "1"
+      }
+    },
+    "lob-recorder": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.lob_recorder.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "PYTHONUTF8": "1",
+        "LOB_HEADLESS": "false"
+      }
+    },
     "uw-rules-validator": {
-      "command": "C:/Projects/SandboxPlaywright/.venv/Scripts/python.exe",
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
       "args": ["-m", "mcp_tools.uw_rules_validator.server"],
-      "cwd": "C:/Projects/SandboxPlaywright",
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
       "env": {
         "AI_PROVIDER": "openai",
         "PYTHONUTF8": "1"

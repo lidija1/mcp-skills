@@ -72,5 +72,3 @@ def ho_coverage_info_uw(page, homeowner_coverage_page, test_data, log):
             return
         raise exc
 
-
-    

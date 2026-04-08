@@ -34,6 +34,7 @@ pytest_plugins = [
     "ui.steps.common.auth_steps",
     "ui.steps.common.login_validation_steps",
     "ui.steps.common.data_steps",
+    "ui.steps.common.field_steps",
     "ui.steps.auto.auto_workflow_steps",
     "ui.steps.homeowner_steps",
     "ui.steps.common.customer_validation_steps",

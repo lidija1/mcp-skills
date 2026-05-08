@@ -61,5 +61,9 @@ policy_summary/
 reports/
 reports/traces/
 
+# Dashboard frontend generated artifacts
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
+
 # Ignore specific report file
 report.html

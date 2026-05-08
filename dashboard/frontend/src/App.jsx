@@ -1,0 +1,201 @@
+import { useState, useEffect, useCallback } from 'react'
+import Header from './components/Header'
+import OverviewPanel from './components/OverviewPanel'
+import PolicyPanel from './components/PolicyPanel'
+import UWPanel from './components/UWPanel'
+import CustomersPanel from './components/CustomersPanel'
+import ExplorerPanel from './components/ExplorerPanel'
+import DashboardLogin from './components/DashboardLogin'
+import JobSidebar from './components/JobSidebar'
+import JobsPanel from './components/JobsPanel'
+import ReportModal from './components/ReportModal'
+import { api } from './utils/api'
+import {
+  CalendarDays,
+  CircleHelp,
+  Compass,
+  Home,
+  Menu,
+  Settings,
+  ShieldCheck,
+  UserCircle,
+  Users,
+  Workflow,
+} from 'lucide-react'
+
+const JOB_HISTORY_KEY = 'inforceDashboardJobHistory'
+const MAX_STORED_JOBS = 100
+
+function loadStoredJobs() {
+  try {
+    const raw = localStorage.getItem(JOB_HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function normalizeJobUpdate(job, update) {
+  if (!update) return job
+
+  if (update.error === 'not found') {
+    return {
+      ...job,
+      status: 'error',
+      error: 'This running job was not found in the backend. Start it again to rerun the test.',
+      finished: job.finished ?? Date.now() / 1000,
+    }
+  }
+
+  return update.status !== 'running' ? { ...job, ...update } : job
+}
+
+export default function App() {
+  const [tab, setTab] = useState('overview')
+  const [jobs, setJobs] = useState(() => loadStoredJobs())
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [backendOk, setBackendOk] = useState(null)
+  const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
+
+  useEffect(() => {
+    api.health()
+      .then(() => setBackendOk(true))
+      .catch(() => setBackendOk(false))
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(JOB_HISTORY_KEY, JSON.stringify(jobs.slice(0, MAX_STORED_JOBS)))
+    } catch {
+      // Local history is convenience state. Ignore quota/private-mode failures.
+    }
+  }, [jobs])
+
+  useEffect(() => {
+    const running = jobs.filter(j => j.status === 'running')
+    if (running.length === 0) return
+
+    const timer = setInterval(async () => {
+      const updates = await Promise.all(
+        running.map(j => api.getJob(j.id).catch(() => ({ id: j.id, status: 'running' })))
+      )
+      setJobs(prev =>
+        prev.map(j => {
+          const upd = updates.find(u => u.id === j.id)
+          return normalizeJobUpdate(j, upd)
+        })
+      )
+      if (selectedJob) {
+        const upd = updates.find(u => u.id === selectedJob.id)
+        if (upd && upd.status !== selectedJob.status) setSelectedJob(normalizeJobUpdate(selectedJob, upd))
+      }
+    }, 2500)
+
+    return () => clearInterval(timer)
+  }, [jobs, selectedJob])
+
+  const submitJob = useCallback(async (apiFn, label) => {
+    const data = await apiFn()
+    if (!data.job_id) return
+    const placeholder = {
+      id: data.job_id,
+      label,
+      status: 'running',
+      started: Date.now() / 1000,
+      result: null,
+      error: null,
+      finished: null,
+    }
+    setJobs(prev => [placeholder, ...prev])
+    return data.job_id
+  }, [])
+
+  const openJob = useCallback(job => {
+    setSelectedJob(job)
+  }, [])
+
+  const clearJobHistory = useCallback(() => {
+    setJobs([])
+    setSelectedJob(null)
+    localStorage.removeItem(JOB_HISTORY_KEY)
+  }, [])
+
+  const login = useCallback(username => {
+    localStorage.setItem('dashboardUser', username)
+    setDashboardUser(username)
+  }, [])
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('dashboardUser')
+    setDashboardUser('')
+    setSelectedJob(null)
+  }, [])
+
+  if (!dashboardUser) {
+    return <DashboardLogin onLogin={login} />
+  }
+
+  return (
+    <div className="app-shell">
+      <Header backendOk={backendOk} user={dashboardUser} onLogout={logout} />
+
+      <div className="workspace">
+        <aside className="side-nav" aria-label="Primary navigation">
+          <nav className="side-nav-main">
+            <IconButton icon={Menu} label="Menu" />
+            <NavItem icon={Home} label="Overview" active={tab === 'overview'} onClick={() => setTab('overview')} />
+            <NavItem icon={Workflow} label="Policy Flow" active={tab === 'policy'} onClick={() => setTab('policy')} />
+            <NavItem icon={ShieldCheck} label="UW Validator" active={tab === 'uw'} onClick={() => setTab('uw')} />
+            <NavItem icon={Compass} label="Explorer" active={tab === 'explorer'} onClick={() => setTab('explorer')} />
+            <NavItem icon={Users} label="Customers" active={tab === 'customers'} onClick={() => setTab('customers')} />
+            <NavItem icon={CalendarDays} label="Jobs" active={tab === 'jobs'} onClick={() => setTab('jobs')} />
+            <NavItem icon={Settings} label="Settings" />
+          </nav>
+          <nav className="side-nav-footer">
+            <NavItem icon={CircleHelp} label="Help" />
+            <NavItem icon={UserCircle} label="Account" />
+          </nav>
+        </aside>
+
+        <main className="content-pane">
+          {backendOk === false && (
+            <div className="status-alert">
+              Backend not reachable. Start it with <code>python dashboard/backend/main.py</code>
+            </div>
+          )}
+          {tab === 'overview' && <OverviewPanel backendOk={backendOk} jobs={jobs} onNavigate={setTab} />}
+          {tab === 'policy' && <PolicyPanel submitJob={submitJob} />}
+          {tab === 'uw' && <UWPanel submitJob={submitJob} />}
+          {tab === 'explorer' && <ExplorerPanel submitJob={submitJob} openJob={openJob} />}
+          {tab === 'customers' && <CustomersPanel />}
+          {tab === 'jobs' && <JobsPanel jobs={jobs} onSelect={openJob} onClearHistory={clearJobHistory} />}
+        </main>
+
+        <JobSidebar jobs={jobs} onSelect={openJob} selectedId={selectedJob?.id} />
+      </div>
+
+      {selectedJob && (
+        <ReportModal job={selectedJob} onClose={() => setSelectedJob(null)} />
+      )}
+    </div>
+  )
+}
+
+function IconButton({ icon: Icon, label }) {
+  return (
+    <button className="nav-icon-button" title={label} aria-label={label}>
+      <Icon size={22} strokeWidth={2} />
+    </button>
+  )
+}
+
+function NavItem({ icon: Icon, label, active, onClick }) {
+  return (
+    <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick} type="button">
+      <Icon size={22} strokeWidth={2} />
+      <span>{label}</span>
+    </button>
+  )
+}

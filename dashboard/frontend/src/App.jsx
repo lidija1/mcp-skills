@@ -2,16 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import OverviewPanel from './components/OverviewPanel'
 import PolicyPanel from './components/PolicyPanel'
+import ChatPanel from './components/ChatPanel'
 import DashboardLogin from './components/DashboardLogin'
-import JobSidebar from './components/JobSidebar'
-import JobsPanel from './components/JobsPanel'
-import ReportModal from './components/ReportModal'
 import { api } from './utils/api'
 import {
-  CalendarDays,
   CircleHelp,
   Home,
   Menu,
+  MessageCircle,
   Settings,
   UserCircle,
   Workflow,
@@ -49,7 +47,6 @@ function normalizeJobUpdate(job, update) {
 export default function App() {
   const [tab, setTab] = useState('overview')
   const [jobs, setJobs] = useState(() => loadStoredJobs())
-  const [selectedJob, setSelectedJob] = useState(null)
   const [backendOk, setBackendOk] = useState(null)
   const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
 
@@ -81,14 +78,10 @@ export default function App() {
           return normalizeJobUpdate(j, upd)
         })
       )
-      if (selectedJob) {
-        const upd = updates.find(u => u.id === selectedJob.id)
-        if (upd && upd.status !== selectedJob.status) setSelectedJob(normalizeJobUpdate(selectedJob, upd))
-      }
     }, 2500)
 
     return () => clearInterval(timer)
-  }, [jobs, selectedJob])
+  }, [jobs])
 
   const submitJob = useCallback(async (apiFn, label) => {
     const data = await apiFn()
@@ -106,14 +99,20 @@ export default function App() {
     return data.job_id
   }, [])
 
-  const openJob = useCallback(job => {
-    setSelectedJob(job)
-  }, [])
-
-  const clearJobHistory = useCallback(() => {
-    setJobs([])
-    setSelectedJob(null)
-    localStorage.removeItem(JOB_HISTORY_KEY)
+  const trackJob = useCallback((jobId, label) => {
+    const placeholder = {
+      id: jobId,
+      label,
+      status: 'running',
+      started: Date.now() / 1000,
+      result: null,
+      error: null,
+      finished: null,
+    }
+    setJobs(prev => {
+      if (prev.some(j => j.id === jobId)) return prev
+      return [placeholder, ...prev]
+    })
   }, [])
 
   const login = useCallback(username => {
@@ -124,7 +123,6 @@ export default function App() {
   const logout = useCallback(() => {
     localStorage.removeItem('dashboardUser')
     setDashboardUser('')
-    setSelectedJob(null)
   }, [])
 
   if (!dashboardUser) {
@@ -141,7 +139,6 @@ export default function App() {
             <IconButton icon={Menu} label="Menu" />
             <NavItem icon={Home} label="Overview" active={tab === 'overview'} onClick={() => setTab('overview')} />
             <NavItem icon={Workflow} label="Policy Flow" active={tab === 'policy'} onClick={() => setTab('policy')} />
-            <NavItem icon={CalendarDays} label="Jobs" active={tab === 'jobs'} onClick={() => setTab('jobs')} />
             <NavItem icon={Settings} label="Settings" />
           </nav>
           <nav className="side-nav-footer">
@@ -156,17 +153,18 @@ export default function App() {
               Backend not reachable. Start it with <code>python dashboard/backend/main.py</code>
             </div>
           )}
-          {tab === 'overview' && <OverviewPanel backendOk={backendOk} jobs={jobs} onNavigate={setTab} />}
+          {tab === 'overview' && <OverviewPanel backendOk={backendOk} jobs={jobs} />}
           {tab === 'policy' && <PolicyPanel submitJob={submitJob} />}
-          {tab === 'jobs' && <JobsPanel jobs={jobs} onSelect={openJob} onClearHistory={clearJobHistory} />}
         </main>
 
-        <JobSidebar jobs={jobs} onSelect={openJob} selectedId={selectedJob?.id} />
+        <aside className="chat-sidebar" aria-label="Chat assistant">
+          <div className="chat-sidebar-header">
+            <MessageCircle size={17} />
+            Chat Assistant
+          </div>
+          <ChatPanel onJobDispatched={trackJob} />
+        </aside>
       </div>
-
-      {selectedJob && (
-        <ReportModal job={selectedJob} onClose={() => setSelectedJob(null)} />
-      )}
     </div>
   )
 }

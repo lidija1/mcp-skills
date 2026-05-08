@@ -6,6 +6,7 @@ import {
   Play,
   Plus,
   Route,
+  Sparkles,
   UserPlus,
   X,
   Zap,
@@ -45,9 +46,18 @@ export default function PolicyPanel({ submitJob }) {
 
   return (
     <div className="panel-stack animate-fade-in">
-      <section className="page-heading">
-        <h1>Policy Flow Generator</h1>
-        <p>Generate realistic customer profiles and run end-to-end insurance policy workflows</p>
+      <section className="panel-hero-card">
+        <div className="panel-hero-icon blue">
+          <Route size={32} strokeWidth={2} />
+        </div>
+        <div className="panel-hero-copy">
+          <span className="overview-eyebrow">
+            <Sparkles size={14} />
+            Insurance Automation
+          </span>
+          <h1>Policy Flow Generator</h1>
+          <p>Generate realistic customer profiles and run end-to-end insurance policy workflows</p>
+        </div>
       </section>
 
       <LobSelector lobs={LOBS} selected={lob} onSelect={setLob} />
@@ -60,6 +70,22 @@ export default function PolicyPanel({ submitJob }) {
       </div>
 
       <BatchTestCard lob={lob} run={run} loading={loading} />
+
+      <section className="policy-help-copy" aria-label="How to use the policy flow tool">
+        <h2>How to use this tool</h2>
+        <p>
+          Start with a line of business, then type a customer story in plain English. You can
+          run a quick end-to-end test, build just the customer profile, or paste JSON to replay
+          a policy journey. If you want to compare more than one customer, add them to the batch
+          tester and run them together.
+        </p>
+        <ul>
+          <li>Use <strong>Quick Policy Test</strong> when you want the full workflow handled for you.</li>
+          <li>Use <strong>Build Customer Profile</strong> when you only need structured test data.</li>
+          <li>Use <strong>Run Policy Journey</strong> when you already have profile JSON to reuse.</li>
+          <li>Use <strong>Test Multiple Customers</strong> to send a small group of scenarios at once.</li>
+        </ul>
+      </section>
     </div>
   )
 }

@@ -81,13 +81,13 @@
       "lob": "Personal Auto",
       "description": [
         "As an agent, I want to register a quote by selecting the producer, program, and effective date so that the policy is associated with the correct producer and starts on the right date.",
-        "The system should compute the effective date from an integer day offset and load the 'Personal Auto' program from the dropdown without ambiguity."
+        "The system should use today's date as the effective date and load the 'Personal Auto' program from the dropdown without ambiguity."
       ],
       "acceptance_criteria": [
         "Agent can select Producer 'Janis Irey' from the combobox",
         "Agent can select Program 'Personal Auto' (exact match, no ambiguity with similar program names)",
         "System waits for FieldProcessorServlet response after Program selection before enabling Effective Date",
-        "Effective date is calculated automatically from EffDateOffset days from today",
+        "Effective date is calculated automatically from today's date",
         "Agent can click Next to proceed to Quote Summary",
         "Invalid effective dates (past dates, missing program) are rejected"
       ],
@@ -351,7 +351,7 @@
         "Driver born one day after the cutoff (24y 364d) triggers the condition",
         "Driver born on the cutoff date (exactly 25) does NOT trigger this condition",
         "Test cases UW_TC_003 (age 21), UW_TC_011 (age 18), UW_TC_014 (age 17y 364d) validate the age rule",
-        "UW_TC_014 uses EffDateOffset='0' to test the minimum age boundary on today's date"
+        "UW_TC_014 uses today's effective date to test the minimum age boundary"
       ],
       "metadata": {
         "environment": "sandbox",
@@ -480,7 +480,7 @@
         "Driver born exactly on the cutoff date (25 years and 6 days before effective date) does NOT trigger the under-25 condition",
         "Driver born one day after the cutoff (24 years 364 days on effective date) DOES trigger the under-25 condition",
         "The boundary is computed per-effective-date, not a fixed calendar date",
-        "EffDateOffset='0' test (today as effective date) validates boundary behavior for same-day policies",
+        "Today's effective date validates boundary behavior for same-day policies",
         "Boundary test UW_BOUNDARY_25_UNDER confirms the trigger fires correctly",
         "Boundary test UW_BOUNDARY_25_EXACT confirms no false positive at age exactly 25"
       ],

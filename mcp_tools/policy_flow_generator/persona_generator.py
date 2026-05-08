@@ -54,7 +54,7 @@ _UNDER_25_CUTOFF = _EFF_DATE - timedelta(days=25 * 365 + 6)
 
 _AUTO_SYSTEM_PROMPT = f"""
 You are a test data generator for a Personal Auto insurance policy automation framework.
-Today is {_TODAY.strftime('%Y-%m-%d')}. Effective date will be {_EFF_DATE.strftime('%m/%d/%Y')}.
+Today is {_TODAY.strftime('%Y-%m-%d')}. Default effective date is tomorrow ({_EFF_DATE.strftime('%m/%d/%Y')}); adjust for persona context (past date for backdated/historical scenarios, future date for renewals).
 
 Translate the natural-language persona description into a single valid JSON object.
 
@@ -75,7 +75,7 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "State":              "Massachusetts",
   "City":               "Springfield",
   "Producer":           "Janis Irey",
-  "EffDateOffset":      "1",
+  "EffectiveDate":      "MM/DD/YYYY",         // policy start date; default: {_EFF_DATE.strftime('%m/%d/%Y')}; use a past date for backdated/historical scenarios, future date for renewals
   "Program":            "Personal Auto",
   "BillingMethod":      "Direct Billed",
   "FalseInfo":          "No",
@@ -152,7 +152,7 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "City":                   "Springfield",
   "Producer":               "Janis Irey",
   "Program":                "Cyber",
-  "EffDateOffset":          "1",
+  "EffectiveDate":          "MM/DD/YYYY",         // policy start date; default: {_EFF_DATE.strftime('%m/%d/%Y')}; use a past date for backdated/historical scenarios, future date for renewals
   "BillingMethod":          "Direct Billed",
   "BusinessStartDate":      "YYYY",               // 4-digit year only; realistic business founding year
   "TotalEmployees":         string,               // integer as string, e.g. "10"
@@ -236,7 +236,7 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "City":                   "Springfield",
   "Producer":               "Janis Irey",
   "Program":                "Homeowner",
-  "EffDateOffset":          "1",
+  "EffectiveDate":          "MM/DD/YYYY",         // policy start date; default: {_EFF_DATE.strftime('%m/%d/%Y')}; use a past date for backdated/historical scenarios, future date for renewals
   "BillingMethod":          "Direct Billed",
   "ProgramType":            "Basic",
   "DayCare":                "Yes" | "No",
@@ -449,3 +449,131 @@ def list_archetypes(lob: str | None = None) -> str:
         for item in items:
             lines.append(f"  • {item}")
     return "\n".join(lines)
+
+
+def generate_persona_variations(lob: str, base_description: str, count: int) -> str:
+    """
+    Generate `count` distinct persona variations for the given LOB, all inspired
+    by `base_description`. Uses a single AI call requesting a JSON array so
+    the model can produce meaningfully different personas in one pass.
+
+    Returns a JSON string: an array of persona dicts, or a dict with "error".
+    """
+    lob = lob.lower().strip()
+    if lob not in _LOB_PROMPTS:
+        return json.dumps({"error": f"Unknown LOB '{lob}'. Valid: auto, cyber, homeowner"})
+
+    count = max(1, min(count, 25))  # hard-clamp
+
+    base_system = _LOB_PROMPTS[lob]
+    original_tail = "Return ONLY a valid JSON object. No explanation, markdown, or extra text."
+    array_instructions = (
+        f"\n\n════════════════════════════════════════════════\n"
+        f"ARRAY MODE — Generate {count} distinct variations\n"
+        f"════════════════════════════════════════════════\n\n"
+        f"Return a JSON ARRAY of exactly {count} persona objects.\n"
+        f"Each object must be complete and valid (all required fields present).\n"
+        f"Vary key attributes across the {count} personas — names, ages, coverage levels,\n"
+        f"risk characteristics, vehicle/property details, and personal details — so\n"
+        f"every persona is meaningfully different, not a minor copy of the previous one.\n"
+        f"Stay true to the base description theme (LOB, risk class, coverage tier).\n\n"
+        f"Return ONLY a JSON ARRAY (starts with '[', ends with ']'). No extra text."
+    )
+
+    if original_tail in base_system:
+        system_prompt = base_system.replace(original_tail, array_instructions)
+    else:
+        system_prompt = base_system + "\n\n" + array_instructions
+
+    user_message = (
+        f"Generate exactly {count} distinct {lob.upper()} persona variations based on: "
+        f"{base_description}\n\n"
+        f"Return a JSON array of {count} complete persona objects."
+    )
+
+    provider = _detect_provider()
+    raw = ""
+    try:
+        if provider == "anthropic":
+            import anthropic as _anthropic
+            client = _anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=_ANTHROPIC_MODEL,
+                max_tokens=8192,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            )
+            raw = message.content[0].text.strip()
+
+        elif provider == "openai":
+            import openai as _openai
+            client = _openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model=_OPENAI_MODEL,
+                max_tokens=8192,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+            raw = response.choices[0].message.content.strip()
+
+        else:
+            return json.dumps({
+                "error": (
+                    "No AI provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY "
+                    "in your .env file."
+                )
+            })
+
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+        parsed = json.loads(raw)
+        if not isinstance(parsed, list):
+            parsed = [parsed]  # model returned single object — wrap it
+
+        for idx, persona in enumerate(parsed):
+            if isinstance(persona, dict):
+                persona["_lob"] = lob
+                persona["_provider"] = provider
+                persona["_variation_index"] = idx
+
+        return json.dumps(parsed, indent=2)
+
+    except json.JSONDecodeError as exc:
+        return json.dumps({"error": f"Model returned non-JSON: {exc}", "raw": raw[:500]})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+def generate_batch_personas(scenarios: list) -> str:
+    """
+    Generate multiple persona JSON objects without executing browser flows.
+
+    Each item in `scenarios` must be a dict with "lob" and "description" keys.
+    Returns a JSON array where each element is the persona object (or an error
+    object) for that scenario, with an added "_scenario_index" field.
+    """
+    results = []
+    for i, scenario in enumerate(scenarios):
+        lob = str(scenario.get("lob", "")).lower().strip()
+        description = str(scenario.get("description", "")).strip()
+
+        if not lob or not description:
+            results.append({
+                "error": f"Scenario {i}: missing 'lob' or 'description'",
+                "_scenario_index": i,
+            })
+            continue
+
+        raw = generate_persona(lob, description)
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = {"error": f"Non-JSON response for scenario {i}", "raw": raw}
+
+        parsed["_scenario_index"] = i
+        results.append(parsed)
+
+    return json.dumps(results, indent=2)

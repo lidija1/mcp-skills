@@ -52,7 +52,7 @@ FIXED_FIELDS = {
     "City":      "Springfield",
     "State":     "Massachusetts",
     "Producer":  "Janis Irey",
-    "EffDateOffset": "1",
+    "EffectiveDate": (datetime.today() + timedelta(days=1)).strftime("%m/%d/%Y"),
     "PaymentPlan": "Pay In Full",
 }
 
@@ -612,7 +612,7 @@ class LOBCodeGenerator:
   FirstName, LastName, DOB (MM/DD/YYYY), Email (`name_{{{{timestamp}}}}@domain.com`),
   PhoneNum (555-xxx-xxxx), CustomerType="Individual"
   Address, ZIP="{FIXED_FIELDS["ZIP"]}", City="{FIXED_FIELDS["City"]}", State="{FIXED_FIELDS["State"]}"
-  Producer="{FIXED_FIELDS["Producer"]}", Program="{self.program}", EffDateOffset="{FIXED_FIELDS["EffDateOffset"]}"
+  Producer="{FIXED_FIELDS["Producer"]}", Program="{self.program}", EffectiveDate="{FIXED_FIELDS["EffectiveDate"]}"
   PaymentPlan="{FIXED_FIELDS["PaymentPlan"]}"
 - ZIP / City / State must ALWAYS match (ZIP 01101 = Springfield MA)
 - Email MUST use literal {{{{timestamp}}}} placeholder — NEVER a real address

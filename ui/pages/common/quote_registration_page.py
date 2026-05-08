@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
 import time
+from datetime import date, timedelta
 
 from ui.pages.common.base_page import BasePage
 
@@ -39,11 +39,10 @@ class QuoteRegistrationPage(BasePage):
         self.wait_for_loader_to_disappear()
 
     def set_effective_date(self, data):
-        """Set effective date with offset from current date."""
-        offset_days = int(data.get("EffDateOffset", 0))
-        target_date = datetime.now() + timedelta(days=offset_days)
-        formatted_date = target_date.strftime("%m/%d/%Y")
-        self.smart_fill(self.effective_date, formatted_date)
+        effective = data.get("EffectiveDate", "").strip()
+        if not effective:
+            effective = (date.today() + timedelta(days=1)).strftime("%m/%d/%Y")
+        self.smart_fill(self.effective_date, effective)
 
     def click_next(self):
         """Proceed to next step."""

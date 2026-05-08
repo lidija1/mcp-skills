@@ -6,8 +6,6 @@ import sys
 import os
 import json
 import time
-import uuid
-import threading
 import concurrent.futures
 from pathlib import Path
 
@@ -15,6 +13,11 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Chat sub-package on sys.path
+_CHAT_DIR = Path(__file__).resolve().parent / "chat"
+if str(_CHAT_DIR) not in sys.path:
+    sys.path.insert(0, str(_CHAT_DIR))
 
 # Load .env before importing any MCP tool that calls the AI API
 from dotenv import load_dotenv
@@ -62,46 +65,12 @@ from mcp_tools.uw_rules_validator.rule_registry import CASES_BY_LOB, CASES_BY_RU
 from mcp_tools.uw_rules_validator.validator import validate_case
 
 # â”€â”€ Job Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-_jobs: dict[str, dict] = {}
-_lock = threading.Lock()
+import job_store as _job_store
+_new_job = _job_store.new_job
+_log = _job_store.log_job
+_done = _job_store.complete_job
+_fail = _job_store.fail_job
 
-
-def _new_job(label: str) -> str:
-    jid = str(uuid.uuid4())[:8]
-    with _lock:
-        _jobs[jid] = {
-            "id": jid,
-            "label": label,
-            "status": "running",
-            "result": None,
-            "error": None,
-            "started": time.time(),
-            "finished": None,
-            "logs": [],
-        }
-    return jid
-
-
-def _log(jid: str, message: str):
-    with _lock:
-        if jid in _jobs:
-            _jobs[jid]["logs"].append({"ts": round(time.time(), 3), "msg": message})
-
-
-def _done(jid: str, result: str):
-    with _lock:
-        if jid in _jobs:
-            _jobs[jid]["status"] = "done"
-            _jobs[jid]["result"] = result
-            _jobs[jid]["finished"] = time.time()
-
-
-def _fail(jid: str, error: str):
-    with _lock:
-        if jid in _jobs:
-            _jobs[jid]["status"] = "error"
-            _jobs[jid]["error"] = error
-            _jobs[jid]["finished"] = time.time()
 
 
 def _run_flow_threaded(lob: str, persona: dict) -> dict:
@@ -126,6 +95,10 @@ app.add_middleware(
 _ALLURE_REPORT_DIR = _PROJECT_ROOT / "allure-report"
 _ALLURE_REPORT_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/allure", StaticFiles(directory=str(_ALLURE_REPORT_DIR), html=True), name="allure")
+
+# Chat router — imports after sys.path is set
+from chat_router import router as _chat_router
+app.include_router(_chat_router)
 
 
 # â”€â”€ Health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -205,13 +178,12 @@ def allure_generate():
 # â”€â”€ Job endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.get("/api/jobs")
 def list_jobs():
-    with _lock:
-        return sorted(_jobs.values(), key=lambda j: j["started"], reverse=True)
+    return _job_store.list_jobs()
 
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str):
-    return _jobs.get(job_id) or {"error": "not found"}
+    return _job_store.get_job(job_id) or {"error": "not found"}
 
 
 # â”€â”€ Policy: Archetypes (fast, no browser) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

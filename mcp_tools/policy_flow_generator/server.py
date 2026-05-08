@@ -1,10 +1,12 @@
 """
 MCP Server — Policy Flow Generator (multi-LOB).
 
-Exposes five tools:
+Exposes seven tools:
 
   list_persona_archetypes   List available persona archetypes per LOB
   create_persona            NL description → structured persona JSON (Auto/Cyber/Homeowner)
+  create_persona_variations Generate N distinct variations from a single base description
+  create_batch_personas     Generate multiple persona JSONs in one call (no browser execution)
   run_policy_flow           Persona JSON → live E2E browser execution + report
   run_full_policy_flow      Combined: NL → persona → execute → report (one shot)
   run_batch_flows           Run multiple NL descriptions across LOBs in one call
@@ -64,6 +66,8 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from mcp_tools.policy_flow_generator.persona_generator import (  # noqa: E402
     generate_persona,
+    generate_batch_personas,
+    generate_persona_variations,
     list_archetypes,
 )
 from mcp_tools.policy_flow_generator.flow_runner import run_flow  # noqa: E402
@@ -98,6 +102,7 @@ mcp = FastMCP(
         "Use list_persona_archetypes to see available personas. "
         "Use run_full_policy_flow for one-shot NL → execute → report. "
         "Use create_persona + run_policy_flow for a two-step inspect-then-run flow. "
+        "Use create_batch_personas to generate multiple persona JSONs without running flows. "
         "Use run_batch_flows to test multiple scenarios at once. "
         "Use compare_scenarios for BA/customer-friendly scenario comparison, "
         "and summarize_policy to summarize a saved bound policy."
@@ -150,6 +155,78 @@ def create_persona(lob: str, description: str) -> str:
 
 
 @mcp.tool()
+def create_batch_personas(scenarios: list) -> str:
+    """
+    Generate multiple insurance persona JSONs in a single call — no browser execution.
+
+    Use this when you need to inspect or store many personas before deciding which
+    flows to run, or when you want to pre-generate a corpus of test data without
+    waiting for browser sessions to complete.
+
+    Args:
+        scenarios: List of dicts, each with:
+            {
+              "lob": "auto" | "cyber" | "homeowner",
+              "description": str   // natural-language persona
+            }
+            Example:
+            [
+              {"lob": "auto", "description": "Young driver aged 19 with one at-fault accident"},
+              {"lob": "cyber", "description": "Healthcare SaaS, 50 employees, HIPAA compliant"},
+              {"lob": "homeowner", "description": "Coastal property, tile roof, $800k value"}
+            ]
+            Up to 25 scenarios per call.
+
+    Returns:
+        JSON array where each element is the generated persona object for that
+        scenario (or an error object if generation failed), plus an added
+        "_scenario_index" field for correlation.
+    """
+    if not scenarios:
+        return json.dumps({"error": "No scenarios provided."})
+
+    if len(scenarios) > MAX_BATCH_SIZE:
+        return json.dumps({
+            "error": (
+                f"Batch size {len(scenarios)} exceeds the limit of "
+                f"{MAX_BATCH_SIZE}. Split into smaller batches."
+            )
+        })
+
+    return generate_batch_personas(scenarios)
+
+
+@mcp.tool()
+def create_persona_variations(lob: str, base_description: str, count: int = 5) -> str:
+    """
+    Generate N distinct persona variations from a single base description — no browser execution.
+
+    Use this when you want multiple different test personas that all share a common
+    risk theme (e.g., "20 variations of a high-risk auto driver" or "10 coastal
+    homeowner profiles"). Each variation differs in name, age, coverage level,
+    specific risk factors, and other details, while staying true to the base theme.
+
+    Args:
+        lob: Line of business — "auto", "cyber", or "homeowner"
+        base_description: Natural-language base persona, e.g.
+            "22-year-old driver with SR-22, revoked license, leased BMW, Platinum coverage"
+        count: Number of distinct variations to generate (1–25, default 5)
+
+    Returns:
+        JSON array of `count` persona objects, each with a `_variation_index` field.
+    """
+    if not lob or not base_description:
+        return json.dumps({"error": "lob and base_description are required."})
+
+    if not 1 <= count <= MAX_BATCH_SIZE:
+        return json.dumps({
+            "error": f"count must be between 1 and {MAX_BATCH_SIZE} (got {count})."
+        })
+
+    return generate_persona_variations(lob, base_description, count)
+
+
+@mcp.tool()
 def run_policy_flow(lob: str, persona_json: str) -> str:
     """
     Execute a full end-to-end insurance policy flow for the given persona.
@@ -174,6 +251,15 @@ def run_policy_flow(lob: str, persona_json: str) -> str:
         persona = json.loads(persona_json)
     except json.JSONDecodeError as exc:
         return f"**ERROR** — invalid JSON: {exc}"
+
+    # Accept an array (e.g. pasted from create_persona_variations output) — use first element
+    if isinstance(persona, list):
+        if not persona:
+            return "**ERROR** — empty persona array."
+        persona = persona[0]
+
+    if not isinstance(persona, dict):
+        return "**ERROR** — persona_json must be a JSON object (or array of objects)."
 
     if persona.get("error"):
         return f"**ERROR** — persona contains error: {persona['error']}"

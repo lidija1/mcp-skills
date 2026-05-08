@@ -35,4 +35,13 @@ export const api = {
   runCustomBoundary: (lob, description, expected_outcome, expected_conditions) =>
     post('/api/uw/custom-boundary', { lob, description, expected_outcome, expected_conditions }),
   runFullAudit: () => post('/api/uw/full-audit', {}),
+
+  // ── Chat ──────────────────────────────────────────────────────────────
+  chatGreeting: () => fetch('/api/chat/greeting').then(r => r.json()),
+  chat: (message, confirmedTool = null, confirmedParams = null) =>
+    post('/api/chat/message', {
+      message,
+      confirmed_tool: confirmedTool,
+      confirmed_params: confirmedParams,
+    }),
 }

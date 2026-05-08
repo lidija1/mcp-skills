@@ -8,7 +8,7 @@ class WCPolicySummaryPage(BasePolicySummary):
         details = dict(common_details or self.extract_common_details())
         details.update({
             "Producer": test_data.get("Producer"),
-            "Effective Date Offset": test_data.get("EffDateOffset"),
+            "Effective Date": test_data.get("EffectiveDate"),
         })
         return details
 

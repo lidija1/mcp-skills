@@ -1,73 +1,87 @@
 """Auto insurance quote and policy workflow step definitions."""
-from datetime import datetime
-
 import allure
 from pytest_bdd import when, given, then, parsers
 
-from utils.file_writer import save_summary_to_csv
-
 
 @when("i create a new quote")
-def create_new_quote(new_quote_page, log):
+def create_new_quote(new_quote_page, log, api_flow_recorder):
     """Initiate a new quote creation process."""
     log.info("Starting new quote creation...")
+    api_flow_recorder.mark_page("auto_new_quote")
     new_quote_page.new_quote_steps()
     log.info("Successfully created new quote.")
 
 
 @when("i create a new customer")
-def create_new_customer(customer_page, test_data, log):
+def create_new_customer(customer_page, test_data, log, api_flow_recorder):
     """Create a new customer with provided data."""
     log.info("Starting customer creation...")
+    api_flow_recorder.mark_page("auto_customer")
     customer_page.customer_steps(test_data)
     log.info("Successfully created new customer.")
 
 
 @when("I provide quote registration details")
-def provide_quote_registration(quote_registration_page, test_data, log):
+def provide_quote_registration(quote_registration_page, test_data, log, api_flow_recorder):
     """Fill quote registration details."""
     log.info("Filling quote registration details...")
+    api_flow_recorder.mark_page("auto_quote_registration")
     quote_registration_page.quote_registration_steps(test_data)
     log.info("Successfully filled quote registration details.")
 
 
 @when("I provide quote summary PA info")
-def provide_quote_summary(quote_summary_page, test_data, log):
+def provide_quote_summary(quote_summary_page, test_data, log, api_flow_recorder):
     """Fill quote summary information."""
     log.info("Filling quote summary information...")
+    api_flow_recorder.mark_page("auto_quote_summary")
     quote_summary_page.summary_steps(test_data)
     log.info("Successfully filled quote summary information.")
 
 
 @when("I provide Driver Details")
-def provide_driver_details(driver_info_page, test_data, log):
+def provide_driver_details(driver_info_page, test_data, log, api_flow_recorder):
     """Fill driver information."""
     log.info("Filling driver details...")
+    api_flow_recorder.mark_page("auto_driver")
     driver_info_page.fill_driver_info(test_data)
     log.info("Successfully filled driver details.")
 
 
 @when("I provide Vehicle Details")
-def provide_vehicle_details(vehicle_info_page, test_data, log):
+def provide_vehicle_details(vehicle_info_page, test_data, log, api_flow_recorder):
     """Fill vehicle information."""
     log.info("Filling vehicle details...")
+    api_flow_recorder.mark_page("auto_vehicle")
     vehicle_info_page.fill_vehicle_info(test_data)
     log.info("Successfully filled vehicle details.")
 
 
 @given("I provide policy term details")
-def provide_policy_term_details(policy_term_page, test_data, log):
+def provide_policy_term_details(policy_term_page, test_data, log, api_flow_recorder):
     """Fill policy term and coverage details."""
     log.info("Filling policy term details...")
+    api_flow_recorder.mark_page("auto_coverages_rating")
     policy_term_page.policy_term_steps(test_data)
     log.info("Successfully filled policy term details.")
 
 
 @when("I create a policy from the quote")
-def create_policy_from_quote(create_policy_page, log):
+def create_policy_from_quote(create_policy_page, log, api_flow_recorder):
     """Create and bind a policy from the quote."""
     log.info("Creating policy from quote...")
-    create_policy_page.policy_creation_steps()
+    api_flow_recorder.mark_page("auto_premium_summary")
+    create_policy_page.click_issue()
+    create_policy_page.wait_for_loader_to_disappear()
+    api_flow_recorder.mark_page("auto_delivery_preferences")
+    create_policy_page.click_next()
+    create_policy_page.wait_for_loader_to_disappear()
+    api_flow_recorder.mark_page("auto_billing_plan")
+    create_policy_page.click_next()
+    create_policy_page.wait_for_loader_to_disappear()
+    api_flow_recorder.mark_page("auto_verify_billing")
+    create_policy_page.click_bind()
+    create_policy_page.wait_for_loader_to_disappear()
     log.info("Successfully created and bound policy.")
 
 
@@ -138,27 +152,13 @@ def assert_uw_referral_condition(uw_referral_page, uw_type, expected_condition, 
 
 
 @then("I read and extract policy summary page details")
-def read_extract_summary(policy_summary_page, test_data, log):
+def read_extract_summary(policy_summary_page, test_data, log, api_flow_recorder):
     """Extract details from the policy summary page."""
     log.info("Extracting policy summary details...")
-    
-    details = {
-        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Policy Number": policy_summary_page.get_policy_number(),
-        "Program": policy_summary_page.get_program(),
-        "Customer Name": policy_summary_page.get_customer_name(),
-        "Status": policy_summary_page.get_status(),
-        "Payment Method": policy_summary_page.get_payment_method(),
-        "Primary Jurisdiction": policy_summary_page.get_jurisdiction(),
-        "Total Policy Premium": policy_summary_page.get_premium(),
-        "Payment Plan": policy_summary_page.get_payment_plan(),
-        "Employment Category": test_data.get("EmploymentCategory"),
-        "Vehicle Use": test_data.get("VehicleUse"),
-        "Ownership": test_data.get("Ownership"),
-        "Policy Coverage Option": test_data.get("PolicyCoverage")
-    }
+    api_flow_recorder.mark_page("auto_policy_summary")
 
-    path = save_summary_to_csv(details)
+    details = policy_summary_page.extract_details(test_data)
+    path = policy_summary_page.save_lob_report(details)
     log.info("Data is saved to CSV file at: " + path)
     
     log.info("-" * 40)

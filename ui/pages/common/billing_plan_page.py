@@ -19,6 +19,7 @@ class BillingPlanPage(BasePage):
     def __init__(self, page):
         super().__init__(page)
 
+        self.payer_currency = page.get_by_role("combobox", name="Payer Currency")
         self.payment_plan = page.get_by_role("combobox", name="Payment Plan*")
         self.save_button = page.get_by_role("button", name="Save Changes")
         self.next_button = page.get_by_role("button", name=">>> next")
@@ -28,13 +29,38 @@ class BillingPlanPage(BasePage):
     # -------------------------------------------------------------------------
 
     def complete_billing_plan(self, data):
+        self.set_payer_currency(data)
         self.set_payment_plan(data)
         self.click_save()
         self.click_next()
 
+    def inventory_dropdown_options(self):
+        return {
+            "PayerCurrency": self.collect_extjs_options(self.payer_currency),
+            "PaymentPlan": self.collect_extjs_options(self.payment_plan),
+        }
+
+    def inventory_and_fill(self, data):
+        options = {}
+        options["PayerCurrency"] = self.collect_extjs_options(self.payer_currency)
+        self.set_payer_currency(data)
+        options["PaymentPlan"] = self.collect_extjs_options(self.payment_plan)
+        self.set_payment_plan(data)
+        self.click_save()
+        self.click_next()
+        return options
+
     # -------------------------------------------------------------------------
     # Field setters
     # -------------------------------------------------------------------------
+
+    def set_payer_currency(self, data):
+        payer_currency = data.get("PayerCurrency")
+        if not payer_currency:
+            return
+        if self.payer_currency.count() == 0:
+            return
+        self._open_and_select(self.payer_currency, payer_currency)
 
     def set_payment_plan(self, data):
         self._open_and_select(self.payment_plan, data["PaymentPlan"])
@@ -44,35 +70,16 @@ class BillingPlanPage(BasePage):
     # -------------------------------------------------------------------------
 
     def click_save(self):
-        self.smart_click(self.save_button)
-        self.spinner_wait("css=.x-mask")
+        self.with_optional_oneshield_response(lambda: self.smart_click(self.save_button))
+        self.wait_for_app_ready()
 
     def click_next(self):
-        self.smart_click(self.next_button)
-        self.spinner_wait("css=.x-mask")
+        self.with_optional_oneshield_response(lambda: self.smart_click(self.next_button))
+        self.wait_for_app_ready()
 
     # -------------------------------------------------------------------------
     # Private helper — same ExtJS tooltip workaround as CyberQuotePage
     # -------------------------------------------------------------------------
 
     def _open_and_select(self, locator, value):
-        locator.click()
-        try:
-            self.page.wait_for_selector(".x-boundlist-item:visible", timeout=3000)
-        except Exception:
-            self.page.keyboard.press("ArrowDown")
-            self.page.wait_for_selector(".x-boundlist-item", timeout=5000)
-
-        self.page.evaluate(
-            """(text) => {
-                const items = [...document.querySelectorAll('.x-boundlist-item')];
-                const visible = items.filter(el => {
-                    const r = el.getBoundingClientRect();
-                    return r.width > 0 && r.height > 0;
-                });
-                const match = visible.find(el => el.textContent.trim() === text);
-                if (match) match.click();
-                else throw new Error('Option not found: ' + text);
-            }""",
-            value
-        )
+        self.select_extjs_option(locator, value)

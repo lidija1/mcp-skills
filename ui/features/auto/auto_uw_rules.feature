@@ -13,7 +13,7 @@ Feature: Personal Auto Underwriting Rules
 
   @uw_rules @auto
   Scenario Outline: Soft UW referral triggered at quote rating — <TC_ID>
-    Given the data is loaded "testdata/static/AutoUWRulesData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/auto/AutoUWRulesData.json", "<TC_ID>"
     When i create a new quote
     When i create a new customer
     When I provide quote registration details

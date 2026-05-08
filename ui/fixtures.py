@@ -11,7 +11,7 @@ from ui.pages.common.customer_page import CustomerPage
 from ui.pages.common.policy_summary_page import PolicySummary
 
 # Auto insurance page fixtures
-from ui.pages.auto.quote_registration_page import QuoteRegistrationPage
+from ui.pages.common.quote_registration_page import QuoteRegistrationPage
 from ui.pages.auto.quote_summary_page import QuoteSummaryPage
 from ui.pages.auto.driver_info_page import DriverInfoPage
 from ui.pages.auto.vehicle_info_page import VehicleInfoPage
@@ -22,6 +22,12 @@ from ui.pages.auto.uw_referral_page import UWReferralPage
 # Homeowner insurance page fixtures
 from ui.pages.homeowner.homeowner_quote_summary_page import HomeOwnerQuoteSummaryPage
 from ui.pages.homeowner.homeowner_coverage_page import HomeownerCoveragePage
+from ui.pages.homeowner.homeowner_city_information_page import HomeownerCityInformationPage
+from ui.pages.homeowner.homeowner_bind_information_page import HomeownerBindInformationPage
+from ui.pages.homeowner.homeowner_premium_summary_page import HomeownerPremiumSummaryPage
+from ui.pages.homeowner.homeowner_delivery_preferences_page import HomeownerDeliveryPreferencesPage
+from ui.pages.homeowner.homeowner_billing_plan_page import HomeownerBillingPlanPage
+from ui.pages.homeowner.homeowner_verify_billing_page import HomeownerVerifyBillingPage
 
 # Cyber insurance page fixtures
 from ui.pages.cyber.cyber_quote_page import CyberQuotePage
@@ -29,6 +35,21 @@ from ui.pages.cyber.cyber_premium_summary_page import CyberPremiumSummaryPage
 
 # Workers Compensation page fixtures
 from ui.pages.wc.wc_quote_page import WCQuotePage
+
+# General Liability page fixtures
+from ui.pages.general_liability.general_liability_risk_address_page import GeneralLiabilityRiskAddressPage
+from ui.pages.general_liability.general_liability_basic_policy_information_page import (
+    GeneralLiabilityBasicPolicyInformationPage,
+)
+from ui.pages.general_liability.general_liability_coverage_and_limits_page import (
+    GeneralLiabilityCoverageAndLimitsPage,
+)
+from ui.pages.general_liability.general_liability_liability_location_list_page import (
+    GeneralLiabilityLiabilityLocationListPage,
+)
+from ui.pages.general_liability.general_liability_rating_basis_and_classification_page import (
+    GeneralLiabilityRatingBasisAndClassificationPage,
+)
 
 # Common workflow pages (shared across LOBs)
 from ui.pages.common.delivery_preferences_page import DeliveryPreferencesPage
@@ -133,7 +154,7 @@ def excel_data():
 @pytest.fixture
 def json_data():
     """Load test data from JSON file."""
-    path = "testdata/static/AutoData.json"
+    path = "testdata/static/auto/AutoData.json"
     return DataLoader.get_data(path)
 
 # ============================================================================
@@ -148,6 +169,36 @@ def homeowner_quote_summary_page(page):
 @pytest.fixture
 def homeowner_coverage_page(page):
     return HomeownerCoveragePage(page)
+
+
+@pytest.fixture
+def homeowner_city_information_page(page):
+    return HomeownerCityInformationPage(page)
+
+
+@pytest.fixture
+def homeowner_bind_information_page(page):
+    return HomeownerBindInformationPage(page)
+
+
+@pytest.fixture
+def homeowner_premium_summary_page(page):
+    return HomeownerPremiumSummaryPage(page)
+
+
+@pytest.fixture
+def homeowner_delivery_preferences_page(page):
+    return HomeownerDeliveryPreferencesPage(page)
+
+
+@pytest.fixture
+def homeowner_billing_plan_page(page):
+    return HomeownerBillingPlanPage(page)
+
+
+@pytest.fixture
+def homeowner_verify_billing_page(page):
+    return HomeownerVerifyBillingPage(page)
 
 
 # ============================================================================
@@ -188,3 +239,33 @@ def verify_billing_page(page):
 def wc_quote_page(page):
     """WC quote details page — LOB-specific fields (to be filled after UI inspection)."""
     return WCQuotePage(page)
+
+
+@pytest.fixture
+def general_liability_risk_address_page(page):
+    """General Liability risk-address page."""
+    return GeneralLiabilityRiskAddressPage(page)
+
+
+@pytest.fixture
+def general_liability_basic_policy_information_page(page):
+    """General Liability basic policy information page."""
+    return GeneralLiabilityBasicPolicyInformationPage(page)
+
+
+@pytest.fixture
+def general_liability_coverage_and_limits_page(page):
+    """General Liability coverage and limits page."""
+    return GeneralLiabilityCoverageAndLimitsPage(page)
+
+
+@pytest.fixture
+def general_liability_liability_location_list_page(page):
+    """General Liability liability location list page."""
+    return GeneralLiabilityLiabilityLocationListPage(page)
+
+
+@pytest.fixture
+def general_liability_rating_basis_and_classification_page(page):
+    """General Liability rating basis and classification page."""
+    return GeneralLiabilityRatingBasisAndClassificationPage(page)

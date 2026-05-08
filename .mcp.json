@@ -1,27 +1,5 @@
 {
   "mcpServers": {
-    "auto-scenario-generator": {
-      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
-      "args": ["-m", "mcp_tools.scenario_generator.server"],
-      "cwd": "C:/Programming/SandboxPlaywrightMCP",
-      "env": {
-        "AI_PROVIDER": "openai",
-        "PYTHONUTF8": "1"
-      }
-    },
-    "form-intelligence": {
-      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
-      "args": ["-m", "mcp_tools.form_intelligence.server"],
-      "cwd": "C:/Programming/SandboxPlaywrightMCP",
-      "env": {
-        "PROBE_ALLOWED_ORIGINS": "https://inforcedev.oneshield.com"
-      }
-    },
-    "accessibility": {
-      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
-      "args": ["-m", "mcp_tools.accessibility.server"],
-      "cwd": "C:/Programming/SandboxPlaywrightMCP"
-    },
     "policy-flow-generator": {
       "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
       "args": ["-m", "mcp_tools.policy_flow_generator.server"],
@@ -29,15 +7,6 @@
       "env": {
         "AI_PROVIDER": "openai",
         "PYTHONUTF8": "1"
-      }
-    },
-    "lob-recorder": {
-      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
-      "args": ["-m", "mcp_tools.lob_recorder.server"],
-      "cwd": "C:/Programming/SandboxPlaywrightMCP",
-      "env": {
-        "PYTHONUTF8": "1",
-        "LOB_HEADLESS": "false"
       }
     },
     "uw-rules-validator": {
@@ -48,6 +17,16 @@
         "AI_PROVIDER": "openai",
         "PYTHONUTF8": "1"
       }
+    },
+    "framework-guided-policy-flow-generator": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.framework_guided_policy_flow_generator.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "PYTHONUTF8": "1"
+      },
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }

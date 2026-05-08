@@ -314,6 +314,10 @@ def noop_lived_here(): pass
 def noop_losses(): pass
 
 
+@step("I answer pool question")
+def noop_pool(): pass
+
+
 @step("I answer existing agency client question")
 def noop_existing_client(): pass
 
@@ -324,3 +328,49 @@ def noop_refused(): pass
 
 @step("I answer coverage declined question")
 def noop_declined(): pass
+
+
+# Additional HO Elements
+
+@step("I review quote summary identity fields")
+def noop_ho_review_quote_identity(): pass
+
+
+@step("I review city information display fields")
+def noop_ho_review_city_information(): pass
+
+
+@step("I set contents limit")
+def noop_ho_contents(): pass
+
+
+@step("I set loss of use limit")
+def noop_ho_loss_of_use(): pass
+
+
+@step("I review other structures limit")
+def noop_ho_other_structures(): pass
+
+
+@step("I review mitigation dropdowns")
+def noop_ho_mitigation_dropdowns(): pass
+
+
+@step("I review security protection checkboxes")
+def noop_ho_security_checkboxes(): pass
+
+
+@step("I review premium summary actions")
+def noop_ho_premium_actions(): pass
+
+
+@step("I review delivery preference controls")
+def noop_ho_delivery_controls(): pass
+
+
+@step("I review billing plan controls")
+def noop_ho_billing_controls(): pass
+
+
+@step("I review verify billing actions")
+def noop_ho_verify_billing(): pass

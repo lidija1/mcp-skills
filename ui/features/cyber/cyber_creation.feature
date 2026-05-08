@@ -5,7 +5,7 @@ Feature: Cyber Insurance Creation
 
   @smoke @cyber
   Scenario Outline: Create a new cyber policy
-    Given the data is loaded "testdata/static/CyberData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/cyber/CyberData.json", "<TC_ID>"
 
     # ── New Quote ─────────────────────────────────────────────────────────────
     When i create a new quote
@@ -58,7 +58,11 @@ Feature: Cyber Insurance Creation
     When I complete billing plan
     When I bind the Cyber policy
 
+    # ── Policy Summary ────────────────────────────────────────────────────────
+    Then I read and extract policy summary page details
+
     Examples:
       | TC_ID      |
       | TC_ID_0001 |
       | TC_ID_0002 |
+      | TC_ID_0003 |

@@ -27,4 +27,4 @@ class DeliveryPreferencesPage(BasePage):
 
     def click_next(self):
         self.smart_click(self.next_button)
-        self.spinner_wait("css=.x-mask")
+        self.wait_for_app_ready()

@@ -40,6 +40,8 @@ logs/
 Thumbs.db
 
 *.md
+!docs/ONESHIELD_APP_KNOWLEDGE.md
+!docs/ONESHIELD_EXPLORATION_BEST_PRACTICES.md
 .policy_summary/
 
 .reports/

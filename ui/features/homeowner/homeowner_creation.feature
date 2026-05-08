@@ -5,7 +5,7 @@ Feature: Homeowner Creation
 
   @smoke @homeowner
   Scenario Outline: Create a new homeowner policy
-    Given the data is loaded "testdata/static/HomeData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/homeowner/HomeData.json", "<TC_ID>"
 
     # ── New Quote ─────────────────────────────────────────────────────────────
     When i create a new quote
@@ -60,6 +60,7 @@ Feature: Homeowner Creation
         * I answer renovation question
         * I answer lived here question
         * I answer any losses question
+        * I answer pool question
         * I answer existing agency client question
         * I answer refused to insure question
         * I answer coverage declined question
@@ -71,9 +72,13 @@ Feature: Homeowner Creation
         * I proceed through billing plan
         * I bind the policy
 
+    # ── Policy Summary ────────────────────────────────────────────────────────
+    Then I read and extract policy summary page details
+
     Examples:
       | TC_ID      |
       | TC_ID_0001 |
+      | TC_ID_0013 |
 #      | TC_ID_0002 |
 #      | TC_ID_0003 |
 #      | TC_ID_0004 |

@@ -379,4 +379,206 @@ class BasePage:
             raise AssertionError('TEST FAILED: Loading mask is still visible after timeout')
         self.logger.info('Spinner has disappeared')
 
+    def wait_for_app_ready(self, timeout: int = 60000):
+        """Wait for common OneShield loading masks to clear."""
+        self.spinner_wait("#ajax-sub-pre-loading", timeout=timeout)
+        self.spinner_wait("css=.x-mask", timeout=timeout)
+
+    def wait_for_loader_to_disappear(self):
+        self.wait_for_app_ready()
+
+    def _click_and_wait(self, locator, wait_for_response=False):
+        if wait_for_response:
+            self.with_optional_oneshield_response(lambda: self.smart_click(locator))
+        else:
+            self.smart_click(locator)
+        self.wait_for_app_ready()
+
+    def wait_for_oneshield_response(self, timeout: int = 10000, url_parts=None):
+        """Wait for a OneShield business response when an action triggers server work."""
+        url_parts = url_parts or ()
+
+        def matches(response):
+            if response.status >= 400:
+                return False
+            if url_parts:
+                return any(part in response.url for part in url_parts)
+            resource_type = response.request.resource_type
+            return (
+                "oneshield" in response.url.lower()
+                and resource_type in {"xhr", "fetch", "document"}
+            )
+
+        response = self.page.wait_for_response(matches, timeout=timeout)
+        self.logger.info(f"Observed OneShield response: {response.status} {response.url}")
+        return response
+
+    def with_optional_oneshield_response(self, action, timeout: int = 10000, url_parts=None):
+        """Run an action and observe the backend response when the app emits one."""
+        action_error = None
+        try:
+            with self.page.expect_response(
+                lambda response: self._matches_oneshield_response(response, url_parts),
+                timeout=timeout,
+            ) as response_info:
+                try:
+                    result = action()
+                except Exception as error:
+                    action_error = error
+                    raise
+            response = response_info.value
+            self.logger.info(f"Observed OneShield response: {response.status} {response.url}")
+            return result
+        except PWTimeout:
+            if action_error:
+                raise action_error
+            self.logger.debug("No OneShield response observed within the timeout window.")
+            return None
+
+    def _matches_oneshield_response(self, response, url_parts=None):
+        if response.status >= 400:
+            return False
+        if url_parts:
+            return any(part in response.url for part in url_parts)
+        resource_type = response.request.resource_type
+        return (
+            "oneshield" in response.url.lower()
+            and resource_type in {"xhr", "fetch", "document"}
+        )
+
+    def select_extjs_option(
+        self,
+        locator: Locator,
+        value: str,
+        wait_for_response: bool = False,
+        response_timeout: int = 10000,
+        url_parts=None,
+    ):
+        """Select an ExtJS combobox option by exact visible text."""
+        last_error = None
+
+        for _ in range(3):
+            try:
+                locator.scroll_into_view_if_needed()
+                locator.click()
+
+                visible_items_js = (
+                    "() => [...document.querySelectorAll('.x-boundlist-item')]"
+                    ".some(el => { const r = el.getBoundingClientRect();"
+                    " return r.width > 0 && r.height > 0; })"
+                )
+                try:
+                    self.page.wait_for_function(visible_items_js, timeout=3000)
+                except Exception:
+                    self.page.keyboard.press("ArrowDown")
+                    self.page.wait_for_function(visible_items_js, timeout=5000)
+
+                def click_option():
+                    return self.page.evaluate(
+                        """(text) => {
+                            const items = [...document.querySelectorAll('.x-boundlist-item')];
+                            const visible = items.filter(el => {
+                                const r = el.getBoundingClientRect();
+                                const style = window.getComputedStyle(el);
+                                return r.width > 0 && r.height > 0
+                                    && style.visibility !== 'hidden'
+                                    && style.display !== 'none';
+                            });
+                            const match = visible.find(el => el.textContent.trim() === text);
+                            if (match) match.click();
+                            else throw new Error('Option not found: ' + text);
+                        }""",
+                        value
+                    )
+
+                if wait_for_response:
+                    self.with_optional_oneshield_response(
+                        click_option,
+                        timeout=response_timeout,
+                        url_parts=url_parts,
+                    )
+                else:
+                    click_option()
+                return
+            except Exception as error:
+                last_error = error
+                self.page.keyboard.press("Escape")
+                self.wait_for_app_ready()
+                time.sleep(0.5)
+        raise last_error
+
+    def collect_extjs_options(self, locator: Locator, timeout: int = 5000):
+        """Return the currently visible ExtJS option texts for a combobox."""
+        locator.scroll_into_view_if_needed()
+        locator.click()
+
+        visible_items_js = (
+            "() => [...document.querySelectorAll('.x-boundlist-item')]"
+            ".filter(el => { const r = el.getBoundingClientRect();"
+            " const style = window.getComputedStyle(el);"
+            " return r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'; })"
+            ".map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim())"
+            ".filter(Boolean)"
+        )
+
+        try:
+            self.page.wait_for_function(
+                "() => [...document.querySelectorAll('.x-boundlist-item')]"
+                ".some(el => { const r = el.getBoundingClientRect();"
+                " return r.width > 0 && r.height > 0; })",
+                timeout=timeout,
+            )
+        except Exception:
+            self.page.keyboard.press("ArrowDown")
+            self.page.wait_for_function(
+                "() => [...document.querySelectorAll('.x-boundlist-item')]"
+                ".some(el => { const r = el.getBoundingClientRect();"
+                " return r.width > 0 && r.height > 0; })",
+                timeout=timeout,
+            )
+
+        options = self.page.evaluate(visible_items_js)
+        self.page.keyboard.press("Escape")
+        return options
+
+    def collect_radio_options(self, group_name: str):
+        """Return visible radio option labels for a named radiogroup."""
+        group = self.page.get_by_role("radiogroup", name=re.compile(group_name, re.I))
+        radios = group.get_by_role("radio")
+        options = []
+
+        for index in range(radios.count()):
+            radio = radios.nth(index)
+            if not radio.is_visible():
+                continue
+            label = (
+                radio.get_attribute("aria-label")
+                or radio.get_attribute("value")
+                or (radio.text_content() or "").strip()
+            )
+            label = " ".join(label.split())
+            if label:
+                options.append(label)
+
+        return options
+
+    def collect_visible_role_texts(self, role: str):
+        """Return visible text content for all elements matching a Playwright role."""
+        locators = self.page.get_by_role(role)
+        items = []
+
+        for index in range(locators.count()):
+            item = locators.nth(index)
+            if not item.is_visible():
+                continue
+            text = (
+                item.get_attribute("aria-label")
+                or (item.text_content() or "").strip()
+            )
+            text = " ".join(text.split())
+            if text:
+                items.append(text)
+
+        return items
+
 

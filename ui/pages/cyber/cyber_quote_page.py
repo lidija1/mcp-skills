@@ -109,11 +109,11 @@ class CyberQuotePage(BasePage):
 
     def click_save(self):
         self.smart_click(self.save_button)
-        self.spinner_wait("css=.x-mask")
+        self.wait_for_app_ready()
 
     def click_rate_quote(self):
         self.smart_click(self.rate_quote_button)
-        self.spinner_wait("css=.x-mask")
+        self.wait_for_app_ready()
 
     # -------------------------------------------------------------------------
     # Private helper: open dropdown and select by visible text using JS click.

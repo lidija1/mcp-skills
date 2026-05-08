@@ -5,7 +5,7 @@ Feature: Workers Compensation Creation
 
   @smoke @wc
   Scenario Outline: Create a new workers compensation policy
-    Given the data is loaded "testdata/static/WCData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/wc/WCData.json", "<TC_ID>"
 
     # ── New Quote ─────────────────────────────────────────────────────────────
     When i create a new quote
@@ -37,6 +37,9 @@ Feature: Workers Compensation Creation
 
     # ── WC Quote Details ──────────────────────────────────────────────────────
     When I explore the WC quote page
+
+    # ── Policy Summary ────────────────────────────────────────────────────────
+    Then I read and extract policy summary page details
 
     Examples:
       | TC_ID      |

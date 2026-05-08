@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import time
+
 from ui.pages.common.base_page import BasePage
 
 
@@ -22,22 +24,19 @@ class QuoteRegistrationPage(BasePage):
 
     def fill_producer(self, data):
         """Fill producer field."""
-        self.smart_fill(self.producer, data["Producer"])
+        self._open_and_select(self.producer, data["Producer"])
+        self.wait_for_loader_to_disappear()
 
     def fill_program(self, data):
         """Fill program field.
 
-        Uses click + exact option match instead of smart_fill + Enter.
+        Uses visible ExtJS option matching instead of smart_fill + Enter.
         Typing 'Homeowner' highlights 'Homeowners Association' first (prefix
-        match), so Enter would select the wrong item. exact=True on the option
-        role prevents that ambiguity. expect_response waits for the server
-        reload triggered by the program selection.
+        match), so Enter would select the wrong item. Exact visible-text
+        matching prevents that ambiguity.
         """
-        value = data["Program"]
-        self.program.scroll_into_view_if_needed()
-        self.program.click()
-        with self.page.expect_response("**/FieldProcessorServlet*"):
-            self.page.get_by_role("option", name=value, exact=True).click()
+        self._open_and_select(self.program, data["Program"])
+        self.wait_for_loader_to_disappear()
 
     def set_effective_date(self, data):
         """Set effective date with offset from current date."""
@@ -50,5 +49,15 @@ class QuoteRegistrationPage(BasePage):
         """Proceed to next step."""
         self.smart_click(self.next_button)
 
-    def wait_for_loader_to_disappear(self):
-        self.spinner_wait("#ajax-sub-pre-loading")
+    def _open_and_select(self, locator, value):
+        last_error = None
+        for _ in range(3):
+            try:
+                self.select_extjs_option(locator, value)
+                return
+            except Exception as error:
+                last_error = error
+                self.page.keyboard.press("Escape")
+                self.wait_for_loader_to_disappear()
+                time.sleep(0.5)
+        raise last_error

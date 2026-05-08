@@ -20,3 +20,7 @@ django-report-builder
 mcp
 anthropic
 openai
+# Dashboard backend dependencies
+fastapi
+pydantic
+uvicorn

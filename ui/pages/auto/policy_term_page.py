@@ -21,9 +21,6 @@ class PolicyTermPage(BasePage):
         self.smart_click(self.coverage)
         self.smart_click(self.page.locator(f"//li[text()='{coverage}']"))
 
-    def wait_for_loader_to_disappear(self):
-        self.spinner_wait("#ajax-sub-pre-loading")
-
     def click_rate(self):
         """Rate the quote."""
         self.smart_click(self.rate_quote_button)

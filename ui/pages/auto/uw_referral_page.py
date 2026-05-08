@@ -59,6 +59,17 @@ class UWReferralPage(BasePage):
             f"  Gridcells visible  :\n{self._dump_gridcells()}"
         )
 
+        grid_dump = self._dump_gridcells()
+        allure.attach(
+            f"TRIGGERED UW RULE\n"
+            f"{'=' * 40}\n"
+            f"Type      : {uw_type}\n"
+            f"Condition : {expected_condition}\n"
+            f"\nAll conditions on page:\n{grid_dump}",
+            name="UW Rule Triggered",
+            attachment_type=allure.attachment_type.TEXT,
+        )
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------

@@ -23,9 +23,6 @@ class QuoteSummaryPage(BasePage):
         """Set billing method."""
         self.smart_fill(self.billing, data['BillingMethod'])
 
-    def wait_for_loader_to_disappear(self):
-        self.spinner_wait("#ajax-sub-pre-loading")
-
     def set_misleading_info(self, data):
         """Answer question about false/misleading information."""
         self.answer_question(

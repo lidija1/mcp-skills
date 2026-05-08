@@ -1,46 +1,102 @@
-Feature: Homeowner Underwriting Rules
-  Validate that UW rules are triggered and surfaced on the underwriting
-  referral page during the Homeowner quote workflow.
+Feature: Homeowner UW Rules Validation
 
-  UW trigger points:
-    - Page 1 save (Quote Summary) : eligibility radios — ResidenceVacant, DayCare, Animals
-    - Page 2 save (Location Coverage) : Renovation=Yes fires a hard-stop before Rate Quote
-    - After Rate Quote : old Frame construction, high-risk roof types, Refused/Declined
+  Validates the 6 confirmed Hard-Stop underwriting rules for the Generic Homeowners
+  product. Each positive scenario isolates one trigger field; the negative scenario
+  proves a clean profile reaches premium summary without referral.
 
-  Confirmed condition text (substring match, case-sensitive):
-    Renovation hard-stop  : "Property is under construction"
-    Old Frame (>10 yrs)   : "Building construction type is 'Frame'. It is also more than 10 years old."
+  All 6 confirmed conditions are Hard-Stops (verified via live browser session).
+  No soft referrals exist for this product configuration.
 
-  Note on unconfirmed conditions (HO_UW_004 – HO_UW_009):
-    These cases are expected to trigger a UW referral. The condition text substrings
-    used below are initial guesses based on the trigger field names. Run with --headed -s
-    to observe the actual gridcell text, then update the Examples table as needed.
+  Trigger field → condition text mapping (confirmed):
+    RoofType=Flat          → "Roof type is flat, tin or rolled paper"          (Location Coverage, after Rate Quote)
+    UndergroundOil=Yes     → "Any underground oil or storage tanks?"            (Quote Summary, after Rate Quote)
+    Renovation=Yes         → "Property is under construction"                   (Location Coverage, after Rate Quote)
+    DayCare=Yes            → "Child or Day Care run out of the home"            (Quote Summary, after Rate Quote)
+    ResidenceRented=Yes    → "Property rented more than 10 weeks a year"        (Quote Summary, after Rate Quote)
+    ResidenceVacant=Yes    → "Property is Vacant"                               (Quote Summary, after Rate Quote)
 
   Background:
     Given The user is logged in with valid credentials
 
-  @uw_rules @homeowner
-  Scenario Outline: UW referral triggered during homeowner quote — <TC_ID>
-    Given the data is loaded "testdata/static/HomeownerUWRulesData.json", "<TC_ID>"
+  # ── Positive: each row isolates one Hard-Stop trigger ─────────────────────
+  @uw @homeowner
+  Scenario Outline: Homeowner UW Hard-Stop fires on trigger field
+    Given the data is loaded "testdata/static/homeowner/HomeUWData.json", "<TC_ID>"
+
     When i create a new quote
+        * I click the Quotes button
+        * I click New Quote
+        * I select the Agent role
+        * I proceed to customer setup
+
     When i create a new customer
+        * I enter first name
+        * I enter last name
+        * I enter ZIP code
+        * I select customer type
+        * I enter address
+        * I enter city
+        * I enter date of birth
+        * I enter phone number
+        * I enter email address
+        * I search for existing customer
+        * I create a new customer record
+        * I confirm and proceed past customer setup
+
     When I provide quote registration details
+        * I enter producer
+        * I select program
+        * I set effective date
+
     When I provide quote summary HO info for UW testing
     When I provide location coverage info for UW testing
-    Then the UW referral page shows a "<UWType>" condition containing "<ExpectedCondition>"
+
+    Then the UW referral page shows a "<uw_type>" condition containing "<expected_condition>"
 
     Examples:
-      | TC_ID     | UWType       | ExpectedCondition                                                             |
-      # ── Renovation hard-stop (fires on Location Coverage save) ──────────────────
-      | HO_UW_002 | Hard-Stop    | Property is under construction                                                |
-      | HO_UW_003 | Hard-Stop    | Property is under construction                                                |
-      # ── Old Frame construction alone (fires after Rate Quote) ────────────────────
-      | HO_UW_004 | Underwriting | Building construction type is 'Frame'                                         |
-      # ── Bind Information flags (fires at Rate Quote) ─────────────────────────────
-      | HO_UW_005 | Underwriting | cancelled or refused to insure                                                |
-      # ── Page 1 eligibility hard-stops (fire on Quote Summary save) ───────────────
-      | HO_UW_006 | Hard-Stop    | vacant                                                                        |
-      | HO_UW_007 | Hard-Stop    | Day Care                                                                      |
-      # ── High-risk roof types (fire after Rate Quote) ─────────────────────────────
-      | HO_UW_008 | Hard-Stop    | Flat                                                                          |
-      | HO_UW_009 | Hard-Stop    | Asbestos                                                                      |
+      | TC_ID  | uw_type   | expected_condition                        |
+      | UW_001 | Hard-Stop | Roof type is flat, tin or rolled paper    |
+      | UW_002 | Hard-Stop | Any underground oil or storage tanks?     |
+      | UW_003 | Hard-Stop | Property is under construction            |
+      | UW_004 | Hard-Stop | Child or Day Care run out of the home     |
+      | UW_005 | Hard-Stop | Property rented more than 10 weeks a year |
+      | UW_006 | Hard-Stop | Property is Vacant                        |
+
+  # ── Negative: clean profile reaches premium summary without referral ───────
+  @uw @homeowner @smoke
+  Scenario Outline: Clean homeowner profile does not trigger UW referral
+    Given the data is loaded "testdata/static/homeowner/HomeUWData.json", "<TC_ID>"
+
+    When i create a new quote
+        * I click the Quotes button
+        * I click New Quote
+        * I select the Agent role
+        * I proceed to customer setup
+
+    When i create a new customer
+        * I enter first name
+        * I enter last name
+        * I enter ZIP code
+        * I select customer type
+        * I enter address
+        * I enter city
+        * I enter date of birth
+        * I enter phone number
+        * I enter email address
+        * I search for existing customer
+        * I create a new customer record
+        * I confirm and proceed past customer setup
+
+    When I provide quote registration details
+        * I enter producer
+        * I select program
+        * I set effective date
+
+    When I provide quote summary HO info for UW testing
+    When I provide location coverage info for UW testing
+
+    Then no active UW conditions are present
+
+    Examples:
+      | TC_ID  |
+      | UW_007 |

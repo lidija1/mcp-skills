@@ -27,7 +27,7 @@ class DriverInfoPage(BasePage):
         self.set_license_status(data)
         self.set_sr22_required(data)
         self.set_defensive_driver(data)
-        self.set_save_button()
+        self.click_save()
         self.click_vehicle_info_link()
 
     def set_gender(self, data):
@@ -69,7 +69,7 @@ class DriverInfoPage(BasePage):
             radio = group.get_by_label(re.compile(f"^{answer}$", re.I))
             radio.dispatch_event("click")
 
-    def set_save_button(self):
+    def click_save(self):
         """Click save button."""
         self.smart_click(self.save_button)
 

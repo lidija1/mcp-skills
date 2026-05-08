@@ -5,7 +5,7 @@ Feature: Personal Auto Creation
 
   @smoke @auto
   Scenario Outline: Create a new personal auto policy
-    Given the data is loaded "testdata/static/AutoData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/auto/AutoData.json", "<TC_ID>"
 
     # ── New Quote ─────────────────────────────────────────────────────────────
     When i create a new quote
@@ -71,6 +71,9 @@ Feature: Personal Auto Creation
         * I proceed through delivery preferences
         * I proceed through billing plan
         * I bind the policy
+
+    # ── Policy Summary ────────────────────────────────────────────────────────
+    Then I read and extract policy summary page details
 
     Examples:
       | TC_ID      |

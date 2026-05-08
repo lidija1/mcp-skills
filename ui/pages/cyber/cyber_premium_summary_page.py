@@ -41,4 +41,4 @@ class CyberPremiumSummaryPage(BasePage):
 
     def click_request_issue(self):
         self.smart_click(self.request_issue_button)
-        self.spinner_wait("css=.x-mask")
+        self.wait_for_app_ready()

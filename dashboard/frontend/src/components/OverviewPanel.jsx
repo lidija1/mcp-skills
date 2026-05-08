@@ -2,10 +2,7 @@ import {
   Activity,
   CalendarDays,
   CheckCircle2,
-  Compass,
-  ShieldCheck,
   Sparkles,
-  Users,
   Workflow,
 } from 'lucide-react'
 
@@ -19,28 +16,12 @@ const FEATURES = [
     target: 'policy',
   },
   {
-    icon: ShieldCheck,
-    color: 'purple',
-    title: 'UW Validator',
-    copy: 'Runs underwriting rule checks and highlights rule violations in a report designed for demos and review.',
-    action: 'Open UW Validator',
-    target: 'uw',
-  },
-  {
-    icon: Users,
+    icon: CalendarDays,
     color: 'green',
-    title: 'Customer Types',
-    copy: 'Explains the customer archetypes used by automated scenarios so test data is easier to understand.',
-    action: 'View Customers',
-    target: 'customers',
-  },
-  {
-    icon: Compass,
-    color: 'blue',
-    title: 'Explorer',
-    copy: 'Builds Codex prompts with the OneShield Explorer skill trigger already attached.',
-    action: 'Open Explorer',
-    target: 'explorer',
+    title: 'Job History',
+    copy: 'Shows saved dashboard runs with status, timing, and generated reports for completed policy tests.',
+    action: 'View Jobs',
+    target: 'jobs',
   },
 ]
 
@@ -64,9 +45,8 @@ export default function OverviewPanel({ backendOk, jobs, onNavigate }) {
           </span>
           <h1>Insurance workflow automation in one focused console.</h1>
           <p>
-            INFORCE brings policy creation, underwriting validation, customer archetypes,
-            local job history, and report viewing into a single dashboard for repeatable demos
-            and faster QA feedback.
+            INFORCE brings policy creation, local job history, and report viewing into a
+            single dashboard for repeatable demos and faster QA feedback.
           </p>
           <div className="overview-actions">
             <button className="action-button blue" type="button" onClick={() => onNavigate('policy')}>

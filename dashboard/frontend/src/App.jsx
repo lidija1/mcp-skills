@@ -2,9 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import OverviewPanel from './components/OverviewPanel'
 import PolicyPanel from './components/PolicyPanel'
-import UWPanel from './components/UWPanel'
-import CustomersPanel from './components/CustomersPanel'
-import ExplorerPanel from './components/ExplorerPanel'
 import DashboardLogin from './components/DashboardLogin'
 import JobSidebar from './components/JobSidebar'
 import JobsPanel from './components/JobsPanel'
@@ -13,13 +10,10 @@ import { api } from './utils/api'
 import {
   CalendarDays,
   CircleHelp,
-  Compass,
   Home,
   Menu,
   Settings,
-  ShieldCheck,
   UserCircle,
-  Users,
   Workflow,
 } from 'lucide-react'
 
@@ -147,9 +141,6 @@ export default function App() {
             <IconButton icon={Menu} label="Menu" />
             <NavItem icon={Home} label="Overview" active={tab === 'overview'} onClick={() => setTab('overview')} />
             <NavItem icon={Workflow} label="Policy Flow" active={tab === 'policy'} onClick={() => setTab('policy')} />
-            <NavItem icon={ShieldCheck} label="UW Validator" active={tab === 'uw'} onClick={() => setTab('uw')} />
-            <NavItem icon={Compass} label="Explorer" active={tab === 'explorer'} onClick={() => setTab('explorer')} />
-            <NavItem icon={Users} label="Customers" active={tab === 'customers'} onClick={() => setTab('customers')} />
             <NavItem icon={CalendarDays} label="Jobs" active={tab === 'jobs'} onClick={() => setTab('jobs')} />
             <NavItem icon={Settings} label="Settings" />
           </nav>
@@ -167,9 +158,6 @@ export default function App() {
           )}
           {tab === 'overview' && <OverviewPanel backendOk={backendOk} jobs={jobs} onNavigate={setTab} />}
           {tab === 'policy' && <PolicyPanel submitJob={submitJob} />}
-          {tab === 'uw' && <UWPanel submitJob={submitJob} />}
-          {tab === 'explorer' && <ExplorerPanel submitJob={submitJob} openJob={openJob} />}
-          {tab === 'customers' && <CustomersPanel />}
           {tab === 'jobs' && <JobsPanel jobs={jobs} onSelect={openJob} onClearHistory={clearJobHistory} />}
         </main>
 

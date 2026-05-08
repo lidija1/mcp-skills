@@ -65,5 +65,9 @@ reports/traces/
 dashboard/frontend/node_modules/
 dashboard/frontend/dist/
 
+# Graphify cache and generated output
+.graphify_python
+graphify-out/
+
 # Ignore specific report file
 report.html

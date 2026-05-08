@@ -109,7 +109,7 @@ export default function JobsPanel({ jobs, onSelect, onClearHistory }) {
         <div className="empty-history">
           <Clock3 size={58} strokeWidth={1.6} />
           <h2>No saved jobs yet</h2>
-          <p>Run a policy flow or underwriting validation and it will be saved here in this browser.</p>
+          <p>Run a policy flow and it will be saved here in this browser.</p>
         </div>
       ) : (
         Object.entries(grouped).map(([day, lobs]) => (

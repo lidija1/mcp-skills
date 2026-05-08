@@ -361,6 +361,7 @@ button { border: 0; }
 
 .card-content {
   min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -392,7 +393,7 @@ button { border: 0; }
 .field {
   width: 100%;
   min-height: 74px;
-  padding: 16px 20px;
+  padding: 16px 48px 16px 20px;
   color: #1e293b;
   background: #fff;
   border: 1px solid var(--border);
@@ -464,6 +465,18 @@ textarea.field { line-height: 1.45; }
   padding-right: 26px;
 }
 
+.two-column-grid .card-content {
+  height: 100%;
+}
+
+.two-column-grid .card-copy {
+  min-height: 76px;
+}
+
+.two-column-grid .field-wrap {
+  margin-top: 16px;
+}
+
 .batch-header,
 .browse-row {
   width: 100%;
@@ -503,7 +516,7 @@ textarea.field { line-height: 1.45; }
 
 .scenario-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 42px;
+  grid-template-columns: 180px minmax(0, 1fr) 42px;
   gap: 12px;
   align-items: center;
 }
@@ -516,6 +529,7 @@ textarea.field { line-height: 1.45; }
 
 .select-wrap {
   position: relative;
+  min-width: 0;
 }
 
 .select-wrap svg {
@@ -1068,7 +1082,7 @@ textarea.field { line-height: 1.45; }
 
 .overview-feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 

@@ -1,20 +1,67 @@
 """
 Multi-LOB Persona Generator: Natural Language → structured test-data JSON.
 
-Supports Personal Auto, Cyber, and Homeowner lines of business.
+Supports Personal Auto and Homeowner policy-flow lines of business.
 Each LOB has a curated schema, known UW trigger rules, and archetype
 mappings so the AI produces realistic, immediately runnable test data.
 """
 
 import json
 import os
+import random
 import re
 from datetime import date, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(_PROJECT_ROOT / ".env")
+
+# ---------------------------------------------------------------------------
+# Vehicle catalog (auto LOB) — loaded once, sampled per generation call
+# ---------------------------------------------------------------------------
+
+_VEHICLE_CATALOG: list | None = None
+
+
+def _load_vehicle_catalog() -> list:
+    """Flatten docs/auto_vehicle_catalog_*.json → list of {Year, Make, Model, Spec} dicts."""
+    global _VEHICLE_CATALOG
+    if _VEHICLE_CATALOG is not None:
+        return _VEHICLE_CATALOG
+
+    catalog_files = sorted((_PROJECT_ROOT / "docs").glob("auto_vehicle_catalog_*.json"))
+    if not catalog_files:
+        _VEHICLE_CATALOG = []
+        return _VEHICLE_CATALOG
+
+    with open(catalog_files[-1], encoding="utf-8") as fh:
+        data = json.load(fh)
+
+    flat = []
+    for year_entry in data.get("years", []):
+        year = year_entry["year"]
+        for make_entry in year_entry.get("makes", []):
+            make = make_entry["make"]
+            for model_entry in make_entry.get("models", []):
+                model = model_entry["model"]
+                for spec in model_entry.get("specifications", []):
+                    flat.append({"Year": year, "Make": make, "Model": model, "Spec": spec})
+
+    _VEHICLE_CATALOG = flat
+    return _VEHICLE_CATALOG
+
+
+def _sample_vehicles(count: int) -> list:
+    """Return `count` distinct vehicles from the catalog (repeats only if count > catalog size)."""
+    catalog = _load_vehicle_catalog()
+    if not catalog:
+        return []
+    if count <= len(catalog):
+        return random.sample(catalog, count)
+    return random.choices(catalog, k=count)
+
 
 # ---------------------------------------------------------------------------
 # Provider detection
@@ -89,10 +136,10 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "Occupation":         "Day Care",
   "LicenseStatus":      "Active License" | "Suspended" | "Revoked",
   "VehicleType":        "Private Passenger Auto",
-  "Year":               "2018",
-  "Make":               "BMW",
-  "Model":              "M3",
-  "Spec":               "Convertible 2-Door | 2WD | 4.0 Ltrs | 4x2",
+  "Year":               string,    // pre-assigned from vehicle catalog — copy exact value from user message
+  "Make":               string,    // pre-assigned from vehicle catalog — copy exact value from user message
+  "Model":              string,    // pre-assigned from vehicle catalog — copy exact value from user message
+  "Spec":               string,    // pre-assigned from vehicle catalog — copy exact value from user message
   "VehicleUse":         "Pleasure" | "Commute" | "Business",
   "Ownership":          "Owned" | "Leased" | "Financed",
   "LossPayeeType":      "Leased" | "Financed",  // REQUIRED when Ownership != "Owned"; OMIT otherwise
@@ -311,9 +358,9 @@ Return ONLY a valid JSON object. No explanation, markdown, or extra text.
 
 _LOB_PROMPTS = {
     "auto": _AUTO_SYSTEM_PROMPT,
-    "cyber": _CYBER_SYSTEM_PROMPT,
     "homeowner": _HOMEOWNER_SYSTEM_PROMPT,
 }
+_VALID_LOBS = ", ".join(_LOB_PROMPTS)
 
 # ---------------------------------------------------------------------------
 # Archetype reference (returned by list_archetypes)
@@ -330,15 +377,6 @@ PERSONA_ARCHETYPES = {
         "business_driver — business-use vehicle, employed, moderate risk",
         "leased_luxury — leased BMW, financed, loss payee required",
         "multiple_accidents — pre-existing vehicle damage, prior claims",
-    ],
-    "cyber": [
-        "small_office — small professional office, good cyber hygiene, low risk",
-        "high_risk_startup — tech startup, high online sales, past breach, no training",
-        "established_retail — brick-and-mortar retail, moderate online presence",
-        "healthcare_provider — healthcare data, strict regulations, medium risk",
-        "e_commerce — high online sales percentage, tech-driven business",
-        "financial_services — financial firm, strong compliance posture",
-        "no_training_no_regs — poor cyber posture, past incidents, UW referral likely",
     ],
     "homeowner": [
         "standard_homeowner — average home, frame construction, clean history",
@@ -366,10 +404,9 @@ def generate_persona(lob: str, description: str) -> str:
       - Otherwise uses Anthropic if ANTHROPIC_API_KEY is set, else OpenAI.
 
     Args:
-        lob: "auto", "cyber", or "homeowner"
+        lob: "auto" or "homeowner"
         description: Natural-language persona, e.g.
             "Young driver aged 21 with SR-22 on a leased vehicle" (auto)
-            "Small healthcare business with poor cyber posture" (cyber)
             "High-value home with history of losses and renovation" (homeowner)
 
     Returns:
@@ -378,12 +415,24 @@ def generate_persona(lob: str, description: str) -> str:
     lob = lob.lower().strip()
     if lob not in _LOB_PROMPTS:
         return json.dumps({
-            "error": f"Unknown LOB '{lob}'. Valid options: auto, cyber, homeowner"
+            "error": f"Unknown LOB '{lob}'. Valid options: {_VALID_LOBS}"
         })
 
     provider = _detect_provider()
     system_prompt = _LOB_PROMPTS[lob]
-    user_message = f"Generate test data for this {lob.upper()} persona: {description}"
+
+    vehicle_constraint = ""
+    if lob == "auto":
+        vehicles = _sample_vehicles(1)
+        if vehicles:
+            v = vehicles[0]
+            vehicle_constraint = (
+                f"\n\nPre-assigned vehicle — copy these EXACT values into Year/Make/Model/Spec "
+                f"(do NOT alter them):\n"
+                f"  Year={v['Year']}  Make={v['Make']}  Model={v['Model']}  Spec={v['Spec']}"
+            )
+
+    user_message = f"Generate test data for this {lob.upper()} persona: {description}{vehicle_constraint}"
     raw = ""
 
     try:
@@ -438,7 +487,7 @@ def list_archetypes(lob: str | None = None) -> str:
     if lob:
         lob = lob.lower().strip()
         if lob not in PERSONA_ARCHETYPES:
-            return f"Unknown LOB '{lob}'. Valid: auto, cyber, homeowner"
+            return f"Unknown LOB '{lob}'. Valid: {_VALID_LOBS}"
         archetypes = {lob: PERSONA_ARCHETYPES[lob]}
     else:
         archetypes = PERSONA_ARCHETYPES
@@ -461,7 +510,7 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
     """
     lob = lob.lower().strip()
     if lob not in _LOB_PROMPTS:
-        return json.dumps({"error": f"Unknown LOB '{lob}'. Valid: auto, cyber, homeowner"})
+        return json.dumps({"error": f"Unknown LOB '{lob}'. Valid: {_VALID_LOBS}"})
 
     count = max(1, min(count, 25))  # hard-clamp
 
@@ -473,6 +522,10 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
         f"════════════════════════════════════════════════\n\n"
         f"Return a JSON ARRAY of exactly {count} persona objects.\n"
         f"Each object must be complete and valid (all required fields present).\n"
+        f"Each object must also include a \"_note\" field: a single sentence describing "
+        f"what makes this variation distinct from the others "
+        f"(e.g. \"Young driver with SR-22 and revoked licence\" or "
+        f"\"Senior clean-record driver on a leased luxury vehicle\").\n"
         f"Vary key attributes across the {count} personas — names, ages, coverage levels,\n"
         f"risk characteristics, vehicle/property details, and personal details — so\n"
         f"every persona is meaningfully different, not a minor copy of the previous one.\n"
@@ -485,10 +538,26 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
     else:
         system_prompt = base_system + "\n\n" + array_instructions
 
+    vehicle_section = ""
+    if lob == "auto":
+        vehicles = _sample_vehicles(count)
+        if vehicles:
+            lines = [
+                f"  [{i}] Year={v['Year']}  Make={v['Make']}  "
+                f"Model={v['Model']}  Spec={v['Spec']}"
+                for i, v in enumerate(vehicles)
+            ]
+            vehicle_section = (
+                "\n\nPre-assigned vehicles — assign vehicles[i] to persona index i. "
+                "Copy Year/Make/Model/Spec EXACTLY; do NOT alter those four fields:\n"
+                + "\n".join(lines)
+            )
+
     user_message = (
         f"Generate exactly {count} distinct {lob.upper()} persona variations based on: "
         f"{base_description}\n\n"
         f"Return a JSON array of {count} complete persona objects."
+        f"{vehicle_section}"
     )
 
     provider = _detect_provider()

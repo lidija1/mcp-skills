@@ -87,6 +87,14 @@ export default function App() {
     return () => clearInterval(timer)
   }, [jobs])
 
+  useEffect(() => {
+    if (!selectedJob) return
+    const latestJob = jobs.find(job => job.id === selectedJob.id)
+    if (latestJob && latestJob !== selectedJob) {
+      setSelectedJob(latestJob)
+    }
+  }, [jobs, selectedJob])
+
   const submitJob = useCallback(async (apiFn, label) => {
     const data = await apiFn()
     if (!data.job_id) return

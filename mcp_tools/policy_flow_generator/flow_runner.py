@@ -22,14 +22,13 @@ load_dotenv(_PROJECT_ROOT / ".env")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 from mcp_tools.policy_flow_generator.runners.auto_runner import run_auto_flow  # noqa: E402
-from mcp_tools.policy_flow_generator.runners.cyber_runner import run_cyber_flow  # noqa: E402
 from mcp_tools.policy_flow_generator.runners.homeowner_runner import run_homeowner_flow  # noqa: E402
 
 _LOB_RUNNERS = {
     "auto": run_auto_flow,
-    "cyber": run_cyber_flow,
     "homeowner": run_homeowner_flow,
 }
+_VALID_LOBS = ", ".join(_LOB_RUNNERS)
 
 
 def run_flow(lob: str, persona: dict) -> dict[str, Any]:
@@ -37,7 +36,7 @@ def run_flow(lob: str, persona: dict) -> dict[str, Any]:
     Launch a browser, execute the LOB-specific policy flow, and return a result dict.
 
     Args:
-        lob: "auto", "cyber", or "homeowner"
+        lob: "auto" or "homeowner"
         persona: Persona dict from persona_generator.generate_persona()
 
     Returns:
@@ -72,7 +71,7 @@ def run_flow(lob: str, persona: dict) -> dict[str, Any]:
     }
 
     if lob not in _LOB_RUNNERS:
-        result["error"] = f"Unknown LOB '{lob}'. Valid: auto, cyber, homeowner"
+        result["error"] = f"Unknown LOB '{lob}'. Valid: {_VALID_LOBS}"
         return result
 
     runner = _LOB_RUNNERS[lob]

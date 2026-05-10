@@ -71,12 +71,24 @@ _log = _job_store.log_job
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
+POLICY_LOBS = {"auto", "homeowner"}
 
 
 def _run_flow_threaded(lob: str, persona: dict) -> dict:
     """Run Playwright flow in a dedicated thread to avoid asyncio conflicts."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         return pool.submit(run_flow, lob, persona).result()
+
+
+def _validate_policy_lob(lob: str) -> str:
+    normalized = lob.lower().strip()
+    if normalized not in POLICY_LOBS:
+        valid = ", ".join(sorted(POLICY_LOBS))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported policy-flow LOB '{lob}'. Valid options: {valid}.",
+        )
+    return normalized
 
 
 # â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -189,6 +201,8 @@ def get_job(job_id: str):
 # â”€â”€ Policy: Archetypes (fast, no browser) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.get("/api/policy/archetypes")
 def get_archetypes(lob: str = ""):
+    if lob:
+        _validate_policy_lob(lob)
     return {"result": list_archetypes(lob or None)}
 
 
@@ -457,7 +471,7 @@ def _parse_explorer_intent(prompt: str) -> dict:
         "You are a routing assistant for an insurance testing dashboard. "
         "Parse the user's request and return a JSON object with no extra text.\n\n"
         "Possible types:\n"
-        '- "policy_flow": run a policy flow. Requires "lob" (auto|cyber|homeowner) '
+        '- "policy_flow": run a policy flow. Requires "lob" (auto|homeowner) '
         'and "description".\n'
         '- "uw_audit": run underwriting rules audit. Requires "lob".\n'
         '- "unknown": cannot determine the action.\n\n'
@@ -542,11 +556,17 @@ def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Build Profile (AI call only, ~5s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/create-persona")
 def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
+    lob = _validate_policy_lob(req.lob)
     jid = _new_job(f"Build Profile â€” {req.lob.upper()}")
 
     def _run():
         try:
-            _done(jid, generate_persona(req.lob, req.description))
+            persona_json = generate_persona(lob, req.description)
+            data = json.loads(persona_json)
+            if "error" in data:
+                _fail(jid, data["error"])
+                return
+            _done(jid, _format_persona_report(req.lob, req.description, persona_json))
         except Exception as e:
             _fail(jid, str(e))
 
@@ -557,12 +577,13 @@ def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Run Journey (browser, ~90s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/run-flow")
 def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
+    lob = _validate_policy_lob(req.lob)
     jid = _new_job(f"Policy Journey â€” {req.lob.upper()}")
 
     def _run():
         try:
             persona = json.loads(req.persona_json)
-            result = _run_flow_threaded(req.lob, persona)
+            result = _run_flow_threaded(lob, persona)
             _done(jid, format_result(result))
         except Exception as e:
             _fail(jid, str(e))
@@ -574,17 +595,18 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Quick Run (AI + browser, ~100s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/quick-run")
 def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
+    lob = _validate_policy_lob(req.lob)
     jid = _new_job(f"Quick Policy Test â€” {req.lob.upper()}")
 
     def _run():
         try:
-            persona_json = generate_persona(req.lob, req.description)
+            persona_json = generate_persona(lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
                 return
-            result = _run_flow_threaded(req.lob, data)
-            persona_section = f"## Generated Customer Profile\n\n```json\n{persona_json}\n```\n\n---\n\n"
+            result = _run_flow_threaded(lob, data)
+            persona_section = _format_persona_report(req.lob, req.description, persona_json) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
         except Exception as e:
             _fail(jid, str(e))
@@ -596,13 +618,15 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Batch Run (AI + browser Ã— N) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/batch-run")
 def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
+    for scenario in req.scenarios:
+        _validate_policy_lob(str(scenario.get("lob", "auto")))
     jid = _new_job(f"Batch Test â€” {len(req.scenarios)} scenarios")
 
     def _run():
         try:
             results = []
             for s in req.scenarios[:25]:
-                lob = s.get("lob", "auto").lower()
+                lob = _validate_policy_lob(str(s.get("lob", "auto")))
                 pjson = generate_persona(lob, s.get("description", ""))
                 try:
                     p = json.loads(pjson)
@@ -635,6 +659,24 @@ def _empty_result(lob: str, error: str) -> dict:
         "error": error,
         "screenshot_path": None,
     }
+
+
+def _format_persona_report(lob: str, description: str, persona_json: str) -> str:
+    """Wrap generated persona JSON in the markdown shape the dashboard report parser expects."""
+    try:
+        persona = json.loads(persona_json)
+        pretty_json = json.dumps(persona, indent=2)
+    except json.JSONDecodeError:
+        pretty_json = persona_json
+
+    return (
+        "## Generated Customer Profile\n\n"
+        f"**Line of Business:** {lob.upper()}\n\n"
+        f"**Source Description:** {description}\n\n"
+        "```json\n"
+        f"{pretty_json}\n"
+        "```\n"
+    )
 
 
 # â”€â”€ UW: List Rules (fast) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

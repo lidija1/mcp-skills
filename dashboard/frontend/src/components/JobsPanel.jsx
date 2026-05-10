@@ -1,26 +1,7 @@
-import {
-  CalendarDays,
-  Car,
-  Clock3,
-  FileText,
-  Globe2,
-  Home,
-  ShieldCheck,
-  Trash2,
-} from 'lucide-react'
-
 const STATUS_CONFIG = {
   running: { color: '#2563eb', label: 'Running' },
   done: { color: '#16a34a', label: 'Done' },
   error: { color: '#dc2626', label: 'Error' },
-}
-
-const LOB_CONFIG = {
-  'Personal Auto': { icon: Car, color: 'blue' },
-  Homeowner: { icon: Home, color: 'green' },
-  Cyber: { icon: ShieldCheck, color: 'purple' },
-  'All LOBs': { icon: Globe2, color: 'orange' },
-  General: { icon: FileText, color: 'blue' },
 }
 
 function elapsed(job) {
@@ -42,9 +23,14 @@ function dayLabel(job) {
   const today = new Date()
   const yesterday = new Date()
   yesterday.setDate(today.getDate() - 1)
+  const dateText = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 
-  if (date.toDateString() === today.toDateString()) return 'Today'
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  if (date.toDateString() === today.toDateString()) return `Today - ${dateText}`
+  if (date.toDateString() === yesterday.toDateString()) return `Yesterday - ${dateText}`
 
   return date.toLocaleDateString(undefined, {
     weekday: 'short',
@@ -92,7 +78,6 @@ export default function JobsPanel({ jobs, onSelect, onClearHistory }) {
         </div>
         {total > 0 && (
           <button className="text-button danger" type="button" onClick={onClearHistory}>
-            <Trash2 size={16} />
             Clear History
           </button>
         )}
@@ -107,30 +92,53 @@ export default function JobsPanel({ jobs, onSelect, onClearHistory }) {
 
       {total === 0 ? (
         <div className="empty-history">
-          <Clock3 size={58} strokeWidth={1.6} />
           <h2>No saved jobs yet</h2>
           <p>Run a policy flow and it will be saved here in this browser.</p>
         </div>
       ) : (
-        Object.entries(grouped).map(([day, lobs]) => (
-          <section className="job-day-section" key={day}>
-            <div className="job-day-header">
-              <CalendarDays size={20} />
-              <h2>{day}</h2>
-            </div>
+        <div className="jobs-table-card">
+          <div className="jobs-table-header" role="row">
+            <span>Group / Job</span>
+            <span>Status</span>
+            <span>Started</span>
+            <span>Duration</span>
+            <span>ID</span>
+            <span />
+          </div>
 
-            {Object.entries(lobs).map(([lob, lobJobs]) => (
-              <div className="job-lob-section" key={`${day}-${lob}`}>
-                <LobHeading lob={lob} count={lobJobs.length} />
-                <div className="job-history-grid">
-                  {lobJobs.map(job => (
-                    <HistoryCard key={job.id} job={job} onSelect={onSelect} />
+          <div className="jobs-table-body">
+            {Object.entries(grouped).map(([day, lobs]) => {
+              const dayCount = Object.values(lobs).reduce((sum, lobJobs) => sum + lobJobs.length, 0)
+
+              return (
+                <section className="jobs-day-group" key={day}>
+                  <div className="jobs-group-row jobs-day-row">
+                    <div className="jobs-group-title">
+                      <strong>{day}</strong>
+                      <span>{dayCount} {dayCount === 1 ? 'job' : 'jobs'}</span>
+                    </div>
+                    <span className="jobs-collapse-marker">v</span>
+                  </div>
+
+                  {Object.entries(lobs).map(([lob, lobJobs]) => (
+                    <div className="jobs-lob-group" key={`${day}-${lob}`}>
+                      <div className="jobs-group-row jobs-lob-row">
+                        <div className="jobs-group-title">
+                          <strong>{lob}</strong>
+                          <span>{lobJobs.length} {lobJobs.length === 1 ? 'job' : 'jobs'}</span>
+                        </div>
+                      </div>
+
+                      {lobJobs.map(job => (
+                        <HistoryRow key={job.id} job={job} onSelect={onSelect} />
+                      ))}
+                    </div>
                   ))}
-                </div>
-              </div>
-            ))}
-          </section>
-        ))
+                </section>
+              )
+            })}
+          </div>
+        </div>
       )}
     </div>
   )
@@ -145,57 +153,34 @@ function SummaryMetric({ label, value }) {
   )
 }
 
-function LobHeading({ lob, count }) {
-  const config = LOB_CONFIG[lob] || LOB_CONFIG.General
-  const Icon = config.icon
-
-  return (
-    <div className="job-lob-heading">
-      <span className={`customer-type-icon ${config.color}`}>
-        <Icon size={22} />
-      </span>
-      <div>
-        <h3>{lob}</h3>
-        <p>{count} {count === 1 ? 'job' : 'jobs'}</p>
-      </div>
-    </div>
-  )
-}
-
-function HistoryCard({ job, onSelect }) {
+function HistoryRow({ job, onSelect }) {
   const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.running
   const canOpen = job.status === 'done' || job.status === 'error'
 
   return (
-    <article className="job-history-card">
-      <div className="job-history-card-top">
+    <article className={`jobs-table-row ${job.status === 'error' ? 'has-error' : ''}`}>
+      <div className="jobs-job-title">{job.label}</div>
+      <div>
         <span className="job-status" style={{ color: cfg.color }}>
           <i style={{ background: cfg.color }} />
           {cfg.label}
         </span>
-        <span>{elapsed(job)}</span>
       </div>
-
-      <h3>{job.label}</h3>
-      <div className="job-history-meta">
-        <span>Started {startedTime(job)}</span>
-        <span>ID {job.id}</span>
-      </div>
-
-      {job.status === 'error' && job.error && (
-        <div className="job-error">{job.error}</div>
-      )}
-
-      <div className="job-history-actions">
+      <div className="jobs-cell-muted">{startedTime(job)}</div>
+      <div className="jobs-cell-muted">{elapsed(job)}</div>
+      <div className="jobs-cell-id" title={job.id}>{job.id}</div>
+      <div className="jobs-report-cell">
         {canOpen ? (
-          <button className="text-button compact" type="button" onClick={() => onSelect(job)}>
-            <FileText size={15} />
+          <button className="jobs-report-link" type="button" onClick={() => onSelect(job)}>
             View Report
           </button>
         ) : (
-          <span className="job-running-note">Report available when the job finishes</span>
+          <span className="job-running-note">Pending</span>
         )}
       </div>
+      {job.status === 'error' && job.error && (
+        <div className="job-error">{job.error}</div>
+      )}
     </article>
   )
 }

@@ -15,19 +15,16 @@ import {
 
 const LOBS = [
   { id: 'auto', label: 'Personal Auto' },
-  { id: 'cyber', label: 'Cyber' },
   { id: 'homeowner', label: 'Homeowner' },
 ]
 
 const QUICK_PLACEHOLDERS = {
   auto: 'e.g. "A 23-year-old driver with an SR-22 on a leased BMW, two at-fault accidents in the past 3 years"',
-  cyber: 'e.g. "A fintech startup with 80 employees handling card data, no prior cyber coverage, remote workforce"',
   homeowner: 'e.g. "A homeowner with a 22-year-old roof in a flood zone, prior water damage claim two years ago"',
 }
 
 const BUILD_PLACEHOLDERS = {
   auto: 'e.g. "Young male driver, multiple violations, SR-22 filing required..."',
-  cyber: 'e.g. "Healthcare company, 200 employees, stores PHI, no MFA in place..."',
   homeowner: 'e.g. "Older home in wildfire zone, prior loss history, wood-shake roof..."',
 }
 
@@ -257,7 +254,7 @@ function BatchTestCard({ lob, run, loading }) {
     { lob: 'auto', description: '' },
   ])
 
-  const LOBS_SIMPLE = ['auto', 'cyber', 'homeowner']
+  const LOBS_SIMPLE = ['auto', 'homeowner']
   const addScenario = () => setScenarios(s => s.length >= 25 ? s : [...s, { lob, description: '' }])
   const removeScenario = i => setScenarios(s => s.filter((_, idx) => idx !== i))
   const updateScenario = (i, field, val) =>

@@ -3,25 +3,21 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   BarChart2,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   Clipboard,
-  Clock3,
   Copy,
   Download,
   FileJson,
+  Pencil,
   ShieldAlert,
-  Sparkles,
   X,
 } from 'lucide-react'
 
 export default function ReportModal({ job, onClose }) {
   const ref = useRef(null)
-  const [allureState, setAllureState] = useState('idle') // idle | generating | ready | error
+  const [allureState, setAllureState] = useState('idle')
   const [allureError, setAllureError] = useState('')
-  const [profileOpen, setProfileOpen] = useState(true)
-  const [expandedStep, setExpandedStep] = useState(null)
+  const [jsonEditorOpen, setJsonEditorOpen] = useState(false)
+  const [editableJson, setEditableJson] = useState('')
 
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose() }
@@ -30,11 +26,6 @@ export default function ReportModal({ job, onClose }) {
   }, [onClose])
 
   const handleBackdrop = e => { if (e.target === ref.current) onClose() }
-
-  const copyReport = () => {
-    const text = job.status === 'done' ? job.result : job.error
-    navigator.clipboard.writeText(text || '')
-  }
 
   const openAllure = async () => {
     setAllureState('generating')
@@ -48,7 +39,6 @@ export default function ReportModal({ job, onClose }) {
       } else {
         setAllureState('error')
         setAllureError(data.error || 'Allure report generation failed')
-        console.error('Allure generate failed:', data.error)
       }
     } catch (error) {
       setAllureState('error')
@@ -56,11 +46,8 @@ export default function ReportModal({ job, onClose }) {
     }
   }
 
-  const isJson = job.status === 'done' && job.result?.trimStart().startsWith('{')
   const isError = job.status === 'error'
-  const isMarkdown = !isError && !isJson && job.status === 'done'
-  const duration = job.finished ? `${Math.round(job.finished - job.started)}s` : 'Running'
-  const HeaderIcon = isError ? ShieldAlert : isJson ? FileJson : Clipboard
+  const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : 'Running'
 
   const allureLabel = {
     idle: 'Allure Report',
@@ -70,14 +57,36 @@ export default function ReportModal({ job, onClose }) {
   }[allureState]
 
   const report = useMemo(() => parsePolicyFlowReport(job.result || ''), [job.result])
+
+  const copyReport = () => {
+    if (report.profileJson) {
+      navigator.clipboard.writeText(report.prettyProfileJson || report.profileJson)
+    } else {
+      const text = job.status === 'done' ? job.result : job.error
+      navigator.clipboard.writeText(text || '')
+    }
+  }
+
+  const openJsonEditor = () => {
+    if (!jsonEditorOpen) {
+      setEditableJson(report.prettyProfileJson || report.profileJson || '')
+    }
+    setJsonEditorOpen(v => !v)
+  }
+
+  const copyEditableJson = () => {
+    navigator.clipboard.writeText(editableJson)
+  }
+
   const hasStructuredReport = Boolean(
     report.profileJson || report.steps.length || Object.keys(report.summary).length || report.aiInsights.length
   )
-
-  const copyProfile = async () => {
-    if (!report.profileJson) return
-    await navigator.clipboard.writeText(report.prettyProfileJson || report.profileJson)
-  }
+  const isJson = job.status === 'done' && job.result?.trimStart().startsWith('{') && !hasStructuredReport
+  const isMarkdown = !isError && !isJson && job.status === 'done'
+  const isPersonaReport = Boolean(
+    job.result?.includes('Generated Customer Profile') || job.result?.includes('Persona Variations')
+  )
+  const HeaderIcon = isError ? ShieldAlert : isJson ? FileJson : Clipboard
 
   const downloadProfile = () => {
     if (!report.profileJson) return
@@ -105,10 +114,6 @@ export default function ReportModal({ job, onClose }) {
                   <span className="report-badge-dot" />
                   {isError ? 'Failed' : job.status === 'done' ? 'Completed' : 'Running'}
                 </span>
-                <span className="report-badge neutral">
-                  <Clock3 size={13} />
-                  {job.finished ? duration : 'Running'}
-                </span>
                 <span className="report-badge neutral report-id-badge">
                   ID {job.id}
                 </span>
@@ -117,7 +122,7 @@ export default function ReportModal({ job, onClose }) {
           </div>
 
           <div className="report-actions">
-            {isMarkdown && (
+            {isMarkdown && !isPersonaReport && (
               <button
                 onClick={openAllure}
                 className="text-button compact"
@@ -129,6 +134,18 @@ export default function ReportModal({ job, onClose }) {
                 {allureLabel}
               </button>
             )}
+            {report.profileJson && (
+              <>
+                <button onClick={openJsonEditor} className="text-button compact" type="button" title="View and edit profile JSON">
+                  <Pencil size={16} />
+                  {jsonEditorOpen ? 'Close Editor' : 'View & Edit'}
+                </button>
+                <button onClick={downloadProfile} className="text-button compact" type="button" title="Download profile JSON">
+                  <Download size={16} />
+                  Download
+                </button>
+              </>
+            )}
             <button onClick={copyReport} className="text-button compact" type="button">
               <Copy size={16} />
               Copy
@@ -138,6 +155,24 @@ export default function ReportModal({ job, onClose }) {
             </button>
           </div>
         </header>
+
+        {jsonEditorOpen && (
+          <div className="json-editor-panel">
+            <div className="json-editor-toolbar">
+              <span className="json-editor-label">Edit JSON</span>
+              <button onClick={copyEditableJson} className="text-button compact" type="button">
+                <Copy size={14} />
+                Copy
+              </button>
+            </div>
+            <textarea
+              className="json-editor-textarea"
+              value={editableJson}
+              onChange={e => setEditableJson(e.target.value)}
+              spellCheck={false}
+            />
+          </div>
+        )}
 
         <div className="report-body">
           {isError ? (
@@ -157,16 +192,7 @@ export default function ReportModal({ job, onClose }) {
               <pre>{JSON.stringify(JSON.parse(job.result), null, 2)}</pre>
             </div>
           ) : hasStructuredReport ? (
-            <StructuredPolicyReport
-              job={job}
-              report={report}
-              profileOpen={profileOpen}
-              setProfileOpen={setProfileOpen}
-              expandedStep={expandedStep}
-              setExpandedStep={setExpandedStep}
-              onCopyProfile={copyProfile}
-              onDownloadProfile={downloadProfile}
-            />
+            <StructuredPolicyReport job={job} report={report} />
           ) : (
             <div className="markdown-report report-markdown">
               <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
@@ -181,254 +207,168 @@ export default function ReportModal({ job, onClose }) {
   )
 }
 
-function StructuredPolicyReport({
-  job,
-  report,
-  profileOpen,
-  setProfileOpen,
-  expandedStep,
-  setExpandedStep,
-  onCopyProfile,
-  onDownloadProfile,
-}) {
-  const heroTone = report.heroTone
-  const heroIcon = heroTone === 'success' ? CheckCircle2 : heroTone === 'warning' ? ShieldAlert : Clock3
-  const heroStatus = report.heroStatus
-  const heroSubtitle = report.heroSubtitle
-  const metrics = buildMetricCards(report, job)
-  const replay = buildReplayStrip(report.steps)
-  const insights = report.aiInsights
+function DocKV({ label, value }) {
+  const v = (value === undefined || value === null) ? '' : String(value)
+  if (v === '') return null
+  return (
+    <div className="doc-kv-row">
+      <dt className="doc-kv-label">{label}</dt>
+      <dd className="doc-kv-value">{v}</dd>
+    </div>
+  )
+}
+
+function StructuredPolicyReport({ job, report }) {
+  const profile = useMemo(() => extractProfileData(report.profileJson), [report.profileJson])
+
+  const statusLabel = job.status === 'done' ? 'Completed' : job.status === 'error' ? 'Failed' : 'Running'
+  const dateStr = job.started
+    ? new Date(job.started * 1000).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+      })
+    : '—'
+  const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : '—'
+  const shortId = (job.id || '').slice(0, 8)
+
+  const hasPolicyDetails = profile && (
+    profile.program || profile.effectiveDate || profile.paymentPlan || profile.maritalStatus ||
+    profile.driverStatus || profile.employmentCategory || profile.occupation
+  )
+  const hasCustomerProfile = profile && (profile.firstName || profile.customerType || profile.email)
 
   return (
-    <div className="report-story">
-      <section className={`report-module report-hero-module ${heroTone}`}>
-        <div className="report-hero-copy">
-          <div className="report-hero-kicker">
-            <Sparkles size={14} />
-            Execution Story
-          </div>
-          <div className="report-hero-title-row">
-            <div className="report-hero-icon">
-              {heroTone === 'success' ? <CheckCircle2 size={30} /> : heroTone === 'warning' ? <ShieldAlert size={30} /> : <Clock3 size={30} />}
-            </div>
-            <div className="report-hero-text">
-              <h3>{heroStatus}</h3>
-              <p>{heroSubtitle}</p>
-            </div>
-          </div>
+    <div className="doc-report">
+      {/* Document header */}
+      <div className="doc-head">
+        <div className="doc-head-left">
+          <div className="doc-title">{job.label}</div>
+          <div className="doc-subtitle">EXECUTION REPORT</div>
         </div>
+        <div className="doc-head-meta">
+          {[
+            { label: 'Execution ID', value: shortId },
+            { label: 'Status', value: statusLabel },
+            { label: 'Date', value: dateStr },
+            { label: 'Duration', value: duration },
+          ].map(({ label, value }) => (
+            <div key={label} className="doc-meta-col">
+              <div className="doc-meta-label">{label}</div>
+              <div className="doc-meta-value">{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-        <div className="report-hero-stats">
+      <div className="doc-rule" />
+
+      {/* Summary */}
+      <div className="doc-section">
+        <div className="doc-section-title">SUMMARY</div>
+        <div className="doc-summary-layout">
+          <dl className="doc-kv-list">
+            <DocKV label="Policy" value={job.label} />
+            <DocKV label="Policy Type" value={report.summary.lob} />
+            <DocKV label="Execution Status" value={report.summary.status || statusLabel} />
+            <DocKV label="Completed In" value={job.finished ? duration : undefined} />
+            <DocKV label="Generated On" value={job.started ? dateStr : undefined} />
+            <DocKV label="AI Prompt" value={report.sourceDescription} />
+          </dl>
           {report.summary.premium && (
-            <div className="report-hero-premium">
-              <span>Premium</span>
-              <strong>{report.summary.premium}</strong>
+            <div className="doc-premium-box">
+              <div className="doc-premium-label">PREMIUM</div>
+              <div className="doc-premium-value">{report.summary.premium}</div>
             </div>
           )}
-          <div className="report-hero-meta">
-            <span>{report.summary.lob || 'Policy Run'}</span>
-            <span>{report.summary.persona || 'Custom persona'}</span>
-            <span>{report.summary.tcId || job.id}</span>
-          </div>
         </div>
-      </section>
+      </div>
 
-      {report.profileJson && (
-        <section className="report-module report-profile-module">
-          <div className="report-module-header">
-            <div>
-              <span className="report-module-kicker">
-                <Sparkles size={13} />
-                AI Generated
-              </span>
-              <h4>Generated Customer Profile</h4>
-            </div>
-
-            <div className="report-module-actions">
-              <button className="module-icon-button" type="button" onClick={onCopyProfile} title="Copy profile JSON">
-                <Copy size={14} />
-              </button>
-              <button className="module-icon-button" type="button" onClick={onDownloadProfile} title="Download profile JSON">
-                <Download size={14} />
-              </button>
-              <button className="module-icon-button toggle" type="button" onClick={() => setProfileOpen(open => !open)} aria-label="Toggle profile card">
-                {profileOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-            </div>
+      {/* Policy Details + Customer Profile */}
+      {(hasPolicyDetails || hasCustomerProfile) && (
+        <>
+          <div className="doc-rule" />
+          <div className={hasPolicyDetails && hasCustomerProfile ? 'doc-two-col' : ''}>
+            {hasPolicyDetails && (
+              <div className="doc-section">
+                <div className="doc-section-title">POLICY DETAILS</div>
+                <dl className="doc-kv-list">
+                  <DocKV label="Program" value={profile.program} />
+                  <DocKV label="Effective Date" value={profile.effectiveDate} />
+                  <DocKV label="Billing Method" value={profile.paymentPlan} />
+                  <DocKV label="Marital Status" value={profile.maritalStatus} />
+                  <DocKV label="Driver Status" value={profile.driverStatus} />
+                  <DocKV label="Employment Category" value={profile.employmentCategory} />
+                  <DocKV label="SR22" value={profile.sr22} />
+                  <DocKV label="Occupation" value={profile.occupation} />
+                  <DocKV label="Commercial Driver License" value={profile.commercialDriverLicense} />
+                  <DocKV label="Prior Insurance" value={profile.priorInsurance} />
+                  <DocKV label="Years Licensed" value={profile.yearsLicensed} />
+                  <DocKV label="Accidents (3 Yrs)" value={profile.accidents3yr} />
+                  <DocKV label="Violations (3 Yrs)" value={profile.violations3yr} />
+                  <DocKV label="Claims (3 Yrs)" value={profile.claims3yr} />
+                </dl>
+              </div>
+            )}
+            {hasPolicyDetails && hasCustomerProfile && <div className="doc-col-divider" />}
+            {hasCustomerProfile && (
+              <div className="doc-section">
+                <div className="doc-section-title">CUSTOMER PROFILE</div>
+                <dl className="doc-kv-list">
+                  <DocKV label="Customer Type" value={profile.customerType} />
+                  <DocKV label="First Name" value={profile.firstName} />
+                  <DocKV label="Last Name" value={profile.lastName} />
+                  <DocKV label="DOB" value={profile.dob} />
+                  <DocKV label="Phone" value={profile.phone} />
+                  <DocKV label="Email" value={profile.email} />
+                  <DocKV label="Address" value={profile.address} />
+                  <DocKV label="ZIP" value={profile.zip} />
+                  <DocKV label="State" value={profile.state} />
+                  <DocKV label="City" value={profile.city} />
+                  <DocKV label="Gender" value={profile.gender} />
+                </dl>
+              </div>
+            )}
           </div>
+        </>
+      )}
 
-          {profileOpen && (
-            <div className="report-profile-code-shell">
-              <div className="report-profile-code-title">Structured profile payload</div>
+      {/* Profile JSON fallback — shown when JSON couldn't be parsed into structured fields */}
+      {report.profileJson && !hasPolicyDetails && !hasCustomerProfile && (
+        <>
+          <div className="doc-rule" />
+          <div className="doc-section">
+            <div className="doc-section-title">GENERATED CUSTOMER PROFILE</div>
+            {report.sourceDescription && (
+              <p className="doc-source-desc">{report.sourceDescription}</p>
+            )}
+            <div className="doc-json-shell">
               <pre className="json-code-viewer">{renderJsonSyntax(report.prettyProfileJson || report.profileJson)}</pre>
             </div>
-          )}
-        </section>
+          </div>
+        </>
       )}
 
-      <section className="report-module">
-        <div className="report-module-header">
-          <div>
-            <span className="report-module-kicker">Command Metrics</span>
-            <h4>Execution summary</h4>
-          </div>
-        </div>
-        <div className="report-metric-grid">
-          {metrics.map(metric => (
-            <MetricCard key={metric.label} {...metric} />
-          ))}
-        </div>
-      </section>
-
-      <section className="report-module">
-        <div className="report-module-header">
-          <div>
-            <span className="report-module-kicker">Replay</span>
-            <h4>Execution strip</h4>
-          </div>
-        </div>
-        <div className="report-replay-strip" aria-label="Execution replay">
-          {replay.map((step, index) => (
-            <ReplayChip key={`${step.label}-${index}`} step={step} isLast={index === replay.length - 1} />
-          ))}
-        </div>
-      </section>
-
-      <section className="report-module">
-        <div className="report-module-header">
-          <div>
-            <span className="report-module-kicker">Timeline</span>
-            <h4>Step-by-step execution</h4>
-          </div>
-        </div>
-
-        <div className="report-timeline">
-          {report.steps.map((step, index) => (
-            <StepTimelineItem
-              key={`${step.label}-${index}`}
-              step={step}
-              index={index}
-              expanded={expandedStep === index}
-              onToggle={() => setExpandedStep(prev => (prev === index ? null : index))}
-              isLast={index === report.steps.length - 1}
-            />
-          ))}
-        </div>
-      </section>
-
-      {insights.length > 0 && (
-        <section className="report-module report-insights-module">
-          <div className="report-module-header">
-            <div>
-              <span className="report-module-kicker">AI Insights</span>
-              <h4>What the run suggests</h4>
-            </div>
-          </div>
-          <ul className="report-insights-list">
-            {insights.map((insight, index) => (
-              <li key={index}>{insight}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {report.uwConditions.length > 0 && (
-        <section className="report-module">
-          <div className="report-module-header">
-            <div>
-              <span className="report-module-kicker">UW Conditions</span>
-              <h4>Triggered conditions</h4>
-            </div>
-          </div>
-          <div className="report-uw-grid">
-            {report.uwConditions.map((condition, index) => (
-              <div className="report-uw-card" key={`${condition}-${index}`}>
-                {condition}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
-  )
-}
-
-function MetricCard({ label, value, detail, tone = 'neutral' }) {
-  return (
-    <div className={`report-metric-card ${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {detail && <p>{detail}</p>}
-    </div>
-  )
-}
-
-function ReplayChip({ step, isLast }) {
-  return (
-    <div className={`report-replay-chip ${step.tone}`}>
-      <span>{step.label}</span>
-      {!isLast && <i aria-hidden="true">→</i>}
-    </div>
-  )
-}
-
-function StepTimelineItem({ step, index, expanded, onToggle, isLast }) {
-  return (
-    <article className={`timeline-item ${step.tone} ${expanded ? 'expanded' : ''}`}>
-      <div className="timeline-rail">
-        <span className="timeline-dot" />
-        {!isLast && <span className="timeline-line" />}
+      <div className="doc-rule" />
+      <div className="doc-footer">
+        <span>Report generated on {dateStr}</span>
+        <span>Page 1 of 1</span>
       </div>
-
-      <div className="timeline-content">
-        <button className="timeline-main" type="button" onClick={onToggle}>
-          <div className="timeline-title-row">
-            <span className="timeline-step-index">{String(index + 1).padStart(2, '0')}</span>
-            <div>
-              <h5>{step.label}</h5>
-              {step.detail && <p>{step.detail}</p>}
-            </div>
-          </div>
-          <div className="timeline-meta">
-            <span className={`timeline-status ${step.tone}`}>{step.statusLabel}</span>
-            <span className="timeline-duration">{step.duration}</span>
-            <ChevronDown size={14} className={`timeline-toggle ${expanded ? 'open' : ''}`} />
-          </div>
-        </button>
-
-        {expanded && step.notes && (
-          <div className="timeline-notes">
-            {step.notes.map((note, noteIndex) => (
-              <div className="timeline-note" key={noteIndex}>
-                {note}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </article>
+    </div>
   )
 }
 
-function buildMetricCards(report, job) {
-  return [
-    { label: 'Policy Type', value: report.summary.lob || 'Unknown', tone: 'blue' },
-    { label: 'Outcome', value: report.summary.outcome || 'Unknown', tone: report.heroTone },
-    { label: 'Status', value: report.summary.status || 'Unknown', tone: report.heroTone },
-    { label: 'Duration', value: report.summary.duration || (job.finished ? `${Math.round(job.finished - job.started)}s` : 'Running'), tone: 'purple' },
-    { label: 'Persona', value: report.summary.persona || 'Custom', tone: 'neutral' },
-    { label: 'TC ID', value: report.summary.tcId || job.id, tone: 'neutral' },
-  ]
-}
-
-function buildReplayStrip(steps) {
-  return steps.map(step => ({ label: step.shortLabel || step.label, tone: step.tone }))
-}
+/* ─── Parsers ─────────────────────────────────────────────────── */
 
 function parsePolicyFlowReport(content) {
   const normalized = (content || '').replace(/\r\n/g, '\n').trim()
-  if (!normalized) {
-    return emptyReport()
+  if (!normalized) return emptyReport()
+
+  if (normalized.startsWith('{')) {
+    return {
+      ...emptyReport(),
+      profileJson: normalized,
+      prettyProfileJson: formatPrettyJson(normalized),
+    }
   }
 
   const chunks = normalized.split('\n\n---\n\n').map(chunk => chunk.trim()).filter(Boolean)
@@ -437,27 +377,26 @@ function parsePolicyFlowReport(content) {
   const stepsChunk = chunks[2] || ''
   const uwChunk = chunks[3] || ''
   const errorChunk = chunks[4] || ''
-  const screenshotMatch = normalized.match(/Failure screenshot:\*\*\s*`([^`]+)`/i)
 
   const summary = parseSummaryChunk(summaryChunk)
+  const sourceDescription = extractSourceDescription(chunks[0] || '')
   const steps = parseStepsChunk(stepsChunk)
   const uwConditions = parseUwChunk(uwChunk)
+  const coverageRows = parseCoverageRows(normalized)
   const error = parseErrorChunk(errorChunk)
   const prettyProfileJson = formatPrettyJson(profileJson)
-  const aiInsights = buildAiInsights(summary, steps, uwConditions, error)
 
   return {
     profileJson,
     prettyProfileJson,
     summary,
+    sourceDescription,
     steps,
     uwConditions,
+    coverageRows,
     error,
-    screenshotPath: screenshotMatch?.[1] || '',
-    aiInsights,
-    heroTone: deriveHeroTone(summary, error),
-    heroStatus: deriveHeroStatus(summary, error),
-    heroSubtitle: deriveHeroSubtitle(summary),
+    screenshotPath: normalized.match(/Failure screenshot:\*\*\s*`([^`]+)`/i)?.[1] || '',
+    aiInsights: [],
   }
 }
 
@@ -466,20 +405,24 @@ function emptyReport() {
     profileJson: '',
     prettyProfileJson: '',
     summary: {},
+    sourceDescription: '',
     steps: [],
     uwConditions: [],
+    coverageRows: [],
     error: '',
     screenshotPath: '',
     aiInsights: [],
-    heroTone: 'neutral',
-    heroStatus: 'Execution Story',
-    heroSubtitle: 'No structured report data was detected.',
   }
 }
 
 function extractProfileJson(chunk) {
   const match = chunk.match(/```json\s*\n([\s\S]*?)\n```/i)
   return match?.[1]?.trim() || ''
+}
+
+function extractSourceDescription(chunk) {
+  const match = chunk.match(/\*\*Source Description:\*\*\s*([^\n]+)/i)
+  return cleanInline(match?.[1] || '').trim()
 }
 
 function parseSummaryChunk(chunk) {
@@ -546,6 +489,40 @@ function parseUwChunk(chunk) {
     .filter(Boolean)
 }
 
+function parseCoverageRows(content) {
+  const lines = content.split('\n')
+  const rows = []
+  let inTable = false
+  let pastSeparator = false
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!inTable) {
+      if (/\|\s*Coverage\s*\|/i.test(line) && /Premium/i.test(line)) {
+        inTable = true
+        pastSeparator = false
+      }
+      continue
+    }
+    if (!pastSeparator) {
+      if (/^\|\s*[-:]+/.test(line)) pastSeparator = true
+      continue
+    }
+    if (!line.startsWith('|')) { inTable = false; continue }
+    const cells = parseTableCells(line)
+    if (cells.length < 2) continue
+    const coverage = cleanInline(cells[0]).trim()
+    if (!coverage) continue
+    rows.push({
+      coverage,
+      limitDeductible: cells.length >= 3 ? cleanInline(cells[1]).trim() : '',
+      premium: cleanInline(cells[cells.length - 1]).trim(),
+      isTotal: /^total/i.test(coverage),
+    })
+  }
+  return rows
+}
+
 function parseErrorChunk(chunk) {
   const match = chunk.match(/```([\s\S]*?)```/i)
   return match?.[1]?.trim() || ''
@@ -562,10 +539,7 @@ function parseStepLabel(cell) {
   const withBreaks = cell.replace(/<br\s*\/?>/gi, '\n')
   const cleaned = cleanInline(withBreaks).replace(/\s+/g, ' ').trim()
   const parts = cleaned.split('\n').map(part => part.trim()).filter(Boolean)
-  return {
-    label: parts[0] || cleaned,
-    detail: parts[1] || '',
-  }
+  return { label: parts[0] || cleaned, detail: parts[1] || '' }
 }
 
 function shortenLabel(label) {
@@ -596,77 +570,18 @@ function cleanInline(text) {
 }
 
 function assignSummaryField(summary, key, value) {
-  const normalizedKey = key.toLowerCase()
-  if (normalizedKey === 'lob') summary.lob = value
-  else if (normalizedKey === 'persona') summary.persona = value
-  else if (normalizedKey === 'status') summary.status = value
-  else if (normalizedKey === 'outcome') summary.outcome = value
-  else if (normalizedKey === 'total duration') summary.duration = value
-  else if (normalizedKey === 'premium') summary.premium = value
-}
-
-function deriveHeroTone(summary, error) {
-  const status = `${summary.status || ''} ${summary.outcome || ''} ${error || ''}`.toLowerCase()
-  if (status.includes('failed') || status.includes('error')) return 'error'
-  if (status.includes('uw referral')) return 'warning'
-  return 'success'
-}
-
-function deriveHeroStatus(summary, error) {
-  if (error) return 'EXECUTION FAILED'
-  const outcome = `${summary.outcome || ''}`.toLowerCase()
-  if (outcome.includes('policy bound')) return 'POLICY BOUND'
-  if (outcome.includes('uw referral')) return 'UW REFERRAL'
-  return 'EXECUTION COMPLETE'
-}
-
-function deriveHeroSubtitle(summary) {
-  const lob = summary.lob || 'Policy Run'
-  const duration = summary.duration || 'Running'
-  return `${lob} • Completed in ${duration}`
-}
-
-function buildAiInsights(summary, steps, uwConditions, error) {
-  const insights = []
-
-  if (error) {
-    insights.push('The execution ended early with an error state.')
-  }
-
-  if (!error && summary.outcome) {
-    insights.push(`Outcome recorded as ${summary.outcome}.`)
-  }
-
-  if (!uwConditions.length && !`${summary.outcome || ''}`.toLowerCase().includes('uw referral')) {
-    insights.push('No underwriting referral was triggered in this run.')
-  }
-
-  if (summary.premium) {
-    insights.push(`Premium finalized at ${summary.premium}.`)
-  }
-
-  if (steps.length) {
-    insights.push(`Execution moved through ${steps.length} timeline steps.`)
-  }
-
-  if (summary.duration) {
-    insights.push(`Total execution time was ${summary.duration}.`)
-  }
-
-  if (uwConditions.length) {
-    insights.push(`${uwConditions.length} underwriting condition(s) were captured.`)
-  }
-
-  return insights.slice(0, 4)
+  const k = key.toLowerCase()
+  if (k === 'lob') summary.lob = value
+  else if (k === 'persona') summary.persona = value
+  else if (k === 'status') summary.status = value
+  else if (k === 'outcome') summary.outcome = value
+  else if (k === 'total duration') summary.duration = value
+  else if (k === 'premium') summary.premium = value
 }
 
 function formatPrettyJson(text) {
   if (!text) return ''
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2)
-  } catch {
-    return text
-  }
+  try { return JSON.stringify(JSON.parse(text), null, 2) } catch { return text }
 }
 
 function sanitizeFilename(text) {
@@ -674,6 +589,54 @@ function sanitizeFilename(text) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function extractProfileData(json) {
+  if (!json) return null
+  try {
+    const p = JSON.parse(json)
+    const get = (...keys) => {
+      for (const k of keys) {
+        const v = p[k]
+        if (v !== undefined && v !== null && v !== '') return v
+      }
+      return undefined
+    }
+    const normBool = v => {
+      if (v === true || v === 'true' || String(v).toLowerCase() === 'yes') return 'Yes'
+      if (v === false || v === 'false' || String(v).toLowerCase() === 'no') return 'No'
+      return v !== undefined ? String(v) : undefined
+    }
+    return {
+      customerType: get('customer_type', 'CustomerType'),
+      firstName: get('first_name', 'FirstName'),
+      lastName: get('last_name', 'LastName'),
+      dob: get('dob', 'DOB'),
+      phone: get('phone', 'PhoneNum', 'phone_number'),
+      email: get('email', 'Email'),
+      address: get('address', 'Address'),
+      zip: get('zip', 'ZIP'),
+      state: get('state', 'State'),
+      city: get('city', 'City'),
+      gender: get('gender', 'Gender'),
+      program: get('program', 'Program'),
+      effectiveDate: get('effective_date', 'EffectiveDate'),
+      paymentPlan: get('payment_plan', 'PaymentPlan'),
+      maritalStatus: get('marital_status', 'MaritalStatus'),
+      driverStatus: get('driver_status', 'DriverStatus'),
+      employmentCategory: get('employment_category', 'EmploymentCategory'),
+      sr22: normBool(get('sr22', 'SR22')),
+      occupation: get('occupation', 'Occupation'),
+      commercialDriverLicense: normBool(get('commercial_driver_license', 'CommercialDriverLicense')),
+      priorInsurance: normBool(get('prior_insurance', 'PriorInsurance')),
+      yearsLicensed: get('years_licensed', 'YearsLicensed'),
+      accidents3yr: get('accidents_3yr', 'Accidents3Yr', 'accidents_3_years', 'accidents'),
+      violations3yr: get('violations_3yr', 'Violations3Yr', 'violations_3_years', 'violations'),
+      claims3yr: get('claims_3yr', 'Claims3Yr', 'claims_3_years', 'claims'),
+    }
+  } catch {
+    return null
+  }
 }
 
 function renderJsonSyntax(text) {

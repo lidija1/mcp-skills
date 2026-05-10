@@ -4,7 +4,7 @@ MCP Server — Policy Flow Generator (multi-LOB).
 Exposes seven tools:
 
   list_persona_archetypes   List available persona archetypes per LOB
-  create_persona            NL description → structured persona JSON (Auto/Cyber/Homeowner)
+  create_persona            NL description → structured persona JSON (Auto/Homeowner)
   create_persona_variations Generate N distinct variations from a single base description
   create_batch_personas     Generate multiple persona JSONs in one call (no browser execution)
   run_policy_flow           Persona JSON → live E2E browser execution + report
@@ -33,11 +33,10 @@ USAGE EXAMPLES
 
   # List all available persona archetypes
   list_persona_archetypes()
-  list_persona_archetypes("cyber")
+  list_persona_archetypes("homeowner")
 
   # One-shot: NL → execute → report
   run_full_policy_flow("auto", "Young driver aged 21 with SR-22 on a leased BMW")
-  run_full_policy_flow("cyber", "E-commerce startup, no cyber training, past ransomware attack")
   run_full_policy_flow("homeowner", "High-value home with prior losses and refused coverage")
 
   # Two-step: inspect persona JSON before running
@@ -47,7 +46,6 @@ USAGE EXAMPLES
   # Batch: multiple scenarios at once
   run_batch_flows([
     {"lob": "auto", "description": "Clean standard driver, Gold coverage"},
-    {"lob": "cyber", "description": "Small office with good cyber hygiene"},
     {"lob": "homeowner", "description": "New construction, low risk"},
   ])
 ──────────────────────────────────────────────────────────────────────────────
@@ -97,7 +95,7 @@ mcp = FastMCP(
     "policy-flow-generator",
     instructions=(
         "Generate realistic insurance personas and execute full end-to-end policy "
-        "flows (quote → UW check → bind) for Personal Auto, Cyber, and Homeowner "
+        "flows (quote → UW check → bind) for Personal Auto and Homeowner "
         "lines of business. "
         "Use list_persona_archetypes to see available personas. "
         "Use run_full_policy_flow for one-shot NL → execute → report. "
@@ -124,7 +122,7 @@ def list_persona_archetypes(lob: str = "") -> str:
     values that produce realistic, immediately runnable test data.
 
     Args:
-        lob: Optional LOB filter — "auto", "cyber", or "homeowner".
+        lob: Optional LOB filter — "auto" or "homeowner".
              Omit (or pass empty string) to see all LOBs.
 
     Returns:
@@ -142,10 +140,9 @@ def create_persona(lob: str, description: str) -> str:
     test data matching the exact field schema required by the policy workflow.
 
     Args:
-        lob: Line of business — "auto", "cyber", or "homeowner"
+        lob: Line of business — "auto" or "homeowner"
         description: Natural-language persona, e.g.
             "Young driver aged 21 with SR-22 on a leased BMW" (auto)
-            "Healthcare business, 20 employees, strong compliance posture" (cyber)
             "Luxury coastal home, tile roof, Platinum coverage" (homeowner)
 
     Returns:
@@ -166,13 +163,12 @@ def create_batch_personas(scenarios: list) -> str:
     Args:
         scenarios: List of dicts, each with:
             {
-              "lob": "auto" | "cyber" | "homeowner",
+              "lob": "auto" | "homeowner",
               "description": str   // natural-language persona
             }
             Example:
             [
               {"lob": "auto", "description": "Young driver aged 19 with one at-fault accident"},
-              {"lob": "cyber", "description": "Healthcare SaaS, 50 employees, HIPAA compliant"},
               {"lob": "homeowner", "description": "Coastal property, tile roof, $800k value"}
             ]
             Up to 25 scenarios per call.
@@ -207,7 +203,7 @@ def create_persona_variations(lob: str, base_description: str, count: int = 5) -
     specific risk factors, and other details, while staying true to the base theme.
 
     Args:
-        lob: Line of business — "auto", "cyber", or "homeowner"
+        lob: Line of business — "auto" or "homeowner"
         base_description: Natural-language base persona, e.g.
             "22-year-old driver with SR-22, revoked license, leased BMW, Platinum coverage"
         count: Number of distinct variations to generate (1–25, default 5)
@@ -233,19 +229,18 @@ def run_policy_flow(lob: str, persona_json: str) -> str:
 
     Launches a headless browser and drives the complete workflow:
     - Auto:       login → quote → customer → registration → driver/vehicle → coverage/rate → UW check → bind
-    - Cyber:      login → quote → customer → registration → cyber details → rate → UW check → issue → delivery → billing → bind
     - Homeowner:  login → quote → customer → registration → HO summary → coverage/rate → UW check → bind
 
     Automatically detects UW soft-referrals (captures all condition rows)
     or proceeds to policy bind.
 
     Args:
-        lob: Line of business — "auto", "cyber", or "homeowner"
+        lob: Line of business — "auto" or "homeowner"
         persona_json: JSON string from create_persona() or hand-crafted data
 
     Returns:
         Markdown report: step-by-step results, timing, UW conditions (if any),
-        premium (Cyber), and failure screenshot path on error.
+        failure screenshot path on error.
     """
     try:
         persona = json.loads(persona_json)
@@ -277,10 +272,9 @@ def run_full_policy_flow(lob: str, description: str) -> str:
     live browser execution → result report.
 
     Args:
-        lob: Line of business — "auto", "cyber", or "homeowner"
+        lob: Line of business — "auto" or "homeowner"
         description: Natural-language persona, e.g.
             "Triple-risk: SR-22, revoked licence, under 25" (auto)
-            "E-commerce startup with no cyber training and past data breach" (cyber)
             "Luxury home worth $1.5M, prior losses, refused by previous insurer" (homeowner)
 
     Returns:
@@ -326,13 +320,12 @@ def run_batch_flows(scenarios: list) -> str:
     Args:
         scenarios: List of dicts, each with:
             {
-              "lob": "auto" | "cyber" | "homeowner",
+              "lob": "auto" | "homeowner",
               "description": str   // natural-language persona
             }
             Example:
             [
               {"lob": "auto", "description": "Clean standard driver, Gold coverage"},
-              {"lob": "cyber", "description": "Small office with good cyber hygiene"},
               {"lob": "homeowner", "description": "New construction 2022, low risk"}
             ]
 
@@ -412,7 +405,7 @@ def compare_scenarios(scenarios: list, default_lob: str = "auto") -> str:
               {"lob": "homeowner", "description": "High-value home with prior losses"}
             ]
         default_lob: LOB used when a scenario item is just a string.
-            Valid values: "auto", "cyber", "homeowner".
+            Valid values: "auto", "homeowner".
 
     Returns:
         Markdown comparison table with outcome, policy number, premium, UW/error

@@ -557,7 +557,7 @@ def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
 @app.post("/api/policy/create-persona")
 def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Build Profile â€” {req.lob.upper()}")
+    jid = _new_job(f"Build Profile - {req.lob.upper()}")
 
     def _run():
         try:
@@ -578,7 +578,7 @@ def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
 @app.post("/api/policy/run-flow")
 def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Policy Journey â€” {req.lob.upper()}")
+    jid = _new_job(f"Policy Journey - {req.lob.upper()}")
 
     def _run():
         try:
@@ -596,7 +596,7 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
 @app.post("/api/policy/quick-run")
 def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Quick Policy Test â€” {req.lob.upper()}")
+    jid = _new_job(f"Quick Policy Test - {req.lob.upper()}")
 
     def _run():
         try:

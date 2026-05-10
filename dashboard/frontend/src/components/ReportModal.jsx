@@ -11,13 +11,15 @@ import {
   ShieldAlert,
   X,
 } from 'lucide-react'
+import { cleanDisplayText } from '../utils/text'
 
 export default function ReportModal({ job, onClose }) {
   const ref = useRef(null)
+  const jobLabel = cleanDisplayText(job.label || '')
+  const jobResult = cleanDisplayText(job.result || '')
+  const jobError = cleanDisplayText(job.error || '')
   const [allureState, setAllureState] = useState('idle')
   const [allureError, setAllureError] = useState('')
-  const [jsonEditorOpen, setJsonEditorOpen] = useState(false)
-  const [editableJson, setEditableJson] = useState('')
 
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose() }
@@ -56,36 +58,26 @@ export default function ReportModal({ job, onClose }) {
     error: 'Report Error',
   }[allureState]
 
-  const report = useMemo(() => parsePolicyFlowReport(job.result || ''), [job.result])
+  const report = useMemo(() => parsePolicyFlowReport(jobResult), [jobResult])
 
   const copyReport = () => {
     if (report.profileJson) {
       navigator.clipboard.writeText(report.prettyProfileJson || report.profileJson)
     } else {
-      const text = job.status === 'done' ? job.result : job.error
+      const text = job.status === 'done' ? jobResult : jobError
       navigator.clipboard.writeText(text || '')
     }
-  }
-
-  const openJsonEditor = () => {
-    if (!jsonEditorOpen) {
-      setEditableJson(report.prettyProfileJson || report.profileJson || '')
-    }
-    setJsonEditorOpen(v => !v)
-  }
-
-  const copyEditableJson = () => {
-    navigator.clipboard.writeText(editableJson)
   }
 
   const hasStructuredReport = Boolean(
     report.profileJson || report.steps.length || Object.keys(report.summary).length || report.aiInsights.length
   )
-  const isJson = job.status === 'done' && job.result?.trimStart().startsWith('{') && !hasStructuredReport
+  const isJson = job.status === 'done' && jobResult.trimStart().startsWith('{') && !hasStructuredReport
   const isMarkdown = !isError && !isJson && job.status === 'done'
   const isPersonaReport = Boolean(
-    job.result?.includes('Generated Customer Profile') || job.result?.includes('Persona Variations')
+    jobResult.includes('Generated Customer Profile') || jobResult.includes('Persona Variations')
   )
+  const isUwReferral = isUwReferralReport(report, jobResult)
   const HeaderIcon = isError ? ShieldAlert : isJson ? FileJson : Clipboard
 
   const downloadProfile = () => {
@@ -94,9 +86,20 @@ export default function ReportModal({ job, onClose }) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `${sanitizeFilename(job.label || 'policy-profile')}.json`
+    link.download = `${sanitizeFilename(jobLabel || 'policy-profile')}.json`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  const openJsonEditorWindow = () => {
+    const jsonText = report.prettyProfileJson || report.profileJson || ''
+    if (!jsonText) return
+    const editor = window.open('', '_blank', 'width=980,height=760,resizable=yes,scrollbars=yes')
+    if (!editor) return
+
+    const title = `${jobLabel || 'Profile JSON'} - View & Edit`
+    editor.document.write(buildJsonEditorDocument(title, jsonText))
+    editor.document.close()
   }
 
   return (
@@ -108,11 +111,11 @@ export default function ReportModal({ job, onClose }) {
               <HeaderIcon size={24} />
             </div>
             <div className="report-title-copy">
-              <h2>{job.label}</h2>
+              <h2>{jobLabel}</h2>
               <div className="report-header-badges">
                 <span className={`report-badge ${job.status === 'done' ? 'success' : isError ? 'error' : 'running'}`}>
                   <span className="report-badge-dot" />
-                  {isError ? 'Failed' : job.status === 'done' ? 'Completed' : 'Running'}
+                  {isError ? 'Failed' : isUwReferral ? 'UW Referral' : job.status === 'done' ? 'Completed' : 'Running'}
                 </span>
                 <span className="report-badge neutral report-id-badge">
                   ID {job.id}
@@ -136,9 +139,9 @@ export default function ReportModal({ job, onClose }) {
             )}
             {report.profileJson && (
               <>
-                <button onClick={openJsonEditor} className="text-button compact" type="button" title="View and edit profile JSON">
+                <button onClick={openJsonEditorWindow} className="text-button compact" type="button" title="View and edit profile JSON in a new window">
                   <Pencil size={16} />
-                  {jsonEditorOpen ? 'Close Editor' : 'View & Edit'}
+                  View & Edit
                 </button>
                 <button onClick={downloadProfile} className="text-button compact" type="button" title="Download profile JSON">
                   <Download size={16} />
@@ -156,24 +159,6 @@ export default function ReportModal({ job, onClose }) {
           </div>
         </header>
 
-        {jsonEditorOpen && (
-          <div className="json-editor-panel">
-            <div className="json-editor-toolbar">
-              <span className="json-editor-label">Edit JSON</span>
-              <button onClick={copyEditableJson} className="text-button compact" type="button">
-                <Copy size={14} />
-                Copy
-              </button>
-            </div>
-            <textarea
-              className="json-editor-textarea"
-              value={editableJson}
-              onChange={e => setEditableJson(e.target.value)}
-              spellCheck={false}
-            />
-          </div>
-        )}
-
         <div className="report-body">
           {isError ? (
             <div className="report-state error">
@@ -189,19 +174,19 @@ export default function ReportModal({ job, onClose }) {
                 <FileJson size={21} />
                 Generated Profile JSON
               </div>
-              <pre>{JSON.stringify(JSON.parse(job.result), null, 2)}</pre>
+              <pre>{JSON.stringify(JSON.parse(jobResult), null, 2)}</pre>
             </div>
           ) : hasStructuredReport ? (
             <StructuredPolicyReport job={job} report={report} />
           ) : (
             <div className="markdown-report report-markdown">
               <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                {job.result || ''}
+                {jobResult}
               </Markdown>
             </div>
           )}
         </div>
-        {!isError && job.result && <ViolationSummary content={job.result} />}
+        {!isError && jobResult && <ViolationSummary content={jobResult} />}
       </section>
     </div>
   )
@@ -219,9 +204,11 @@ function DocKV({ label, value }) {
 }
 
 function StructuredPolicyReport({ job, report }) {
+  const jobLabel = cleanDisplayText(job.label || '')
   const profile = useMemo(() => extractProfileData(report.profileJson), [report.profileJson])
 
   const statusLabel = job.status === 'done' ? 'Completed' : job.status === 'error' ? 'Failed' : 'Running'
+  const executionStatus = report.summary.status || (isUwReferralReport(report) ? 'UW Referral' : statusLabel)
   const dateStr = job.started
     ? new Date(job.started * 1000).toLocaleString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
@@ -231,10 +218,10 @@ function StructuredPolicyReport({ job, report }) {
   const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : '—'
   const shortId = (job.id || '').slice(0, 8)
 
-  const hasPolicyDetails = profile && (
+  const hasPolicyDetails = Boolean(report.summary.policyNumber) || (profile && (
     profile.program || profile.effectiveDate || profile.paymentPlan || profile.maritalStatus ||
     profile.driverStatus || profile.employmentCategory || profile.occupation
-  )
+  ))
   const hasCustomerProfile = profile && (profile.firstName || profile.customerType || profile.email)
 
   return (
@@ -242,13 +229,13 @@ function StructuredPolicyReport({ job, report }) {
       {/* Document header */}
       <div className="doc-head">
         <div className="doc-head-left">
-          <div className="doc-title">{job.label}</div>
+          <div className="doc-title">{jobLabel}</div>
           <div className="doc-subtitle">EXECUTION REPORT</div>
         </div>
         <div className="doc-head-meta">
           {[
             { label: 'Execution ID', value: shortId },
-            { label: 'Status', value: statusLabel },
+            { label: 'Status', value: executionStatus },
             { label: 'Date', value: dateStr },
             { label: 'Duration', value: duration },
           ].map(({ label, value }) => (
@@ -267,9 +254,10 @@ function StructuredPolicyReport({ job, report }) {
         <div className="doc-section-title">SUMMARY</div>
         <div className="doc-summary-layout">
           <dl className="doc-kv-list">
-            <DocKV label="Policy" value={job.label} />
+            <DocKV label="Policy" value={jobLabel} />
             <DocKV label="Policy Type" value={report.summary.lob} />
-            <DocKV label="Execution Status" value={report.summary.status || statusLabel} />
+            <DocKV label="Execution Status" value={executionStatus} />
+            <DocKV label="Outcome" value={report.summary.outcome} />
             <DocKV label="Completed In" value={job.finished ? duration : undefined} />
             <DocKV label="Generated On" value={job.started ? dateStr : undefined} />
             <DocKV label="AI Prompt" value={report.sourceDescription} />
@@ -292,20 +280,21 @@ function StructuredPolicyReport({ job, report }) {
               <div className="doc-section">
                 <div className="doc-section-title">POLICY DETAILS</div>
                 <dl className="doc-kv-list">
-                  <DocKV label="Program" value={profile.program} />
-                  <DocKV label="Effective Date" value={profile.effectiveDate} />
-                  <DocKV label="Billing Method" value={profile.paymentPlan} />
-                  <DocKV label="Marital Status" value={profile.maritalStatus} />
-                  <DocKV label="Driver Status" value={profile.driverStatus} />
-                  <DocKV label="Employment Category" value={profile.employmentCategory} />
-                  <DocKV label="SR22" value={profile.sr22} />
-                  <DocKV label="Occupation" value={profile.occupation} />
-                  <DocKV label="Commercial Driver License" value={profile.commercialDriverLicense} />
-                  <DocKV label="Prior Insurance" value={profile.priorInsurance} />
-                  <DocKV label="Years Licensed" value={profile.yearsLicensed} />
-                  <DocKV label="Accidents (3 Yrs)" value={profile.accidents3yr} />
-                  <DocKV label="Violations (3 Yrs)" value={profile.violations3yr} />
-                  <DocKV label="Claims (3 Yrs)" value={profile.claims3yr} />
+                  <DocKV label="Policy Number" value={report.summary.policyNumber} />
+                  <DocKV label="Program" value={profile?.program} />
+                  <DocKV label="Effective Date" value={profile?.effectiveDate} />
+                  <DocKV label="Billing Method" value={profile?.paymentPlan} />
+                  <DocKV label="Marital Status" value={profile?.maritalStatus} />
+                  <DocKV label="Driver Status" value={profile?.driverStatus} />
+                  <DocKV label="Employment Category" value={profile?.employmentCategory} />
+                  <DocKV label="SR22" value={profile?.sr22} />
+                  <DocKV label="Occupation" value={profile?.occupation} />
+                  <DocKV label="Commercial Driver License" value={profile?.commercialDriverLicense} />
+                  <DocKV label="Prior Insurance" value={profile?.priorInsurance} />
+                  <DocKV label="Years Licensed" value={profile?.yearsLicensed} />
+                  <DocKV label="Accidents (3 Yrs)" value={profile?.accidents3yr} />
+                  <DocKV label="Violations (3 Yrs)" value={profile?.violations3yr} />
+                  <DocKV label="Claims (3 Yrs)" value={profile?.claims3yr} />
                 </dl>
               </div>
             )}
@@ -328,6 +317,23 @@ function StructuredPolicyReport({ job, report }) {
                 </dl>
               </div>
             )}
+          </div>
+        </>
+      )}
+
+      {report.uwConditions.length > 0 && (
+        <>
+          <div className="doc-rule" />
+          <div className="doc-section">
+            <div className="doc-section-title">UW RULES TRIGGERED</div>
+            <div className="doc-uw-rules">
+              {report.uwConditions.map((condition, index) => (
+                <div className="doc-uw-rule" key={`${index}-${condition}`}>
+                  <span>{index + 1}</span>
+                  <p>{condition}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -577,6 +583,16 @@ function assignSummaryField(summary, key, value) {
   else if (k === 'outcome') summary.outcome = value
   else if (k === 'total duration') summary.duration = value
   else if (k === 'premium') summary.premium = value
+  else if (k === 'policy number') summary.policyNumber = value
+}
+
+function isUwReferralReport(report, rawContent = '') {
+  const fields = [
+    report?.summary?.status,
+    report?.summary?.outcome,
+    rawContent,
+  ].filter(Boolean).join(' ').toLowerCase()
+  return fields.includes('uw referral') || Boolean(report?.uwConditions?.length)
 }
 
 function formatPrettyJson(text) {
@@ -589,6 +605,132 @@ function sanitizeFilename(text) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+function buildJsonEditorDocument(title, jsonText) {
+  const safeTitle = escapeHtml(title)
+  const safeJson = escapeHtml(jsonText)
+  const downloadName = sanitizeFilename(title.replace(/\s+-\s+View & Edit$/i, '') || 'policy-profile')
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0f172a;
+      color: #dbeafe;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .json-editor-panel {
+      min-height: 100vh;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+    }
+    .json-editor-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 16px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+    }
+    .json-editor-label {
+      min-width: 0;
+      overflow: hidden;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .json-editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .text-button {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      color: #2563eb;
+      background: #eef4ff;
+      border: 0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .text-button:hover { background: #dbeafe; }
+    .json-editor-textarea {
+      flex: 1;
+      width: 100%;
+      min-height: calc(100vh - 55px);
+      padding: 16px;
+      background: #0f172a;
+      color: #dbeafe;
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+  </style>
+</head>
+<body>
+  <div class="json-editor-panel">
+    <div class="json-editor-toolbar">
+      <span class="json-editor-label">${safeTitle}</span>
+      <div class="json-editor-actions">
+        <button class="text-button" id="copyBtn" type="button">Copy</button>
+        <button class="text-button" id="downloadBtn" type="button">Download</button>
+      </div>
+    </div>
+    <textarea id="jsonEditor" class="json-editor-textarea" spellcheck="false">${safeJson}</textarea>
+  </div>
+  <script>
+    const editor = document.getElementById('jsonEditor');
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(editor.value);
+    });
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const blob = new Blob([editor.value], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = ${JSON.stringify(downloadName)} + '.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+    editor.focus();
+  </script>
+</body>
+</html>`
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
 }
 
 function extractProfileData(json) {

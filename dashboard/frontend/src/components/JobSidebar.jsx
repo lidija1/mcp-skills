@@ -1,4 +1,5 @@
 import { Clock3, MoreVertical, RefreshCcw } from 'lucide-react'
+import { cleanDisplayText } from '../utils/text'
 
 const STATUS_CONFIG = {
   running: { color: '#2563eb', label: 'Running' },
@@ -68,7 +69,7 @@ function JobCard({ job, onSelect, isSelected }) {
         </span>
         <span>{elapsed(job)}</span>
       </div>
-      <div className="job-label">{job.label}</div>
+      <div className="job-label">{cleanDisplayText(job.label)}</div>
       {job.status === 'error' && job.error && (
         <div className="job-error">{job.error}</div>
       )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Header from './components/Header'
 import OverviewPanel from './components/OverviewPanel'
 import PolicyPanel from './components/PolicyPanel'
@@ -8,15 +8,19 @@ import ReportModal from './components/ReportModal'
 import DashboardLogin from './components/DashboardLogin'
 import { api } from './utils/api'
 import {
+  AlertTriangle,
   CircleHelp,
   CalendarDays,
+  CheckCircle2,
   Home,
   Menu,
   MessageCircle,
   Settings,
   UserCircle,
   Workflow,
+  X,
 } from 'lucide-react'
+import { cleanDisplayText } from './utils/text'
 
 const JOB_HISTORY_KEY = 'inforceDashboardJobHistory'
 const MAX_STORED_JOBS = 100
@@ -50,9 +54,11 @@ function normalizeJobUpdate(job, update) {
 export default function App() {
   const [tab, setTab] = useState('overview')
   const [jobs, setJobs] = useState(() => loadStoredJobs())
+  const [jobPopups, setJobPopups] = useState([])
   const [backendOk, setBackendOk] = useState(null)
   const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
   const [selectedJob, setSelectedJob] = useState(null)
+  const previousJobStatusRef = useRef(null)
 
   useEffect(() => {
     api.health()
@@ -86,6 +92,37 @@ export default function App() {
 
     return () => clearInterval(timer)
   }, [jobs])
+
+  useEffect(() => {
+    if (previousJobStatusRef.current === null) {
+      previousJobStatusRef.current = new Map(jobs.map(job => [job.id, job.status]))
+      return
+    }
+
+    const previousStatuses = previousJobStatusRef.current
+    const completedJobs = jobs.filter(job => previousStatuses.get(job.id) === 'running' && job.status === 'done')
+    if (completedJobs.length > 0) {
+      setJobPopups(prev => {
+        const existingIds = new Set(prev.map(item => item.id))
+        const next = completedJobs
+          .filter(job => !existingIds.has(job.id))
+          .map(job => ({ id: job.id, job }))
+        return [...next, ...prev].slice(0, 3)
+      })
+    }
+
+    previousJobStatusRef.current = new Map(jobs.map(job => [job.id, job.status]))
+  }, [jobs])
+
+  useEffect(() => {
+    if (jobPopups.length === 0) return
+    const timers = jobPopups.map(popup =>
+      setTimeout(() => {
+        setJobPopups(prev => prev.filter(item => item.id !== popup.id))
+      }, 15000)
+    )
+    return () => timers.forEach(clearTimeout)
+  }, [jobPopups])
 
   useEffect(() => {
     if (!selectedJob) return
@@ -126,6 +163,16 @@ export default function App() {
       return [placeholder, ...prev]
     })
   }, [])
+
+  const dismissJobPopup = useCallback(jobId => {
+    setJobPopups(prev => prev.filter(item => item.id !== jobId))
+  }, [])
+
+  const openJobReportFromPopup = useCallback(job => {
+    const latest = jobs.find(item => item.id === job.id) || job
+    setSelectedJob(latest)
+    dismissJobPopup(job.id)
+  }, [dismissJobPopup, jobs])
 
   const login = useCallback(username => {
     localStorage.setItem('dashboardUser', username)
@@ -179,8 +226,50 @@ export default function App() {
           <ChatPanel onJobDispatched={trackJob} />
         </aside>
 
+        <JobDonePopups
+          popups={jobPopups}
+          onOpenReport={openJobReportFromPopup}
+          onDismiss={dismissJobPopup}
+        />
+
         {selectedJob && <ReportModal job={selectedJob} onClose={() => setSelectedJob(null)} />}
       </div>
+    </div>
+  )
+}
+
+function isUwReferralJob(job) {
+  const text = `${job?.result || ''} ${job?.error || ''}`.toLowerCase()
+  return text.includes('uw referral') || text.includes('uw conditions triggered')
+}
+
+function JobDonePopups({ popups, onOpenReport, onDismiss }) {
+  if (popups.length === 0) return null
+
+  return (
+    <div className="job-popup-stack" aria-live="polite" aria-label="Job notifications">
+      {popups.map(({ id, job }) => (
+        <section className={`job-done-popup ${isUwReferralJob(job) ? 'warning' : ''}`} key={id}>
+          <div className="job-done-icon">
+            {isUwReferralJob(job) ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+          </div>
+          <div className="job-done-copy">
+            <strong>{isUwReferralJob(job) ? 'UW referral triggered' : 'Job completed'}</strong>
+            <span>{cleanDisplayText(job.label)}</span>
+          </div>
+          <button className="job-done-link" type="button" onClick={() => onOpenReport(job)}>
+            Open report
+          </button>
+          <button
+            className="job-done-dismiss"
+            type="button"
+            aria-label="Dismiss notification"
+            onClick={() => onDismiss(id)}
+          >
+            <X size={16} />
+          </button>
+        </section>
+      ))}
     </div>
   )
 }

@@ -59,6 +59,8 @@ def format_result(result: dict) -> str:
     outcome_label = result.get("outcome", "unknown").replace("_", " ").title()
     persona_type = result.get("persona_type", "custom")
     tc_id = result.get("tc_id", "UNKNOWN")
+    policy_summary = result.get("policy_summary") or {}
+    policy_number = policy_summary.get("Policy Number")
 
     lines: list[str] = [
         f"## {status_emoji} Policy Flow Result — `{tc_id}`",
@@ -74,6 +76,8 @@ def format_result(result: dict) -> str:
 
     if result.get("premium"):
         lines.append(f"| **Premium** | {result['premium']} |")
+    if policy_number:
+        lines.append(f"| **Policy Number** | {policy_number} |")
 
     lines += ["", "---", "", "### Steps", ""]
     lines += [

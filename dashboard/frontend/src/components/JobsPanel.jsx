@@ -1,3 +1,5 @@
+import { cleanDisplayText } from '../utils/text'
+
 const STATUS_CONFIG = {
   running: { color: '#2563eb', label: 'Running' },
   done: { color: '#16a34a', label: 'Done' },
@@ -41,7 +43,7 @@ function dayLabel(job) {
 }
 
 function inferLob(job) {
-  const text = `${job.label || ''} ${job.result || ''}`.toLowerCase()
+  const text = `${cleanDisplayText(job.label) || ''} ${cleanDisplayText(job.result) || ''}`.toLowerCase()
   if (text.includes('all lob')) return 'All LOBs'
   if (text.includes('homeowner') || text.includes('home ') || text.includes('ho_')) return 'Homeowner'
   if (text.includes('cyber')) return 'Cyber'
@@ -159,7 +161,7 @@ function HistoryRow({ job, onSelect }) {
 
   return (
     <article className={`jobs-table-row ${job.status === 'error' ? 'has-error' : ''}`}>
-      <div className="jobs-job-title">{job.label}</div>
+      <div className="jobs-job-title">{cleanDisplayText(job.label)}</div>
       <div>
         <span className="job-status" style={{ color: cfg.color }}>
           <i style={{ background: cfg.color }} />

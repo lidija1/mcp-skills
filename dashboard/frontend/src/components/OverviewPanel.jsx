@@ -195,7 +195,8 @@ function buildActivityFeed(jobs) {
       }
 
       if (lower.includes('quick policy test') || lower.includes('policy journey')) {
-        const title = text.includes('uw referral')
+        const isUwReferral = text.includes('uw referral') || text.includes('uw conditions triggered')
+        const title = isUwReferral
           ? 'Referral triggered: review required'
           : job.status === 'running'
             ? 'Policy flow in progress'
@@ -208,7 +209,7 @@ function buildActivityFeed(jobs) {
           title,
           terminalLine: `> ${simplifyLabel(label)}`,
           status: job.status,
-          statusLabel: statusLabel(job.status),
+          statusLabel: isUwReferral ? 'uw referral' : statusLabel(job.status),
           duration,
           meta,
           canOpenReport: job.status !== 'running',

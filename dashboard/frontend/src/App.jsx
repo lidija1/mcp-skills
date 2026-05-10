@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import OverviewPanel from './components/OverviewPanel'
 import PolicyPanel from './components/PolicyPanel'
+import JobsPanel from './components/JobsPanel'
 import ChatPanel from './components/ChatPanel'
+import ReportModal from './components/ReportModal'
 import DashboardLogin from './components/DashboardLogin'
 import { api } from './utils/api'
 import {
   CircleHelp,
+  CalendarDays,
   Home,
   Menu,
   MessageCircle,
@@ -49,6 +52,7 @@ export default function App() {
   const [jobs, setJobs] = useState(() => loadStoredJobs())
   const [backendOk, setBackendOk] = useState(null)
   const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
+  const [selectedJob, setSelectedJob] = useState(null)
 
   useEffect(() => {
     api.health()
@@ -138,6 +142,7 @@ export default function App() {
           <nav className="side-nav-main">
             <IconButton icon={Menu} label="Menu" />
             <NavItem icon={Home} label="Overview" active={tab === 'overview'} onClick={() => setTab('overview')} />
+            <NavItem icon={CalendarDays} label="Jobs" active={tab === 'jobs'} onClick={() => setTab('jobs')} />
             <NavItem icon={Workflow} label="Policy Flow" active={tab === 'policy'} onClick={() => setTab('policy')} />
             <NavItem icon={Settings} label="Settings" />
           </nav>
@@ -153,7 +158,8 @@ export default function App() {
               Backend not reachable. Start it with <code>python dashboard/backend/main.py</code>
             </div>
           )}
-          {tab === 'overview' && <OverviewPanel backendOk={backendOk} jobs={jobs} />}
+          {tab === 'overview' && <OverviewPanel backendOk={backendOk} jobs={jobs} onOpenReport={setSelectedJob} />}
+          {tab === 'jobs' && <JobsPanel jobs={jobs} onSelect={setSelectedJob} onClearHistory={() => setJobs([])} />}
           {tab === 'policy' && <PolicyPanel submitJob={submitJob} />}
         </main>
 
@@ -164,6 +170,8 @@ export default function App() {
           </div>
           <ChatPanel onJobDispatched={trackJob} />
         </aside>
+
+        {selectedJob && <ReportModal job={selectedJob} onClose={() => setSelectedJob(null)} />}
       </div>
     </div>
   )

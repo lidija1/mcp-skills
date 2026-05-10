@@ -23,6 +23,7 @@ load_dotenv(_PROJECT_ROOT / ".env")
 # ---------------------------------------------------------------------------
 
 _VEHICLE_CATALOG: list | None = None
+_VEHICLE_MAKES: set[str] | None = None
 
 
 def _load_vehicle_catalog() -> list:
@@ -61,6 +62,82 @@ def _sample_vehicles(count: int) -> list:
     if count <= len(catalog):
         return random.sample(catalog, count)
     return random.choices(catalog, k=count)
+
+
+def _normalize_vehicle_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+
+def _vehicle_makes() -> set[str]:
+    global _VEHICLE_MAKES
+    if _VEHICLE_MAKES is None:
+        _VEHICLE_MAKES = {
+            _normalize_vehicle_text(vehicle["Make"])
+            for vehicle in _load_vehicle_catalog()
+            if vehicle.get("Make")
+        }
+    return _VEHICLE_MAKES
+
+
+def _vehicle_matches_description(vehicle: dict, description: str) -> bool:
+    text = f" {_normalize_vehicle_text(description)} "
+    make = _normalize_vehicle_text(vehicle.get("Make", ""))
+    model = _normalize_vehicle_text(vehicle.get("Model", ""))
+    if not make or f" {make} " not in text:
+        return False
+
+    model_tokens = [
+        token for token in model.split()
+        if len(token) > 1 and token not in {"awd", "fwd", "rwd", "2wd", "4wd", "se", "le", "s"}
+    ]
+    return not model_tokens or any(f" {token} " in text for token in model_tokens)
+
+
+def _find_vehicle_from_description(description: str) -> dict | None:
+    """Return a runnable catalog vehicle when the user explicitly names one."""
+    text = f" {_normalize_vehicle_text(description)} "
+    if not text.strip():
+        return None
+
+    mentioned_makes = [make for make in _vehicle_makes() if f" {make} " in text]
+    if not mentioned_makes:
+        return None
+
+    catalog = _load_vehicle_catalog()
+    exact_model_matches = [
+        vehicle for vehicle in catalog
+        if _vehicle_matches_description(vehicle, description)
+    ]
+    if exact_model_matches:
+        return sorted(
+            exact_model_matches,
+            key=lambda vehicle: (str(vehicle.get("Year", "")), str(vehicle.get("Model", ""))),
+            reverse=True,
+        )[0]
+
+    # User gave a make but no catalog model; keep the make instead of randomizing to another brand.
+    make_matches = [
+        vehicle for vehicle in catalog
+        if _normalize_vehicle_text(vehicle.get("Make", "")) in mentioned_makes
+    ]
+    if make_matches:
+        return sorted(
+            make_matches,
+            key=lambda vehicle: (str(vehicle.get("Year", "")), str(vehicle.get("Model", ""))),
+            reverse=True,
+        )[0]
+
+    return None
+
+
+def _vehicle_constraint_text(vehicle: dict, plural: bool = False) -> str:
+    label = "Pre-assigned vehicles" if plural else "Pre-assigned vehicle"
+    return (
+        f"\n\n{label} — copy these EXACT values into Year/Make/Model/Spec "
+        f"(do NOT alter them):\n"
+        f"  Year={vehicle['Year']}  Make={vehicle['Make']}  "
+        f"Model={vehicle['Model']}  Spec={vehicle['Spec']}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -432,6 +509,11 @@ def generate_persona(lob: str, description: str) -> str:
                 f"  Year={v['Year']}  Make={v['Make']}  Model={v['Model']}  Spec={v['Spec']}"
             )
 
+    if lob == "auto":
+        requested_vehicle = _find_vehicle_from_description(description)
+        if requested_vehicle:
+            vehicle_constraint = _vehicle_constraint_text(requested_vehicle)
+
     user_message = f"Generate test data for this {lob.upper()} persona: {description}{vehicle_constraint}"
     raw = ""
 
@@ -541,6 +623,9 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
     vehicle_section = ""
     if lob == "auto":
         vehicles = _sample_vehicles(count)
+        requested_vehicle = _find_vehicle_from_description(base_description)
+        if requested_vehicle:
+            vehicles = [requested_vehicle for _ in range(count)]
         if vehicles:
             lines = [
                 f"  [{i}] Year={v['Year']}  Make={v['Make']}  "

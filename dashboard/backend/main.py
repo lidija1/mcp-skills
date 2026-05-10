@@ -584,7 +584,8 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
         try:
             persona = json.loads(req.persona_json)
             result = _run_flow_threaded(lob, persona)
-            _done(jid, format_result(result))
+            persona_section = _format_persona_report(req.lob, '', req.persona_json) + "\n\n---\n\n"
+            _done(jid, persona_section + format_result(result))
         except Exception as e:
             _fail(jid, str(e))
 
@@ -669,14 +670,15 @@ def _format_persona_report(lob: str, description: str, persona_json: str) -> str
     except json.JSONDecodeError:
         pretty_json = persona_json
 
-    return (
-        "## Generated Customer Profile\n\n"
-        f"**Line of Business:** {lob.upper()}\n\n"
-        f"**Source Description:** {description}\n\n"
-        "```json\n"
-        f"{pretty_json}\n"
-        "```\n"
-    )
+    lines = [
+        "## Generated Customer Profile",
+        "",
+        f"**Line of Business:** {lob.upper()}",
+    ]
+    if description:
+        lines += ["", f"**Source Description:** {description}"]
+    lines += ["", "```json", pretty_json, "```"]
+    return "\n".join(lines)
 
 
 # â”€â”€ UW: List Rules (fast) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

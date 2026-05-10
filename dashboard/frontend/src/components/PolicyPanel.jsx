@@ -2,15 +2,11 @@ import { useState } from 'react'
 import { api } from '../utils/api'
 import {
   Check,
-  ChevronsUpDown,
+  ChevronDown,
   Play,
-  Plus,
-  Route,
   Sparkles,
   UserPlus,
   X,
-  Zap,
-  UsersRound,
 } from 'lucide-react'
 
 const LOBS = [
@@ -43,10 +39,7 @@ export default function PolicyPanel({ submitJob }) {
 
   return (
     <div className="panel-stack animate-fade-in">
-      <section className="panel-hero-card">
-        <div className="panel-hero-icon blue">
-          <Route size={32} strokeWidth={2} />
-        </div>
+      <section className="panel-hero-card no-icon">
         <div className="panel-hero-copy">
           <span className="overview-eyebrow">
             <Sparkles size={14} />
@@ -65,68 +58,49 @@ export default function PolicyPanel({ submitJob }) {
         <BuildProfileCard lob={lob} run={run} loading={loading} />
         <RunJourneyCard lob={lob} run={run} loading={loading} />
       </div>
-
-      <BatchTestCard lob={lob} run={run} loading={loading} />
-
-      <section className="policy-help-copy" aria-label="How to use the policy flow tool">
-        <h2>How to use this tool</h2>
-        <p>
-          Start with a line of business, then type a customer story in plain English. You can
-          run a quick end-to-end test, build just the customer profile, or paste JSON to replay
-          a policy journey. If you want to compare more than one customer, add them to the batch
-          tester and run them together.
-        </p>
-        <ul>
-          <li>Use <strong>Quick Policy Test</strong> when you want the full workflow handled for you.</li>
-          <li>Use <strong>Build Customer Profile</strong> when you only need structured test data.</li>
-          <li>Use <strong>Run Policy Journey</strong> when you already have profile JSON to reuse.</li>
-          <li>Use <strong>Test Multiple Customers</strong> to send a small group of scenarios at once.</li>
-        </ul>
-      </section>
     </div>
   )
 }
 
 function LobSelector({ lobs, selected, onSelect }) {
   return (
-    <div className="lob-selector">
-      <span>Line of Business:</span>
-      {lobs.map(l => (
-        <button
-          key={l.id}
-          onClick={() => onSelect(l.id)}
-          className={`lob-pill ${selected === l.id ? 'active' : ''}`}
-          type="button"
+    <div className="lob-selector-row">
+      <label className="lob-selector-label" htmlFor="lob-select">Line of Business</label>
+      <div className="lob-dropdown-wrap">
+        <select
+          id="lob-select"
+          className="lob-dropdown"
+          value={selected}
+          onChange={e => onSelect(e.target.value)}
         >
-          {selected === l.id && <Check size={17} />}
-          {l.label}
-        </button>
-      ))}
+          {lobs.map(l => (
+            <option key={l.id} value={l.id}>{l.label}</option>
+          ))}
+        </select>
+        <ChevronDown size={15} />
+      </div>
     </div>
   )
 }
 
-function ToolCard({ icon: Icon, tone = 'blue', children, featured }) {
+function ToolCard({ featured, children }) {
   return (
     <section className={`tool-card ${featured ? 'featured' : ''}`}>
-      <div className={`card-icon ${tone}`}>
-        <Icon size={27} strokeWidth={2.3} />
-      </div>
       <div className="card-content">{children}</div>
     </section>
   )
 }
 
-function ActionBtn({ tone = 'blue', loading, onClick, children, disabled, icon: Icon = Play }) {
+function ActionBtn({ tone = 'blue', loading, completed, onClick, children, disabled, icon: Icon = Play }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled || loading}
-      className={`action-button ${tone}`}
+      className={`action-button ${tone} ${completed ? 'completed' : ''}`}
       type="button"
     >
-      {loading ? <span className="spinner" /> : <Icon size={17} fill="none" />}
-      <span>{children}</span>
+      {loading ? <span className="spinner" /> : completed ? <Check size={17} /> : <Icon size={17} fill="none" />}
+      <span>{loading ? 'Submitting…' : completed ? 'Submitted' : children}</span>
     </button>
   )
 }
@@ -141,15 +115,19 @@ function ClearButton({ onClick }) {
 
 function QuickTestCard({ lob, run, loading }) {
   const [description, setDescription] = useState('')
+  const [submitted, setSubmitted] = useState(false)
   const key = `Quick Policy Test - ${lob.toUpperCase()}`
 
-  const handleRun = () => {
+  const handleRun = async () => {
     if (!description.trim()) return
-    run(key, () => api.quickRun(lob, description))
+    setSubmitted(false)
+    await run(key, () => api.quickRun(lob, description))
+    setSubmitted(true)
+    setTimeout(() => setSubmitted(false), 3000)
   }
 
   return (
-    <ToolCard icon={Zap} tone="blue" featured>
+    <ToolCard featured>
       <div className="card-copy">
         <h2>Quick Policy Test</h2>
         <p>Describe a customer in plain English. We will build their profile and run the full policy journey automatically.</p>
@@ -166,6 +144,7 @@ function QuickTestCard({ lob, run, loading }) {
       <ActionBtn
         tone="blue"
         loading={loading === key}
+        completed={submitted}
         onClick={handleRun}
         disabled={!description.trim()}
       >
@@ -177,15 +156,19 @@ function QuickTestCard({ lob, run, loading }) {
 
 function BuildProfileCard({ lob, run, loading }) {
   const [description, setDescription] = useState('')
+  const [submitted, setSubmitted] = useState(false)
   const key = `Build Profile - ${lob.toUpperCase()}`
 
-  const handleRun = () => {
+  const handleRun = async () => {
     if (!description.trim()) return
-    run(key, () => api.createPersona(lob, description))
+    setSubmitted(false)
+    await run(key, () => api.createPersona(lob, description))
+    setSubmitted(true)
+    setTimeout(() => setSubmitted(false), 3000)
   }
 
   return (
-    <ToolCard icon={UserPlus} tone="purple">
+    <ToolCard>
       <div className="card-copy">
         <h2>Build Customer Profile</h2>
         <p>Generate structured test data from a description.</p>
@@ -203,6 +186,7 @@ function BuildProfileCard({ lob, run, loading }) {
         tone="purple"
         icon={UserPlus}
         loading={loading === key}
+        completed={submitted}
         onClick={handleRun}
         disabled={!description.trim()}
       >
@@ -214,15 +198,19 @@ function BuildProfileCard({ lob, run, loading }) {
 
 function RunJourneyCard({ lob, run, loading }) {
   const [personaJson, setPersonaJson] = useState('')
+  const [submitted, setSubmitted] = useState(false)
   const key = `Policy Journey - ${lob.toUpperCase()}`
 
-  const handleRun = () => {
+  const handleRun = async () => {
     if (!personaJson.trim()) return
-    run(key, () => api.runFlow(lob, personaJson))
+    setSubmitted(false)
+    await run(key, () => api.runFlow(lob, personaJson))
+    setSubmitted(true)
+    setTimeout(() => setSubmitted(false), 3000)
   }
 
   return (
-    <ToolCard icon={Route} tone="green">
+    <ToolCard>
       <div className="card-copy">
         <h2>Run Policy Journey</h2>
         <p>Paste profile JSON from Build Customer Profile</p>
@@ -239,82 +227,11 @@ function RunJourneyCard({ lob, run, loading }) {
       <ActionBtn
         tone="green"
         loading={loading === key}
+        completed={submitted}
         onClick={handleRun}
         disabled={!personaJson.trim()}
       >
         Run Journey
-      </ActionBtn>
-    </ToolCard>
-  )
-}
-
-function BatchTestCard({ lob, run, loading }) {
-  const [scenarios, setScenarios] = useState([
-    { lob: 'auto', description: '' },
-    { lob: 'auto', description: '' },
-  ])
-
-  const LOBS_SIMPLE = ['auto', 'homeowner']
-  const addScenario = () => setScenarios(s => s.length >= 25 ? s : [...s, { lob, description: '' }])
-  const removeScenario = i => setScenarios(s => s.filter((_, idx) => idx !== i))
-  const updateScenario = (i, field, val) =>
-    setScenarios(s => s.map((sc, idx) => idx === i ? { ...sc, [field]: val } : sc))
-
-  const handleRun = () => {
-    const valid = scenarios.filter(s => s.description.trim())
-    if (!valid.length) return
-    run(`Batch Test - ${valid.length} customers`, () => api.batchRun(valid))
-  }
-
-  return (
-    <ToolCard icon={UsersRound} tone="blue">
-      <div className="batch-header">
-        <div className="card-copy">
-          <h2>Test Multiple Customers</h2>
-          <p>Run several policy scenarios back-to-back (max 25)</p>
-        </div>
-        <button onClick={addScenario} className="text-button" type="button">
-          <Plus size={17} />
-          Add Customer
-        </button>
-      </div>
-
-      <div className="scenario-list">
-        {scenarios.map((sc, i) => (
-          <div key={i} className="scenario-row">
-            <div className="select-wrap">
-              <select
-                className="field select-field"
-                value={sc.lob}
-                onChange={e => updateScenario(i, 'lob', e.target.value)}
-              >
-                {LOBS_SIMPLE.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-              <ChevronsUpDown size={16} />
-            </div>
-            <input
-              className="field"
-              placeholder={`Customer ${i + 1} description...`}
-              value={sc.description}
-              onChange={e => updateScenario(i, 'description', e.target.value)}
-            />
-            {scenarios.length > 1 && (
-              <button onClick={() => removeScenario(i)} className="row-remove" title="Remove" type="button">
-                <X size={17} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <ActionBtn
-        tone="blue"
-        icon={UsersRound}
-        loading={loading.startsWith('Batch Test')}
-        onClick={handleRun}
-        disabled={!scenarios.some(s => s.description.trim())}
-      >
-        Test All Customers
       </ActionBtn>
     </ToolCard>
   )

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  BarChart2,
   Clipboard,
   Copy,
   Download,
@@ -18,9 +17,6 @@ export default function ReportModal({ job, onClose }) {
   const jobLabel = cleanDisplayText(job.label || '')
   const jobResult = cleanDisplayText(job.result || '')
   const jobError = cleanDisplayText(job.error || '')
-  const [allureState, setAllureState] = useState('idle')
-  const [allureError, setAllureError] = useState('')
-
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -29,34 +25,8 @@ export default function ReportModal({ job, onClose }) {
 
   const handleBackdrop = e => { if (e.target === ref.current) onClose() }
 
-  const openAllure = async () => {
-    setAllureState('generating')
-    setAllureError('')
-    try {
-      const res = await fetch('http://localhost:8000/api/allure/generate', { method: 'POST' })
-      const data = await res.json()
-      if (data.ok) {
-        setAllureState('ready')
-        window.open('http://localhost:8000/allure/', '_blank')
-      } else {
-        setAllureState('error')
-        setAllureError(data.error || 'Allure report generation failed')
-      }
-    } catch (error) {
-      setAllureState('error')
-      setAllureError(error?.message || 'Unable to contact dashboard backend')
-    }
-  }
-
   const isError = job.status === 'error'
   const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : 'Running'
-
-  const allureLabel = {
-    idle: 'Allure Report',
-    generating: 'Generating…',
-    ready: 'Open Again',
-    error: 'Report Error',
-  }[allureState]
 
   const report = useMemo(() => parsePolicyFlowReport(jobResult), [jobResult])
 
@@ -77,6 +47,7 @@ export default function ReportModal({ job, onClose }) {
   const isPersonaReport = Boolean(
     jobResult.includes('Generated Customer Profile') || jobResult.includes('Persona Variations')
   )
+  const isVariationReport = report.reportType === 'persona_variations'
   const isUwReferral = isUwReferralReport(report, jobResult)
   const HeaderIcon = isError ? ShieldAlert : isJson ? FileJson : Clipboard
 
@@ -125,18 +96,6 @@ export default function ReportModal({ job, onClose }) {
           </div>
 
           <div className="report-actions">
-            {isMarkdown && !isPersonaReport && (
-              <button
-                onClick={openAllure}
-                className="text-button compact"
-                type="button"
-                disabled={allureState === 'generating'}
-                title={allureState === 'error' ? allureError : 'Generate and open Allure report'}
-              >
-                <BarChart2 size={16} />
-                {allureLabel}
-              </button>
-            )}
             {report.profileJson && (
               <>
                 <button onClick={openJsonEditorWindow} className="text-button compact" type="button" title="View and edit profile JSON in a new window">
@@ -176,6 +135,8 @@ export default function ReportModal({ job, onClose }) {
               </div>
               <pre>{JSON.stringify(JSON.parse(jobResult), null, 2)}</pre>
             </div>
+          ) : isVariationReport ? (
+            <PersonaVariationsReport job={job} report={report} />
           ) : hasStructuredReport ? (
             <StructuredPolicyReport job={job} report={report} />
           ) : (
@@ -326,14 +287,7 @@ function StructuredPolicyReport({ job, report }) {
           <div className="doc-rule" />
           <div className="doc-section">
             <div className="doc-section-title">UW RULES TRIGGERED</div>
-            <div className="doc-uw-rules">
-              {report.uwConditions.map((condition, index) => (
-                <div className="doc-uw-rule" key={`${index}-${condition}`}>
-                  <span>{index + 1}</span>
-                  <p>{condition}</p>
-                </div>
-              ))}
-            </div>
+            <UwRulesCarousel conditions={report.uwConditions} />
           </div>
         </>
       )}
@@ -363,6 +317,143 @@ function StructuredPolicyReport({ job, report }) {
   )
 }
 
+function PersonaVariationsReport({ job, report }) {
+  const jobLabel = cleanDisplayText(job.label || '')
+  const dateStr = job.started
+    ? new Date(job.started * 1000).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+      })
+    : '-'
+  const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : '-'
+  const personas = report.personas || []
+
+  return (
+    <div className="doc-report">
+      <div className="doc-head">
+        <div className="doc-head-left">
+          <div className="doc-title">{jobLabel}</div>
+          <div className="doc-subtitle">PERSONA GENERATION REPORT</div>
+        </div>
+        <div className="doc-head-meta">
+          <div className="doc-meta-col">
+            <div className="doc-meta-label">Generated</div>
+            <div className="doc-meta-value">{personas.length}</div>
+          </div>
+          <div className="doc-meta-col">
+            <div className="doc-meta-label">Date</div>
+            <div className="doc-meta-value">{dateStr}</div>
+          </div>
+          <div className="doc-meta-col">
+            <div className="doc-meta-label">Duration</div>
+            <div className="doc-meta-value">{duration}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="doc-rule" />
+
+      <div className="doc-section">
+        <div className="doc-section-title">SUMMARY</div>
+        <dl className="doc-kv-list">
+          <DocKV label="Line of Business" value={report.variationLob} />
+          <DocKV label="Base Request" value={report.sourceDescription} />
+          <DocKV label="Created Personas" value={personas.length} />
+        </dl>
+      </div>
+
+      <div className="doc-rule" />
+
+      <div className="doc-section">
+        <div className="doc-section-title">CREATED PERSONAS</div>
+        <div className="persona-list">
+          {personas.map((persona, index) => (
+            <PersonaListCard key={`${persona.TC_ID || index}-${index}`} persona={persona} index={index} />
+          ))}
+        </div>
+      </div>
+
+      <div className="doc-rule" />
+      <div className="doc-footer">
+        <span>Full JSON array is available through View & Edit, Download, and Copy.</span>
+        <span>Page 1 of 1</span>
+      </div>
+    </div>
+  )
+}
+
+function PersonaListCard({ persona, index }) {
+  const name = [persona.FirstName, persona.LastName].filter(Boolean).join(' ') || `Persona ${index + 1}`
+  const riskFlags = [
+    persona.SR22 === 'Yes' ? 'SR-22' : '',
+    persona.LicenseStatus && persona.LicenseStatus !== 'Active License' ? persona.LicenseStatus : '',
+    persona.DamageInfo === 'Yes' ? 'Prior Damage' : '',
+    persona.Ownership && persona.Ownership !== 'Owned' ? persona.Ownership : '',
+  ].filter(Boolean)
+
+  return (
+    <article className="persona-list-card">
+      <div className="persona-list-index">{index + 1}</div>
+      <div className="persona-list-main">
+        <div className="persona-list-title">
+          <strong>{name}</strong>
+          {persona.TC_ID && <span>{persona.TC_ID}</span>}
+        </div>
+        {persona._note && <p className="persona-list-note">{persona._note}</p>}
+        <div className="persona-list-grid">
+          <DocKV label="DOB" value={persona.DOB} />
+          <DocKV label="Coverage" value={persona.PolicyCoverage} />
+          <DocKV label="Vehicle" value={[persona.Year, persona.Make, persona.Model].filter(Boolean).join(' ')} />
+          <DocKV label="Use" value={persona.VehicleUse} />
+          <DocKV label="Ownership" value={persona.Ownership} />
+          <DocKV label="License" value={persona.LicenseStatus} />
+        </div>
+        <div className="persona-risk-row">
+          {riskFlags.length ? riskFlags.map(flag => <span key={flag}>{flag}</span>) : <span className="low">Clean / Low Risk</span>}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function UwRulesCarousel({ conditions }) {
+  const [idx, setIdx] = useState(0)
+  const total = conditions.length
+  if (total === 0) return null
+
+  return (
+    <div className="uw-carousel">
+      {total > 1 && (
+        <div className="uw-carousel-nav">
+          <button
+            className="uw-nav-btn"
+            type="button"
+            aria-label="Previous rule"
+            disabled={idx === 0}
+            onClick={() => setIdx(i => Math.max(0, i - 1))}
+          >
+            ‹
+          </button>
+          <span className="uw-carousel-count">{idx + 1} of {total}</span>
+          <button
+            className="uw-nav-btn"
+            type="button"
+            aria-label="Next rule"
+            disabled={idx === total - 1}
+            onClick={() => setIdx(i => Math.min(total - 1, i + 1))}
+          >
+            ›
+          </button>
+        </div>
+      )}
+      <div className="doc-uw-rule">
+        <span>{idx + 1}</span>
+        <p>{conditions[idx]}</p>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Parsers ─────────────────────────────────────────────────── */
 
 function parsePolicyFlowReport(content) {
@@ -377,15 +468,46 @@ function parsePolicyFlowReport(content) {
     }
   }
 
+  if (normalized.startsWith('[')) {
+    return {
+      ...emptyReport(),
+      reportType: 'persona_variations',
+      profileJson: normalized,
+      prettyProfileJson: formatPrettyJson(normalized),
+      personas: parseJsonArray(normalized),
+    }
+  }
+
   const chunks = normalized.split('\n\n---\n\n').map(chunk => chunk.trim()).filter(Boolean)
-  const profileJson = extractProfileJson(chunks[0] || '')
-  const summaryChunk = chunks[1] || ''
-  const stepsChunk = chunks[2] || ''
-  const uwChunk = chunks[3] || ''
-  const errorChunk = chunks[4] || ''
+  const isVariations = /Persona Variations/i.test(normalized)
+  const variationJsonBlocks = isVariations ? extractAllProfileJson(normalized) : []
+  const variationNotes = isVariations ? extractVariationNotes(normalized) : []
+  const variationPersonas = variationJsonBlocks
+    .map(parseJsonObject)
+    .filter(Boolean)
+    .map((persona, index) => ({
+      ...persona,
+      _note: persona._note || variationNotes[index] || '',
+    }))
+
+  // Quick Policy Test prepends a persona JSON chunk; standalone Policy Journey runs do not.
+  const hasProfileChunk = !isVariations && /```json/i.test(chunks[0] || '')
+  const c = (i) => chunks[i] || ''
+
+  const profileJson = isVariations
+    ? JSON.stringify(variationPersonas, null, 2)
+    : hasProfileChunk
+      ? extractProfileJson(c(0))
+      : ''
+  const summaryChunk = hasProfileChunk ? c(1) : c(0)
+  const stepsChunk = hasProfileChunk ? c(2) : c(1)
+  const uwChunk = hasProfileChunk ? c(3) : c(2)
+  const errorChunk = hasProfileChunk ? c(4) : c(3)
 
   const summary = parseSummaryChunk(summaryChunk)
-  const sourceDescription = extractSourceDescription(chunks[0] || '')
+  const sourceDescription = isVariations
+    ? extractVariationBaseDescription(normalized)
+    : extractSourceDescription(chunks[0] || '')
   const steps = parseStepsChunk(stepsChunk)
   const uwConditions = parseUwChunk(uwChunk)
   const coverageRows = parseCoverageRows(normalized)
@@ -395,6 +517,9 @@ function parsePolicyFlowReport(content) {
   return {
     profileJson,
     prettyProfileJson,
+    reportType: isVariations ? 'persona_variations' : '',
+    personas: variationPersonas,
+    variationLob: extractVariationLob(normalized),
     summary,
     sourceDescription,
     steps,
@@ -410,6 +535,9 @@ function emptyReport() {
   return {
     profileJson: '',
     prettyProfileJson: '',
+    reportType: '',
+    personas: [],
+    variationLob: '',
     summary: {},
     sourceDescription: '',
     steps: [],
@@ -424,6 +552,40 @@ function emptyReport() {
 function extractProfileJson(chunk) {
   const match = chunk.match(/```json\s*\n([\s\S]*?)\n```/i)
   return match?.[1]?.trim() || ''
+}
+
+function extractAllProfileJson(content) {
+  return Array.from(content.matchAll(/```json\s*\n([\s\S]*?)\n```/gi))
+    .map(match => match[1]?.trim())
+    .filter(Boolean)
+}
+
+function parseJsonObject(text) {
+  try { return JSON.parse(text) } catch { return null }
+}
+
+function parseJsonArray(text) {
+  try {
+    const parsed = JSON.parse(text)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function extractVariationBaseDescription(content) {
+  const match = content.match(/\*\*Base:\*\*\s*([^\n]+)/i)
+  return cleanInline(match?.[1] || '').trim()
+}
+
+function extractVariationLob(content) {
+  const match = content.match(/^##\s+\d+\s+([A-Z]+)\s+Persona Variations/im)
+  return match?.[1] || ''
+}
+
+function extractVariationNotes(content) {
+  return Array.from(content.matchAll(/###\s+Variation\s+\d+[^\n]*\n+\s*_([^_\n]+)_/gi))
+    .map(match => cleanInline(match[1] || '').trim())
 }
 
 function extractSourceDescription(chunk) {
@@ -491,7 +653,7 @@ function parseUwChunk(chunk) {
   return rows
     .map(row => parseTableCells(row))
     .filter(cells => cells.length >= 2)
-    .map(cells => `${cleanInline(cells[0]).trim()} ${cleanInline(cells[1]).trim()}`.trim())
+    .map(cells => cleanInline(cells[1]).trim() || cleanInline(cells[0]).trim())
     .filter(Boolean)
 }
 

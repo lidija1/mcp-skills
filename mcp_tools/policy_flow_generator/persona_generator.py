@@ -438,6 +438,30 @@ _LOB_PROMPTS = {
     "homeowner": _HOMEOWNER_SYSTEM_PROMPT,
 }
 _VALID_LOBS = ", ".join(_LOB_PROMPTS)
+_VARIATION_CHUNK_SIZE = 5
+
+
+def _clean_model_json(raw: str) -> str:
+    """Return the likely JSON payload from a model response."""
+    cleaned = (raw or "").strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+
+    starts = [idx for idx in (cleaned.find("["), cleaned.find("{")) if idx != -1]
+    if not starts:
+        return cleaned
+
+    start = min(starts)
+    end_array = cleaned.rfind("]")
+    end_object = cleaned.rfind("}")
+    end = max(end_array, end_object)
+    if end >= start:
+        return cleaned[start:end + 1].strip()
+    return cleaned[start:].strip()
+
+
+def _parse_model_json(raw: str):
+    return json.loads(_clean_model_json(raw))
 
 # ---------------------------------------------------------------------------
 # Archetype reference (returned by list_archetypes)
@@ -550,10 +574,7 @@ def generate_persona(lob: str, description: str) -> str:
                 )
             })
 
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-
-        parsed = json.loads(raw)
+        parsed = _parse_model_json(raw)
         parsed["_lob"] = lob
         parsed["_provider"] = provider
         return json.dumps(parsed)
@@ -582,20 +603,14 @@ def list_archetypes(lob: str | None = None) -> str:
     return "\n".join(lines)
 
 
-def generate_persona_variations(lob: str, base_description: str, count: int) -> str:
-    """
-    Generate `count` distinct persona variations for the given LOB, all inspired
-    by `base_description`. Uses a single AI call requesting a JSON array so
-    the model can produce meaningfully different personas in one pass.
-
-    Returns a JSON string: an array of persona dicts, or a dict with "error".
-    """
-    lob = lob.lower().strip()
-    if lob not in _LOB_PROMPTS:
-        return json.dumps({"error": f"Unknown LOB '{lob}'. Valid: {_VALID_LOBS}"})
-
-    count = max(1, min(count, 25))  # hard-clamp
-
+def _generate_persona_variation_chunk(
+    lob: str,
+    base_description: str,
+    count: int,
+    start_index: int,
+    vehicles: list | None = None,
+) -> list:
+    """Generate a small persona-variation chunk."""
     base_system = _LOB_PROMPTS[lob]
     original_tail = "Return ONLY a valid JSON object. No explanation, markdown, or extra text."
     array_instructions = (
@@ -622,10 +637,6 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
 
     vehicle_section = ""
     if lob == "auto":
-        vehicles = _sample_vehicles(count)
-        requested_vehicle = _find_vehicle_from_description(base_description)
-        if requested_vehicle:
-            vehicles = [requested_vehicle for _ in range(count)]
         if vehicles:
             lines = [
                 f"  [{i}] Year={v['Year']}  Make={v['Make']}  "
@@ -641,6 +652,8 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
     user_message = (
         f"Generate exactly {count} distinct {lob.upper()} persona variations based on: "
         f"{base_description}\n\n"
+        f"This is chunk starting at overall variation index {start_index}. "
+        f"Do not reuse names or risk-detail wording from earlier chunks.\n\n"
         f"Return a JSON array of {count} complete persona objects."
         f"{vehicle_section}"
     )
@@ -680,10 +693,7 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
                 )
             })
 
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-
-        parsed = json.loads(raw)
+        parsed = _parse_model_json(raw)
         if not isinstance(parsed, list):
             parsed = [parsed]  # model returned single object — wrap it
 
@@ -691,12 +701,67 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
             if isinstance(persona, dict):
                 persona["_lob"] = lob
                 persona["_provider"] = provider
-                persona["_variation_index"] = idx
+                persona["_variation_index"] = start_index + idx
 
-        return json.dumps(parsed, indent=2)
+        return parsed[:count]
 
     except json.JSONDecodeError as exc:
-        return json.dumps({"error": f"Model returned non-JSON: {exc}", "raw": raw[:500]})
+        raise ValueError(f"Model returned non-JSON: {exc}. Raw response starts: {raw[:500]}") from exc
+    except Exception as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+def generate_persona_variations(lob: str, base_description: str, count: int) -> str:
+    """
+    Generate `count` distinct persona variations for the given LOB, all inspired
+    by `base_description`.
+
+    Returns a JSON string: an array of persona dicts, or a dict with "error".
+    """
+    lob = lob.lower().strip()
+    if lob not in _LOB_PROMPTS:
+        return json.dumps({"error": f"Unknown LOB '{lob}'. Valid: {_VALID_LOBS}"})
+
+    count = max(1, min(count, 25))  # hard-clamp
+
+    all_vehicles: list = []
+    if lob == "auto":
+        requested_vehicle = _find_vehicle_from_description(base_description)
+        if requested_vehicle:
+            all_vehicles = [requested_vehicle for _ in range(count)]
+        else:
+            all_vehicles = _sample_vehicles(count)
+
+    try:
+        results = []
+        for start in range(0, count, _VARIATION_CHUNK_SIZE):
+            chunk_count = min(_VARIATION_CHUNK_SIZE, count - start)
+            chunk_vehicles = all_vehicles[start:start + chunk_count] if all_vehicles else None
+            try:
+                chunk = _generate_persona_variation_chunk(
+                    lob=lob,
+                    base_description=base_description,
+                    count=chunk_count,
+                    start_index=start,
+                    vehicles=chunk_vehicles,
+                )
+            except ValueError:
+                if chunk_count == 1:
+                    raise
+                chunk = []
+                for offset in range(chunk_count):
+                    single_vehicles = [chunk_vehicles[offset]] if chunk_vehicles else None
+                    chunk.extend(_generate_persona_variation_chunk(
+                        lob=lob,
+                        base_description=base_description,
+                        count=1,
+                        start_index=start + offset,
+                        vehicles=single_vehicles,
+                    ))
+            results.extend(chunk)
+
+        return json.dumps(results[:count], indent=2)
+
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 

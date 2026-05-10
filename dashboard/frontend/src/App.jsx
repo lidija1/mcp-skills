@@ -58,6 +58,7 @@ export default function App() {
   const [backendOk, setBackendOk] = useState(null)
   const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
   const [selectedJob, setSelectedJob] = useState(null)
+  const [showHelp, setShowHelp] = useState(false)
   const previousJobStatusRef = useRef(null)
 
   useEffect(() => {
@@ -202,7 +203,7 @@ export default function App() {
             <NavItem icon={Settings} label="Settings" />
           </nav>
           <nav className="side-nav-footer">
-            <NavItem icon={CircleHelp} label="Help" />
+            <NavItem icon={CircleHelp} label="Help" onClick={() => setShowHelp(true)} />
             <NavItem icon={UserCircle} label="Account" />
           </nav>
         </aside>
@@ -233,6 +234,7 @@ export default function App() {
         />
 
         {selectedJob && <ReportModal job={selectedJob} onClose={() => setSelectedJob(null)} />}
+        {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       </div>
     </div>
   )
@@ -288,5 +290,45 @@ function NavItem({ icon: Icon, label, active, onClick }) {
       <Icon size={22} strokeWidth={2} />
       <span>{label}</span>
     </button>
+  )
+}
+
+function HelpModal({ onClose }) {
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div className="help-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="Help">
+      <div className="help-modal" onClick={e => e.stopPropagation()}>
+        <div className="help-modal-header">
+          <h2>How to use INFORCE</h2>
+          <button className="help-modal-close" onClick={onClose} aria-label="Close help" type="button">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="help-modal-body">
+          <div className="help-section">
+            <h3>Policy Flow</h3>
+            <p>Generate a customer profile and run an end-to-end policy quote from a plain-English description. Choose a line of business, describe the customer, and click <strong>Run Policy Test</strong>.</p>
+            <p>Use <strong>Build Customer Profile</strong> to generate structured JSON, then paste it into <strong>Run Policy Journey</strong> to replay it.</p>
+          </div>
+          <div className="help-section">
+            <h3>Jobs</h3>
+            <p>Every dispatched run appears in the Jobs tab. Jobs poll every 2.5 s while running. Click any completed job to open its report.</p>
+          </div>
+          <div className="help-section">
+            <h3>Chat Assistant</h3>
+            <p>Use the right-hand chat panel to describe a scenario in natural language. The assistant will dispatch a policy run and track the resulting job for you.</p>
+          </div>
+          <div className="help-section">
+            <h3>Notifications</h3>
+            <p>When a job finishes, a popup appears in the bottom-right corner. Click <strong>Open report</strong> to view results, or dismiss to close.</p>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

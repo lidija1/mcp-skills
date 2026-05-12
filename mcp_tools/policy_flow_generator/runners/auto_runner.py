@@ -35,6 +35,88 @@ def _record(steps, name, status, elapsed, detail=""):
     })
 
 
+def _is_uw_referral_visible(page: Page, timeout: int = 2_000) -> bool:
+    """Return whether the current page is an underwriting referral screen."""
+    from ui.pages.auto.uw_referral_page import UWReferralPage
+
+    return UWReferralPage(page).is_visible(timeout=timeout)
+
+
+def _capture_uw_conditions(page: Page) -> list[str]:
+    """Capture the UW issue grid cells from the visible referral screen."""
+    from ui.pages.auto.uw_referral_page import UWReferralPage
+
+    return UWReferralPage(page).capture_conditions(timeout=5_000)
+
+
+def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str) -> dict:
+    uw_conditions = _capture_uw_conditions(page)
+    _record(steps, name, "passed", elapsed, detail)
+    _record(
+        steps,
+        "Outcome: UW Referral",
+        "passed",
+        0,
+        f"{len(uw_conditions)} condition cell(s) captured",
+    )
+    return {
+        "outcome": "uw_referral",
+        "uw_conditions": uw_conditions,
+        "error": None,
+        "screenshot_path": None,
+        "policy_summary": None,
+        "premium": None,
+    }
+
+
+def _create_policy_or_uw(page: Page, steps: list, started_at: float) -> dict | None:
+    """Run issue/billing/bind actions, stopping early if UW appears."""
+    from ui.pages.auto.create_policy_page import CreatePolicyPage
+
+    create_policy = CreatePolicyPage(page)
+    actions = [
+        ("Request Issue", create_policy.click_issue),
+        ("Delivery Preferences", create_policy.click_next),
+        ("Billing Plan", create_policy.click_next),
+        ("Bind", create_policy.click_bind),
+    ]
+
+    for action_name, action in actions:
+        if _is_uw_referral_visible(page, timeout=1_000):
+            return _record_uw_outcome(
+                steps,
+                f"Outcome: UW Referral ({action_name})",
+                time.perf_counter() - started_at,
+                page,
+                f"UW referral detected before {action_name.lower()}.",
+            )
+
+        try:
+            action()
+            create_policy.wait_for_loader_to_disappear()
+        except Exception:
+            if _is_uw_referral_visible(page, timeout=8_000):
+                return _record_uw_outcome(
+                    steps,
+                    f"Outcome: UW Referral ({action_name})",
+                    time.perf_counter() - started_at,
+                    page,
+                    f"UW referral detected during {action_name.lower()}.",
+                )
+            raise
+
+        if _is_uw_referral_visible(page, timeout=1_000):
+            return _record_uw_outcome(
+                steps,
+                f"Outcome: UW Referral ({action_name})",
+                time.perf_counter() - started_at,
+                page,
+                f"UW referral detected after {action_name.lower()}.",
+            )
+
+    return None
+
+
 def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
     """
     Execute the Personal Auto quote workflow on an already-open browser page.
@@ -56,7 +138,6 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
     from ui.pages.auto.driver_info_page import DriverInfoPage
     from ui.pages.auto.vehicle_info_page import VehicleInfoPage
     from ui.pages.auto.policy_term_page import PolicyTermPage
-    from ui.pages.auto.create_policy_page import CreatePolicyPage
     from ui.pages.common.policy_summary_page import PolicySummary
 
     outcome = "error"
@@ -108,24 +189,77 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
 
         # 8. Coverage & Rate
         t = time.perf_counter()
-        PolicyTermPage(page).policy_term_steps(persona)
-        _record(steps, "Coverage & Rate", "passed", time.perf_counter() - t)
+        if _is_uw_referral_visible(page):
+            uw_conditions = _capture_uw_conditions(page)
+            outcome = "uw_referral"
+            _record(
+                steps,
+                "Coverage & Rate",
+                "passed",
+                time.perf_counter() - t,
+                "UW referral detected before rating.",
+            )
+            _record(
+                steps,
+                "Outcome: UW Referral",
+                "passed",
+                0,
+                f"{len(uw_conditions)} condition cell(s) captured",
+            )
+            return {
+                "outcome": outcome,
+                "uw_conditions": uw_conditions,
+                "error": None,
+                "screenshot_path": None,
+                "policy_summary": None,
+                "premium": None,
+            }
+
+        try:
+            PolicyTermPage(page).policy_term_steps(persona)
+            _record(steps, "Coverage & Rate", "passed", time.perf_counter() - t)
+        except Exception:
+            if _is_uw_referral_visible(page, timeout=5_000):
+                uw_conditions = _capture_uw_conditions(page)
+                outcome = "uw_referral"
+                _record(
+                    steps,
+                    "Coverage & Rate",
+                    "passed",
+                    time.perf_counter() - t,
+                    "UW referral detected during rating.",
+                )
+                _record(
+                    steps,
+                    "Outcome: UW Referral",
+                    "passed",
+                    0,
+                    f"{len(uw_conditions)} condition cell(s) captured",
+                )
+                return {
+                    "outcome": outcome,
+                    "uw_conditions": uw_conditions,
+                    "error": None,
+                    "screenshot_path": None,
+                    "policy_summary": None,
+                    "premium": None,
+                }
+            raise
 
         # 9. Outcome detection
         t = time.perf_counter()
-        uw_breadcrumb = page.locator("text=underwriting referral")
-        try:
-            uw_breadcrumb.first.wait_for(state="visible", timeout=6_000)
-            cells = page.get_by_role("gridcell").all()
-            uw_conditions = [c.inner_text().strip() for c in cells if c.inner_text().strip()]
+        if _is_uw_referral_visible(page, timeout=6_000):
+            uw_conditions = _capture_uw_conditions(page)
             outcome = "uw_referral"
             _record(
                 steps, "Outcome: UW Referral", "passed",
                 time.perf_counter() - t,
                 f"{len(uw_conditions)} condition cell(s) captured",
             )
-        except Exception:
-            CreatePolicyPage(page).policy_creation_steps()
+        else:
+            uw_result = _create_policy_or_uw(page, steps, t)
+            if uw_result:
+                return uw_result
             outcome = "policy_bound"
             try:
                 policy_page = PolicySummary(page)
@@ -136,6 +270,15 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
             _record(steps, "Outcome: Policy Bound", "passed", time.perf_counter() - t)
 
     except Exception as exc:
+        if _is_uw_referral_visible(page, timeout=8_000):
+            return _record_uw_outcome(
+                steps,
+                "Outcome: UW Referral",
+                0,
+                page,
+                "UW referral detected while handling a normal-flow exception.",
+            )
+
         error = traceback.format_exc()
         # Best-effort screenshot
         try:

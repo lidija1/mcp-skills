@@ -29,8 +29,22 @@ class UWReferralPage(BasePage):
         )
 
     # ------------------------------------------------------------------
-    # Public assertion API
+    # Public API
     # ------------------------------------------------------------------
+
+    def is_visible(self, timeout: int = 2_000) -> bool:
+        """Return whether the current page is showing an underwriting referral."""
+        try:
+            self._wait_for_uw_page(timeout=timeout)
+            return True
+        except Exception:
+            return False
+
+    def capture_conditions(self, timeout: int = 2_000) -> list[str]:
+        """Return visible underwriting issue grid cell text."""
+        self._wait_for_uw_page(timeout=timeout)
+        cells = self.page.get_by_role("gridcell").all()
+        return [cell.inner_text().strip() for cell in cells if cell.inner_text().strip()]
 
     @allure.step("Assert UW condition: type='{uw_type}', condition contains='{expected_condition}'")
     def assert_uw_condition(self, uw_type: str, expected_condition: str) -> None:

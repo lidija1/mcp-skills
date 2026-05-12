@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import {
   Clipboard,
   Copy,
+  Camera,
   Download,
   FileJson,
   Pencil,
@@ -43,12 +44,13 @@ export default function ReportModal({ job, onClose }) {
     report.profileJson || report.steps.length || Object.keys(report.summary).length || report.aiInsights.length
   )
   const isJson = job.status === 'done' && jobResult.trimStart().startsWith('{') && !hasStructuredReport
-  const isMarkdown = !isError && !isJson && job.status === 'done'
   const isPersonaReport = Boolean(
     jobResult.includes('Generated Customer Profile') || jobResult.includes('Persona Variations')
   )
   const isVariationReport = report.reportType === 'persona_variations'
   const isUwReferral = isUwReferralReport(report, jobResult)
+  const isPolicyFailed = isFailedPolicyReport(report, jobResult)
+  const screenshotUrl = isPolicyFailed ? screenshotUrlFromPath(report.screenshotPath) : ''
   const HeaderIcon = isError ? ShieldAlert : isJson ? FileJson : Clipboard
 
   const downloadProfile = () => {
@@ -84,9 +86,9 @@ export default function ReportModal({ job, onClose }) {
             <div className="report-title-copy">
               <h2>{jobLabel}</h2>
               <div className="report-header-badges">
-                <span className={`report-badge ${job.status === 'done' ? 'success' : isError ? 'error' : 'running'}`}>
+                <span className={`report-badge ${isError || isPolicyFailed ? 'error' : job.status === 'done' ? 'success' : 'running'}`}>
                   <span className="report-badge-dot" />
-                  {isError ? 'Failed' : isUwReferral ? 'UW Referral' : job.status === 'done' ? 'Completed' : 'Running'}
+                  {isError || isPolicyFailed ? 'Failed' : isUwReferral ? 'UW Referral' : job.status === 'done' ? 'Completed' : 'Running'}
                 </span>
                 <span className="report-badge neutral report-id-badge">
                   ID {job.id}
@@ -96,6 +98,12 @@ export default function ReportModal({ job, onClose }) {
           </div>
 
           <div className="report-actions">
+            {screenshotUrl && (
+              <button onClick={() => window.open(screenshotUrl, '_blank', 'noopener,noreferrer')} className="text-button compact" type="button" title="Open failure screenshot">
+                <Camera size={16} />
+                Screenshot
+              </button>
+            )}
             {report.profileJson && (
               <>
                 <button onClick={openJsonEditorWindow} className="text-button compact" type="button" title="View and edit profile JSON in a new window">
@@ -214,15 +222,18 @@ function StructuredPolicyReport({ job, report }) {
       <div className="doc-section">
         <div className="doc-section-title">SUMMARY</div>
         <div className="doc-summary-layout">
-          <dl className="doc-kv-list">
-            <DocKV label="Policy" value={jobLabel} />
-            <DocKV label="Policy Type" value={report.summary.lob} />
-            <DocKV label="Execution Status" value={executionStatus} />
-            <DocKV label="Outcome" value={report.summary.outcome} />
-            <DocKV label="Completed In" value={job.finished ? duration : undefined} />
-            <DocKV label="Generated On" value={job.started ? dateStr : undefined} />
-            <DocKV label="AI Prompt" value={report.sourceDescription} />
-          </dl>
+          <div className="doc-summary-main">
+            <dl className="doc-kv-list">
+              <DocKV label="Policy" value={jobLabel} />
+              <DocKV label="Policy Type" value={report.summary.lob} />
+              <DocKV label="Execution Status" value={executionStatus} />
+              <DocKV label="Outcome" value={report.summary.outcome} />
+              <DocKV label="Completed In" value={job.finished ? duration : undefined} />
+              <DocKV label="Generated On" value={job.started ? dateStr : undefined} />
+              <DocKV label="AI Prompt" value={report.sourceDescription} />
+            </dl>
+            <UwSummaryList conditions={report.uwConditions} />
+          </div>
           {report.summary.premium && (
             <div className="doc-premium-box">
               <div className="doc-premium-label">PREMIUM</div>
@@ -313,6 +324,26 @@ function StructuredPolicyReport({ job, report }) {
         <span>Report generated on {dateStr}</span>
         <span>Page 1 of 1</span>
       </div>
+    </div>
+  )
+}
+
+function UwSummaryList({ conditions }) {
+  if (!conditions?.length) return null
+  return (
+    <div className="doc-uw-summary">
+      <div className="doc-uw-summary-title">UW Referrals Appeared ({conditions.length})</div>
+      <div className="doc-uw-summary-list">
+        {conditions.slice(0, 4).map((condition, index) => (
+          <div key={`${condition}-${index}`} className="doc-uw-summary-item">
+            <span>{index + 1}</span>
+            <p>{condition}</p>
+          </div>
+        ))}
+      </div>
+      {conditions.length > 4 && (
+        <div className="doc-uw-summary-more">+{conditions.length - 4} more in UW Rules Triggered</div>
+      )}
     </div>
   )
 }
@@ -755,6 +786,21 @@ function isUwReferralReport(report, rawContent = '') {
     rawContent,
   ].filter(Boolean).join(' ').toLowerCase()
   return fields.includes('uw referral') || Boolean(report?.uwConditions?.length)
+}
+
+function isFailedPolicyReport(report, rawContent = '') {
+  const fields = [
+    report?.summary?.status,
+    report?.summary?.outcome,
+    rawContent,
+  ].filter(Boolean).join(' ').toLowerCase()
+  return fields.includes('policy creation failed') || fields.includes('outcome | error') || fields.includes('status | failed')
+}
+
+function screenshotUrlFromPath(path) {
+  if (!path) return ''
+  const filename = String(path).split(/[\\/]/).pop()
+  return filename ? `/screenshots/${encodeURIComponent(filename)}` : ''
 }
 
 function formatPrettyJson(text) {

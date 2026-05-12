@@ -535,6 +535,62 @@ Add confirmed behavior below as exploration progresses.
 **Open Questions**
 - Full live validation of `compare_scenarios` should be run deliberately because each scenario creates a live quote/policy or UW outcome.
 
+### 2026-05-12 - Policy Journey UW Terminal Detection
+
+**Context**
+- Area: Dashboard / MCP policy-flow-generator
+- Scenario: Run Policy Journey with pasted customer JSON that triggers UW during the normal issue/billing/bind path.
+- Test data: In-memory persona JSON from the dashboard or MCP tool.
+
+**Confirmed Behavior**
+- The runner should treat `underwriting referral` or `Underwriting Issues` as a terminal `uw_referral` result anywhere after rating, including during request issue, delivery preferences, billing plan, or bind.
+- Waiting only for policy bind buttons can misclassify a valid UW referral as a timeout/error when risky customer data leaves the normal bind path.
+- Cyber policy flow is now registered in the policy-flow runner and dashboard policy LOB whitelist so existing cyber runner logic is reachable from Run Policy Journey.
+
+**Stable Selectors / Methods**
+- Use `UWReferralPage.is_visible()` for short terminal checks.
+- Use `UWReferralPage.capture_conditions()` to collect visible UW grid cells for reports.
+- Policy-flow runners check for UW before and after normal issue/billing/bind actions and after exceptions from those actions.
+
+**Required Waits**
+- Use short visible checks around expected normal-flow buttons, then a longer visible check after an action exception before classifying the run as an error.
+
+**Known Failed Approaches**
+- Attempt: Check for UW only immediately after rating, then always proceed through request issue, next, next, and bind.
+- Symptom: Valid risky customers could land on UW referral while the runner kept waiting for policy-bound controls and eventually timed out.
+- Replacement: Classify visible UW pages as terminal `uw_referral` throughout the post-rating path.
+
+**Open Questions**
+- Full live validation was not run in the Codex sandbox because browser execution can be restricted by local Playwright subprocess permissions.
+
+### 2026-05-11 - Personal Auto Early UW Referral In Dashboard Runner
+
+**Context**
+- LOB: Personal Auto
+- Scenario: Dashboard Run Policy Journey with pasted JSON `AI_482736`
+- Test data: In-memory persona with under-25 driver, `SR22=Yes`, and `LicenseStatus=Revoked`
+
+**Confirmed Behavior**
+- OneShield correctly routes this profile to `QUOTE | UNDERWRITING REFERRAL | UNDERWRITER`.
+- The visible UW grid shows three conditions: all drivers under 25, SR-22 / Certificate of Insurance, and revoked/suspended license status.
+- This is a valid `uw_referral` outcome, not malformed JSON and not a failed policy bind attempt.
+
+**Stable Selectors / Methods**
+- Detect UW referral by visible text `underwriting referral`.
+- Capture visible UW issue grid values from `page.get_by_role("gridcell")`.
+- The dashboard auto runner now checks for UW before coverage/rating, during a coverage/rating exception, and after rating before attempting policy creation.
+
+**Required Waits**
+- Use short visible checks for the UW breadcrumb around coverage/rating so a referral screen is classified before the runner searches for normal rating or bind controls.
+
+**Known Failed Approaches**
+- Attempt: Always call `PolicyTermPage.policy_term_steps()` and classify UW only afterward.
+- Symptom: Risky inputs that reach UW before normal rating were reported as flow errors and could be shown in the dashboard as completed/bound.
+- Replacement: Treat early visible UW referral as a terminal `uw_referral` result and skip policy creation.
+
+**Open Questions**
+- Additional auto UW screens may need richer grid parsing if the column count changes from the current Asset / Condition / Type / Comments / Overridden layout.
+
 ### 2026-05-06 - General Liability UW Trigger Exploration With One Quote
 
 **Context**

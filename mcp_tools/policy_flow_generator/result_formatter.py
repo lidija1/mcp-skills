@@ -5,6 +5,42 @@ Multi-LOB aware — shows LOB badge, persona type, premium (where available).
 
 from __future__ import annotations
 
+# Known UW rule definitions: (condition_substring, rule_id, rule_name, lob)
+# Condition substrings are case-sensitive, matching UWReferralPage.assert_uw_condition logic.
+_KNOWN_RULES: list[tuple[str, str, str, str]] = [
+    # Auto
+    (
+        "SR-22 / Certificate of Insurance Indicator is checked",
+        "AUTO_SR22",
+        "SR-22 Certificate Required",
+        "auto",
+    ),
+    (
+        "driver license status that is revoked or suspended",
+        "AUTO_LICENSE",
+        "Suspended/Revoked License",
+        "auto",
+    ),
+    (
+        "All drivers under 25 years of age",
+        "AUTO_UNDER25",
+        "Driver Under 25 Years of Age",
+        "auto",
+    ),
+]
+
+
+def _match_rules(raw_cells: list[str]) -> list[dict]:
+    """Return list of matched rule dicts for the given raw UW grid cells."""
+    matched = []
+    seen_ids: set[str] = set()
+    for substring, rule_id, rule_name, lob in _KNOWN_RULES:
+        if rule_id not in seen_ids and any(substring in cell for cell in raw_cells):
+            matched.append({"rule_id": rule_id, "rule_name": rule_name, "lob": lob})
+            seen_ids.add(rule_id)
+    return matched
+
+
 _STATUS_LABEL = {
     "passed": "PASSED",
     "failed": "FAILED",
@@ -20,6 +56,12 @@ _STATUS_EMOJI = {
 _STEP_ICON = {
     "passed": "✓",
     "failed": "✗",
+}
+
+_OUTCOME_LABEL = {
+    "policy_bound": "Policy Bound",
+    "uw_referral": "UW Referral",
+    "error": "Policy Creation Failed",
 }
 
 _LOB_LABEL = {
@@ -56,7 +98,8 @@ def format_result(result: dict) -> str:
     status = result.get("overall_status", "failed")
     status_label = _STATUS_LABEL.get(status, status.upper())
     status_emoji = _STATUS_EMOJI.get(status, "")
-    outcome_label = result.get("outcome", "unknown").replace("_", " ").title()
+    outcome = result.get("outcome", "unknown")
+    outcome_label = _OUTCOME_LABEL.get(outcome, str(outcome).replace("_", " ").title())
     persona_type = result.get("persona_type", "custom")
     tc_id = result.get("tc_id", "UNKNOWN")
     policy_summary = result.get("policy_summary") or {}
@@ -91,18 +134,15 @@ def format_result(result: dict) -> str:
             f"| {i} | {step['step']}{detail} | {icon} {step['status']} | {step['duration_s']}s |"
         )
 
-    # UW conditions
+    # UW rules
     if result.get("uw_conditions"):
-        lines += ["", "---", "", "### UW Conditions Triggered", ""]
-        rows = _parse_uw_rows(result["uw_conditions"])
-        if rows:
-            lines += ["| Type | Condition |", "|------|-----------|"]
-            for row in rows:
-                lines.append(f"| {row.get('Type', '')} | {row.get('Condition', '')} |")
+        matched = _match_rules(result["uw_conditions"])
+        lines += ["", "---", "", "### UW Rules Triggered", ""]
+        if matched:
+            for m in matched:
+                lines.append(f"- {m['rule_name']}")
         else:
-            for cell in result["uw_conditions"]:
-                if cell:
-                    lines.append(f"- {cell}")
+            lines.append("_No known rules matched — condition text may be unrecognized or LOB-specific._")
 
     # Error
     if result.get("error"):

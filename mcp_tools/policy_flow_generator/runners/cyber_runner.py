@@ -33,6 +33,37 @@ def _record(steps, name, status, elapsed, detail=""):
     })
 
 
+def _is_uw_referral_visible(page: Page, timeout: int = 2_000) -> bool:
+    from ui.pages.auto.uw_referral_page import UWReferralPage
+
+    return UWReferralPage(page).is_visible(timeout=timeout)
+
+
+def _capture_uw_conditions(page: Page) -> list[str]:
+    from ui.pages.auto.uw_referral_page import UWReferralPage
+
+    return UWReferralPage(page).capture_conditions(timeout=5_000)
+
+
+def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str) -> dict:
+    uw_conditions = _capture_uw_conditions(page)
+    _record(
+        steps,
+        name,
+        "passed",
+        elapsed,
+        f"{detail} {len(uw_conditions)} condition cell(s) captured",
+    )
+    return {
+        "outcome": "uw_referral",
+        "uw_conditions": uw_conditions,
+        "error": None,
+        "screenshot_path": None,
+        "premium": None,
+        "policy_summary": None,
+    }
+
+
 def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
     """
     Execute the Cyber quote workflow on an already-open browser page.
@@ -106,11 +137,10 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
 
         # 7. Outcome detection
         t = time.perf_counter()
-        uw_breadcrumb = page.locator("text=underwriting referral")
         try:
-            uw_breadcrumb.first.wait_for(state="visible", timeout=6_000)
-            cells = page.get_by_role("gridcell").all()
-            uw_conditions = [c.inner_text().strip() for c in cells if c.inner_text().strip()]
+            if not _is_uw_referral_visible(page, timeout=6_000):
+                raise RuntimeError("UW referral was not visible after rating.")
+            uw_conditions = _capture_uw_conditions(page)
             outcome = "uw_referral"
             _record(
                 steps, "Outcome: UW Referral", "passed",
@@ -126,19 +156,79 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
             except Exception:
                 pass
 
-            summary.click_request_issue()
+            try:
+                if _is_uw_referral_visible(page, timeout=1_000):
+                    return _record_uw_outcome(
+                        steps,
+                        "Outcome: UW Referral (Request Issue)",
+                        time.perf_counter() - t,
+                        page,
+                        "UW referral detected before request issue.",
+                    )
+                summary.click_request_issue()
+                if _is_uw_referral_visible(page, timeout=1_000):
+                    return _record_uw_outcome(
+                        steps,
+                        "Outcome: UW Referral (Request Issue)",
+                        time.perf_counter() - t,
+                        page,
+                        "UW referral detected after request issue.",
+                    )
+            except Exception:
+                if _is_uw_referral_visible(page, timeout=8_000):
+                    return _record_uw_outcome(
+                        steps,
+                        "Outcome: UW Referral (Request Issue)",
+                        time.perf_counter() - t,
+                        page,
+                        "UW referral detected during request issue.",
+                    )
+                raise
             _record(steps, "Request Issue", "passed", time.perf_counter() - t)
 
             t = time.perf_counter()
-            DeliveryPreferencesPage(page).click_next()
+            try:
+                DeliveryPreferencesPage(page).click_next()
+            except Exception:
+                if _is_uw_referral_visible(page, timeout=8_000):
+                    return _record_uw_outcome(
+                        steps,
+                        "Outcome: UW Referral (Delivery Preferences)",
+                        time.perf_counter() - t,
+                        page,
+                        "UW referral detected during delivery preferences.",
+                    )
+                raise
             _record(steps, "Delivery Preferences", "passed", time.perf_counter() - t)
 
             t = time.perf_counter()
-            BillingPlanPage(page).complete_billing_plan(persona)
+            try:
+                BillingPlanPage(page).complete_billing_plan(persona)
+            except Exception:
+                if _is_uw_referral_visible(page, timeout=8_000):
+                    return _record_uw_outcome(
+                        steps,
+                        "Outcome: UW Referral (Billing Plan)",
+                        time.perf_counter() - t,
+                        page,
+                        "UW referral detected during billing plan.",
+                    )
+                raise
             _record(steps, "Billing Plan", "passed", time.perf_counter() - t)
 
             t = time.perf_counter()
-            VerifyBillingPage(page).click_bind()
+            try:
+                VerifyBillingPage(page).click_bind()
+            except Exception:
+                if _is_uw_referral_visible(page, timeout=8_000):
+                    return _record_uw_outcome(
+                        steps,
+                        "Outcome: UW Referral (Bind)",
+                        time.perf_counter() - t,
+                        page,
+                        "UW referral detected during bind.",
+                    )
+                raise
             outcome = "policy_bound"
             try:
                 policy_page = PolicySummary(page)
@@ -150,6 +240,15 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
             _record(steps, "Outcome: Policy Bound (Bind)", "passed", time.perf_counter() - t)
 
     except Exception as exc:
+        if _is_uw_referral_visible(page, timeout=8_000):
+            return _record_uw_outcome(
+                steps,
+                "Outcome: UW Referral",
+                0,
+                page,
+                "UW referral detected while handling a normal-flow exception.",
+            )
+
         error = traceback.format_exc()
         try:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -90,7 +90,7 @@ function MetricCard({ icon: Icon, label, value, tone }) {
 function ActivityCard({ item, index, onOpenReport }) {
   return (
     <article
-      className={`activity-card ${index % 2 === 0 ? 'light' : 'dark'} ${item.status} ${index === 0 ? 'latest' : ''}`}
+      className={`activity-card ${item.status} ${index === 0 ? 'latest' : ''}`}
       style={{ animationDelay: `${index * 90}ms` }}
     >
       {item.canOpenReport && (
@@ -196,12 +196,13 @@ function buildActivityFeed(jobs) {
 
       if (lower.includes('quick policy test') || lower.includes('policy journey')) {
         const isUwReferral = text.includes('uw referral') || text.includes('uw conditions triggered')
+        const isPolicyFailed = text.includes('policy creation failed') || text.includes('| **status** | failed') || text.includes('| **outcome** | error')
         const title = isUwReferral
           ? 'Referral triggered: review required'
           : job.status === 'running'
             ? 'Policy flow in progress'
-            : job.status === 'error'
-              ? 'Policy run failed'
+            : job.status === 'error' || isPolicyFailed
+              ? 'Policy creation failed'
               : 'Policy bound successfully'
         return {
           id: job.id,
@@ -209,7 +210,7 @@ function buildActivityFeed(jobs) {
           title,
           terminalLine: `> ${simplifyLabel(label)}`,
           status: job.status,
-          statusLabel: isUwReferral ? 'uw referral' : statusLabel(job.status),
+          statusLabel: isUwReferral ? 'uw referral' : isPolicyFailed ? 'failed' : statusLabel(job.status),
           duration,
           meta,
           canOpenReport: job.status !== 'running',

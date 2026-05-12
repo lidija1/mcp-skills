@@ -71,7 +71,7 @@ _log = _job_store.log_job
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
-POLICY_LOBS = {"auto", "homeowner"}
+POLICY_LOBS = {"auto", "cyber", "homeowner"}
 
 
 def _run_flow_threaded(lob: str, persona: dict) -> dict:
@@ -107,6 +107,10 @@ app.add_middleware(
 _ALLURE_REPORT_DIR = _PROJECT_ROOT / "allure-report"
 _ALLURE_REPORT_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/allure", StaticFiles(directory=str(_ALLURE_REPORT_DIR), html=True), name="allure")
+
+_SCREENSHOTS_DIR = _PROJECT_ROOT / "reports" / "screenshots"
+_SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/screenshots", StaticFiles(directory=str(_SCREENSHOTS_DIR)), name="screenshots")
 
 # Chat router — imports after sys.path is set
 from chat_router import router as _chat_router

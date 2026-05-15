@@ -38,7 +38,7 @@ export default function PolicyPanel({ submitJob }) {
   }
 
   return (
-    <div className="panel-stack animate-fade-in">
+    <div className="panel-stack policy-panel animate-fade-in">
       <section className="panel-hero-card no-icon">
         <div className="panel-hero-copy">
           <span className="overview-eyebrow">

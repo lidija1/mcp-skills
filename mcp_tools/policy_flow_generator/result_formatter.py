@@ -41,6 +41,24 @@ def _match_rules(raw_cells: list[str]) -> list[dict]:
     return matched
 
 
+def _uw_rule_summary(raw_cells: list[str]) -> str:
+    """Return a compact triggered-rule summary for the Steps table."""
+    matched = _match_rules(raw_cells)
+    if matched:
+        return "Triggered rules: " + ", ".join(m["rule_name"] for m in matched)
+
+    rows = _parse_uw_rows(raw_cells)
+    conditions = [row.get("Condition", "").strip() for row in rows if row.get("Condition", "").strip()]
+    if conditions:
+        return "Triggered rules: " + ", ".join(conditions)
+
+    cells = [str(cell).strip() for cell in raw_cells if str(cell).strip()]
+    if cells:
+        return "Triggered rules: " + ", ".join(cells)
+
+    return ""
+
+
 _STATUS_LABEL = {
     "passed": "PASSED",
     "failed": "FAILED",
@@ -127,9 +145,13 @@ def format_result(result: dict) -> str:
         "| # | Step | Status | Duration |",
         "|---|------|--------|----------|",
     ]
+    uw_rule_summary = _uw_rule_summary(result.get("uw_conditions", []))
     for i, step in enumerate(result.get("steps", []), 1):
         icon = _STEP_ICON.get(step["status"], "?")
-        detail = f"<br>_{step['detail']}_" if step.get("detail") else ""
+        detail_parts = [step["detail"]] if step.get("detail") else []
+        if uw_rule_summary and str(step.get("step", "")).lower().startswith("outcome: uw referral"):
+            detail_parts.append(uw_rule_summary)
+        detail = "".join(f"<br>_{part}_" for part in detail_parts)
         lines.append(
             f"| {i} | {step['step']}{detail} | {icon} {step['status']} | {step['duration_s']}s |"
         )

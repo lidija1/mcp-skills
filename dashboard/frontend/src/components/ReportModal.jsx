@@ -228,6 +228,7 @@ function StructuredPolicyReport({ job, report }) {
               <DocKV label="Policy Type" value={report.summary.lob} />
               <DocKV label="Execution Status" value={executionStatus} />
               <DocKV label="Outcome" value={report.summary.outcome} />
+              <DocKV label="Triggered Rules" value={report.uwConditions.join(', ')} />
               <DocKV label="Completed In" value={job.finished ? duration : undefined} />
               <DocKV label="Generated On" value={job.started ? dateStr : undefined} />
               <DocKV label="AI Prompt" value={report.sourceDescription} />
@@ -242,6 +243,36 @@ function StructuredPolicyReport({ job, report }) {
           )}
         </div>
       </div>
+
+      {/* Steps */}
+      {report.steps.length > 0 && (
+        <>
+          <div className="doc-rule" />
+          <div className="doc-section">
+            <div className="doc-section-title">STEPS</div>
+            <ol className="doc-steps">
+              {report.steps.map((step, i) => {
+                const isUwOutcome = /outcome.*uw referral/i.test(step.label || '')
+                return (
+                  <li key={i} className={`doc-step doc-step--${step.tone}`}>
+                    <span className="doc-step-num">{step.index}</span>
+                    <div className="doc-step-content">
+                      <span className="doc-step-name">{step.label}</span>
+                      {step.detail && <span className="doc-step-detail">{step.detail}</span>}
+                      {isUwOutcome && report.uwConditions.length > 0 && (
+                        <span className="doc-step-rules">
+                          {report.uwConditions.join(' · ')}
+                        </span>
+                      )}
+                    </div>
+                    <span className="doc-step-dur">{step.duration}</span>
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        </>
+      )}
 
       {/* Policy Details + Customer Profile */}
       {(hasPolicyDetails || hasCustomerProfile) && (
@@ -676,16 +707,23 @@ function parseStepsChunk(chunk) {
 function parseUwChunk(chunk) {
   if (!chunk) return []
 
-  const rows = chunk
+  const tableConditions = chunk
     .split('\n')
     .map(line => line.trim())
     .filter(line => line.startsWith('|') && !/^\|\s*Type\s*\|/i.test(line) && !/^\|\s*-+/.test(line))
-
-  return rows
     .map(row => parseTableCells(row))
     .filter(cells => cells.length >= 2)
     .map(cells => cleanInline(cells[1]).trim() || cleanInline(cells[0]).trim())
     .filter(Boolean)
+
+  const bullets = chunk
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => /^[-*]\s+/.test(line))
+    .map(line => cleanInline(line.replace(/^[-*]\s+/, '')).trim())
+    .filter(Boolean)
+
+  return [...new Set([...tableConditions, ...bullets])]
 }
 
 function parseCoverageRows(content) {
@@ -800,7 +838,17 @@ function isFailedPolicyReport(report, rawContent = '') {
 function screenshotUrlFromPath(path) {
   if (!path) return ''
   const filename = String(path).split(/[\\/]/).pop()
-  return filename ? `/screenshots/${encodeURIComponent(filename)}` : ''
+  if (!filename) return ''
+
+  const screenshotPath = `/screenshots/${encodeURIComponent(filename)}`
+  if (typeof window === 'undefined') return screenshotPath
+
+  const { protocol, hostname, port } = window.location
+  if (port === '5173') {
+    return `${protocol}//${hostname}:8000${screenshotPath}`
+  }
+
+  return screenshotPath
 }
 
 function formatPrettyJson(text) {

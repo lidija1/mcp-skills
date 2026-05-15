@@ -10,7 +10,7 @@ import json
 import os
 import random
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -439,6 +439,50 @@ _LOB_PROMPTS = {
 }
 _VALID_LOBS = ", ".join(_LOB_PROMPTS)
 _VARIATION_CHUNK_SIZE = 5
+_EMAIL_SEQUENCE = 0
+
+
+def _email_domain_for_lob(lob: str) -> str:
+    return {
+        "auto": "uwtest.com",
+        "cyber": "cybertest.com",
+        "homeowner": "hometest.com",
+    }.get(lob, "uwtest.com")
+
+
+def _email_local_part(value: str) -> str:
+    local = re.sub(r"[^a-z0-9]+", "_", str(value or "").lower()).strip("_")
+    return local or "customer"
+
+
+def _current_time_token(extra: str = "") -> str:
+    global _EMAIL_SEQUENCE
+    _EMAIL_SEQUENCE += 1
+    token = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    suffix = re.sub(r"[^a-zA-Z0-9]+", "", str(extra or ""))
+    sequence = f"{_EMAIL_SEQUENCE:04d}"
+    return f"{token}{suffix}{sequence}" if suffix else f"{token}{sequence}"
+
+
+def _ensure_unique_email(persona: dict, lob: str, extra: str = "") -> None:
+    """Mutate a generated persona so Email contains this computer's current time."""
+    if not isinstance(persona, dict):
+        return
+
+    raw_email = str(persona.get("Email") or "").strip()
+    timestamp = _current_time_token(extra)
+
+    if "{timestamp}" in raw_email:
+        persona["Email"] = raw_email.replace("{timestamp}", timestamp)
+        return
+
+    if "@" in raw_email:
+        local, domain = raw_email.rsplit("@", 1)
+        persona["Email"] = f"{_email_local_part(local)}_{timestamp}@{domain.strip() or _email_domain_for_lob(lob)}"
+        return
+
+    first_name = persona.get("FirstName") or persona.get("CustomerName") or lob
+    persona["Email"] = f"{_email_local_part(first_name)}_{timestamp}@{_email_domain_for_lob(lob)}"
 
 
 def _clean_model_json(raw: str) -> str:
@@ -577,6 +621,7 @@ def generate_persona(lob: str, description: str) -> str:
         parsed = _parse_model_json(raw)
         parsed["_lob"] = lob
         parsed["_provider"] = provider
+        _ensure_unique_email(parsed, lob)
         return json.dumps(parsed)
 
     except json.JSONDecodeError as exc:
@@ -702,6 +747,7 @@ def _generate_persona_variation_chunk(
                 persona["_lob"] = lob
                 persona["_provider"] = provider
                 persona["_variation_index"] = start_index + idx
+                _ensure_unique_email(persona, lob, extra=start_index + idx)
 
         return parsed[:count]
 

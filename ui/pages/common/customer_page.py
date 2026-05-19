@@ -113,9 +113,6 @@ class CustomerPage(BasePage):
         """Skip current step."""
         self.smart_click(self.skip_button)
 
-    def wait_for_loader_to_disappear(self):
-        self.spinner_wait("#ajax-sub-pre-loading")
-
     def check_next_page_loaded(self):
         page_msg = self.page.get_by_text("Search Page")
         expect(page_msg).to_be_visible()

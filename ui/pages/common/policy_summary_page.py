@@ -1,8 +1,12 @@
+from datetime import datetime
+
+from utils.file_writer import save_summary_to_csv
 from ui.pages.common.base_page import BasePage
 
 
-class PolicySummary(BasePage):
-    """Handles the data extraction from summary page."""
+class BasePolicySummary(BasePage):
+    """Base reader for fields shared by policy summary pages."""
+
     def __init__(self, page):
         super().__init__(page)
 
@@ -29,3 +33,75 @@ class PolicySummary(BasePage):
 
     def get_payment_plan(self) -> str:
         return self.read_summary("Payment Plan")
+
+    def extract_common_details(self):
+        """Read fields that are shared across LOB policy summary pages."""
+        return {
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Policy Number": self.get_policy_number(),
+            "Program": self.get_program(),
+            "Customer Name": self.get_customer_name(),
+            "Status": self.get_status(),
+            "Payment Method": self.get_payment_method(),
+            "Primary Jurisdiction": self.get_jurisdiction(),
+            "Total Policy Premium": self.get_premium(),
+            "Payment Plan": self.get_payment_plan(),
+        }
+
+
+class PolicySummary(BasePolicySummary):
+    """Routes policy summary extraction to the matching LOB-specific page object."""
+
+    def extract_details(self, test_data):
+        common_details = self.extract_common_details()
+        return self._lob_summary(common_details.get("Program")).extract_details(test_data, common_details)
+
+    def save_lob_report(self, details):
+        """Save policy summary details to a report file separated by LOB/program."""
+        file_name = self._lob_summary(details.get("Program")).report_file_name()
+        return save_summary_to_csv(details, file_name=file_name)
+
+    def _lob_summary(self, program):
+        program_name = str(program or "").strip().lower()
+
+        if program_name == "homeowner":
+            from ui.pages.homeowner.homeowner_policy_summary_page import HomeownerPolicySummaryPage
+            return HomeownerPolicySummaryPage(self.page)
+
+        if program_name == "cyber":
+            from ui.pages.cyber.cyber_policy_summary_page import CyberPolicySummaryPage
+            return CyberPolicySummaryPage(self.page)
+
+        if program_name == "workers compensation":
+            from ui.pages.wc.wc_policy_summary_page import WCPolicySummaryPage
+            return WCPolicySummaryPage(self.page)
+
+        if program_name == "general liability":
+            return GeneralLiabilityPolicySummaryPage(self.page)
+
+        from ui.pages.auto.auto_policy_summary_page import AutoPolicySummaryPage
+        return AutoPolicySummaryPage(self.page)
+
+
+class GeneralLiabilityPolicySummaryPage(BasePolicySummary):
+    """Extracts General Liability policy summary report fields."""
+
+    def extract_details(self, test_data, common_details=None):
+        details = dict(common_details or self.extract_common_details())
+        details.update({
+            "Billing Method": test_data.get("BillingMethod"),
+            "Audit Frequency": test_data.get("AuditFrequency"),
+            "Loss History": test_data.get("LossHistory"),
+            "Coverage Type": test_data.get("CoverageType"),
+            "Policy Type": test_data.get("PolicyType"),
+            "Form Type": test_data.get("FormType"),
+            "Each Occurrence Limit": test_data.get("EachOccurrenceLimit"),
+            "General Aggregate Limit": test_data.get("GeneralAggregateLimit"),
+            "General Liability Deductible": test_data.get("GeneralLiabilityDeductible"),
+            "Deductible Type": test_data.get("DeductibleType"),
+            "Deductible Applies": test_data.get("DeductibleApplies"),
+        })
+        return details
+
+    def report_file_name(self):
+        return "policy_reports_general_liability.csv"

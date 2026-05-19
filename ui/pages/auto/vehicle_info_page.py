@@ -30,6 +30,8 @@ class VehicleInfoPage(BasePage):
         self.set_specification(data)
         self.set_vehicle_use(data)
         self.set_ownership(data)
+        if data.get("Ownership") != "Owned":
+            self.add_loss_payee(data)
         self.click_save()
         self.click_coverages_link()
 
@@ -97,6 +99,26 @@ class VehicleInfoPage(BasePage):
         ownership = data["Ownership"]
         self.logger.info(f"Setting ownership: {ownership}")
         self.smart_fill(self.ownership, ownership)
+
+    @allure.step("Add loss payee / additional interest")
+    def add_loss_payee(self, data):
+        """Click Add and fill the mandatory Loss Payee / Additional Interest row.
+
+        Interest Type options are 'Leased' or 'Financed' — mirrors the Ownership value.
+        """
+        self.logger.info("Adding loss payee / additional interest")
+        add_btn = self.page.get_by_role("button", name="Add", exact=True)
+        add_btn.dispatch_event("click")
+
+        # Interest Type — required dropdown (options: Leased / Financed)
+        interest_type = data.get("LossPayeeType", data.get("Ownership", "Leased"))
+        interest_type_combo = self.page.get_by_role("combobox", name="Interest Type")
+        self.smart_click(interest_type_combo)
+        self.smart_click(self.page.locator(f"//li[contains(text(),'{interest_type}')]"))
+
+        # Loss Payee / Additional Interest Name — required text field
+        name_field = self.page.get_by_role("textbox", name="Loss Payee/Additional Interest Name")
+        self.smart_fill(name_field, data.get("LossPayeeName", "Leasing Company"))
 
     @allure.step("Click save")
     def click_save(self):

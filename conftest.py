@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
 from utils.logger import setup_logger
+from utils.api_flow_recorder import ApiFlowRecorder
 
 load_dotenv()
 
@@ -34,9 +35,13 @@ pytest_plugins = [
     "ui.steps.common.auth_steps",
     "ui.steps.common.login_validation_steps",
     "ui.steps.common.data_steps",
+    "ui.steps.common.field_steps",
     "ui.steps.auto.auto_workflow_steps",
     "ui.steps.homeowner_steps",
     "ui.steps.common.customer_validation_steps",
+    "ui.steps.cyber_steps",
+    "ui.steps.wc_steps",
+    "ui.steps.general_liability_steps",
 ]
 
 
@@ -69,6 +74,18 @@ def pytest_addoption(parser):
         default="off",
         choices=["off", "on"],
         help="Playwright tracing mode: off or on"
+    )
+    parser.addoption(
+        "--api-flow-map",
+        action="store",
+        default=None,
+        help="Write captured page-to-API flow traffic to the given JSON path"
+    )
+    parser.addoption(
+        "--api-flow-include-static",
+        action="store_true",
+        default=False,
+        help="Include static browser resources in --api-flow-map output"
     )
 
 # -------------------------
@@ -176,6 +193,22 @@ def page(context):
     page = context.new_page()
     yield page
     page.close()
+
+
+@pytest.fixture(scope="function")
+def api_flow_recorder(page, request):
+    """Opt-in network recorder for mapping UI flow pages to backend calls."""
+    recorder = ApiFlowRecorder(
+        page=page,
+        output_path=request.config.getoption("--api-flow-map"),
+        enabled=bool(request.config.getoption("--api-flow-map")),
+        include_static=request.config.getoption("--api-flow-include-static"),
+    )
+    recorder.start()
+    yield recorder
+    output_path = recorder.finish()
+    if output_path:
+        print(f"\n[API FLOW MAP] Wrote network capture to {output_path}")
 
 # -------------------------
 # Test data passthrough

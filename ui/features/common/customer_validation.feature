@@ -5,7 +5,7 @@ Feature: Customer Page Field Validation
 
   @smoke @validation
   Scenario Outline: Validate invalid email format on customer search
-    Given the data is loaded "testdata/static/CustomerValidationData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/common/CustomerValidationData.json", "<TC_ID>"
     When i create a new quote
     When I fill all customer fields with test data
     When I click search for customer
@@ -21,7 +21,7 @@ Feature: Customer Page Field Validation
 
   @smoke @validation
   Scenario Outline: Validate invalid date of birth on customer search
-    Given the data is loaded "testdata/static/CustomerValidationData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/common/CustomerValidationData.json", "<TC_ID>"
     When i create a new quote
     When I fill all customer fields with test data
     When I click search for customer
@@ -37,7 +37,7 @@ Feature: Customer Page Field Validation
 
   @smoke @validation
   Scenario Outline: Validate valid email formats are accepted
-    Given the data is loaded "testdata/static/CustomerValidationData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/common/CustomerValidationData.json", "<TC_ID>"
     When i create a new quote
     When I fill all customer fields with test data
     When I click search for customer
@@ -51,7 +51,7 @@ Feature: Customer Page Field Validation
 
   @smoke @validation
   Scenario Outline: Validate valid date of birth formats are accepted
-    Given the data is loaded "testdata/static/CustomerValidationData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/common/CustomerValidationData.json", "<TC_ID>"
     When i create a new quote
     When I fill all customer fields with test data
     When I click search for customer
@@ -65,7 +65,7 @@ Feature: Customer Page Field Validation
 
   @smoke @validation
   Scenario Outline: Validate required fields are filled before search
-    Given the data is loaded "testdata/static/CustomerValidationData.json", "<TC_ID>"
+    Given the data is loaded "testdata/static/common/CustomerValidationData.json", "<TC_ID>"
     When i create a new quote
     When I fill all customer fields with test data
     When I click search for customer

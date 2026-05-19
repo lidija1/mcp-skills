@@ -1,3 +1,5 @@
+import re
+
 from ui.pages.common.base_page import BasePage
 
 
@@ -24,7 +26,8 @@ class DriverInfoPage(BasePage):
         self.set_occupation(data)
         self.set_license_status(data)
         self.set_sr22_required(data)
-        self.set_save_button()
+        self.set_defensive_driver(data)
+        self.click_save()
         self.click_vehicle_info_link()
 
     def set_gender(self, data):
@@ -55,7 +58,18 @@ class DriverInfoPage(BasePage):
         """Answer SR22 required question."""
         self.answer_question("Certificate of Insurance Required?", data["SR22"])
 
-    def set_save_button(self):
+    def set_defensive_driver(self, data):
+        """Answer defensive driver course question if present on the page."""
+        group = self.page.get_by_role(
+            "radiogroup",
+            name=re.compile("Has a Defensive Driver Course been completed in last 3 years", re.I)
+        )
+        if group.is_visible(timeout=2000):
+            answer = data.get("DefensiveDriver", "No")
+            radio = group.get_by_label(re.compile(f"^{answer}$", re.I))
+            radio.dispatch_event("click")
+
+    def click_save(self):
         """Click save button."""
         self.smart_click(self.save_button)
 

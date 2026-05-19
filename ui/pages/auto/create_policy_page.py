@@ -25,9 +25,6 @@ class CreatePolicyPage(BasePage):
         """Request policy issue."""
         self.smart_click(self.request_issue)
 
-    def wait_for_loader_to_disappear(self):
-        self.spinner_wait("#ajax-sub-pre-loading")
-
     def click_next(self):
         """Proceed to next step."""
         self.smart_click(self.next_button)

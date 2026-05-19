@@ -1,0 +1,36 @@
+# Python bytecode & caches
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+
+# Virtual environment
+.venv/
+
+# Test output & reports
+allure-results/
+allure-report/
+reports/
+screenshots/
+logs/
+policy_summary/
+
+# Playwright artifacts
+.playwright-mcp/
+
+# IDE & editor
+.idea/
+.vscode/
+
+# Git internals
+.git/
+
+# Static assets
+assets/
+
+# Generated / legacy HTML reports at root
+report.html
+project_documentation.txt
+
+# Lighthouse raw output
+lighthouse/

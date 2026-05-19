@@ -2,6 +2,13 @@
 .env
 .env.local
 config/secrets.yaml
+
+# Claude Code local settings (may contain API keys or sensitive paths)
+.claude/settings.local.json
+.claude/settings.json
+
+# Playwright MCP session artifacts (screenshots, snapshots, logs — may contain PII)
+.playwright-mcp/
 # Python
 __pycache__/
 *.py[cod]
@@ -33,6 +40,9 @@ logs/
 Thumbs.db
 
 *.md
+!api_tests/guide.md
+!docs/ONESHIELD_APP_KNOWLEDGE.md
+!docs/ONESHIELD_EXPLORATION_BEST_PRACTICES.md
 .policy_summary/
 
 .reports/
@@ -51,6 +61,17 @@ policy_summary/
 # Ignore reports directory
 reports/
 reports/traces/
+
+# API replay artifacts may contain live OneShield session/request data
+api_tests/artifacts/
+
+# Dashboard frontend generated artifacts
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
+
+# Graphify cache and generated output
+.graphify_python
+graphify-out/
 
 # Ignore specific report file
 report.html

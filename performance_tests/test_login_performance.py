@@ -1,9 +1,11 @@
 """Performance tests for login page functionality."""
+import statistics
+import time
 import pytest
 import allure
 from ui.pages.common.login_page import LoginPage
-from utils.performance_metrics import PerformanceMetrics
-from performance_tests.performance_config import PerformanceThresholds, Environment
+from performance_tests.performance_metrics import PerformanceMetrics
+from performance_tests.performance_config import PerformanceThresholds
 
 
 @pytest.mark.performance
@@ -226,4 +228,48 @@ class TestLoginPagePerformance:
             # Second load should benefit from caching (optional assertion)
             if load_times[1] < load_times[0]:
                 allure.step(f"✓ Browser caching effective: Load 2 ({load_times[1]:.2f}ms) < Load 1 ({load_times[0]:.2f}ms)")
+
+    def test_login_to_home_page_load_time(self, browser, request):
+        """Measure time from login button click until the home page is ready.
+
+        Runs the full login flow 3 times (fresh context per run) and reports
+        the median elapsed time. 'Ready' is defined as the 'quotes' button
+        becoming visible on the home dashboard.
+        """
+        runs = 3
+        durations = []
+
+        for i in range(1, runs + 1):
+            with allure.step(f"Run {i}/{runs} — full login cycle"):
+                ctx = browser.new_context(viewport=None)
+                pg = ctx.new_page()
+                login_page = LoginPage(pg)
+
+                login_page.navigate()
+                login_page.click_splash_button()
+                login_page.wait_for_login_page()
+                login_page.fill_credentials_from_env()
+
+                # --- start measuring here ---
+                t_start = time.perf_counter()
+                login_page.click_login()
+                pg.get_by_role("button", name="quotes").wait_for(state="visible", timeout=30000)
+                elapsed_ms = (time.perf_counter() - t_start) * 1000
+                # --- end measuring here ---
+
+                durations.append(elapsed_ms)
+                print(f"\n  Run {i}: {elapsed_ms:.0f} ms")
+
+                pg.close()
+                ctx.close()
+
+        median_ms = statistics.median(durations)
+        summary = (
+            f"Run 1 : {durations[0]:.0f} ms\n"
+            f"Run 2 : {durations[1]:.0f} ms\n"
+            f"Run 3 : {durations[2]:.0f} ms\n"
+            f"Median: {median_ms:.0f} ms"
+        )
+        print(f"\n{'='*40}\nLogin -> Home Page Load Time\n{summary}\n{'='*40}")
+        allure.attach(summary, name="Login -> Home Page Load Time (3 runs)", attachment_type=allure.attachment_type.TEXT)
 

@@ -1,0 +1,614 @@
+{
+  "environment": {
+    "name": "Sandbox",
+    "description": "All user stories target the OneShield sandbox environment. Tests are executed against this environment using Playwright automation via the pytest-bdd framework.",
+    "credentials_source": ".env file — PARTNER_NUM, USERNAMEE, PASSWORD (double-E to avoid Windows USERNAME clash)",
+    "fixed_test_data": {
+      "zip": "01101",
+      "state": "Massachusetts",
+      "city": "Springfield",
+      "producer": "Janis Irey",
+      "program": "Personal Auto",
+      "billing_method": "Direct Billed",
+      "payment_plan": "Pay In Full"
+    },
+    "runner": "pytest / pytest-bdd",
+    "feature_files": "ui/features/auto/",
+    "test_data_source": "testdata/static/auto/AutoData.json, testdata/static/auto/AutoUWRulesData.json"
+  },
+
+  "user_stories": [
+    {
+      "id": "US10001",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to create a complete Personal Auto new business policy from quote to bind so that the customer receives valid coverage.",
+        "The system should guide the agent through all required steps: new quote, customer creation, quote registration, quote summary, driver details, vehicle details, coverage selection, and policy binding."
+      ],
+      "acceptance_criteria": [
+        "Agent can log in to the OneShield sandbox and navigate to Quotes",
+        "Agent can initiate a New Quote selecting the Agent role",
+        "All required pages (Customer, Quote Registration, Quote Summary, Driver, Vehicle, Coverage) are accessible in sequence",
+        "Completed quote results in a bound policy with a valid policy number",
+        "No underwriting referral is triggered for a clean risk profile",
+        "Policy summary page is displayed after binding",
+        "Test cases TC_ID_0001 and TC_ID_0011 complete end-to-end without errors"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.95,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0011"],
+        "feature_file": "ui/features/auto/personal_auto.feature",
+        "step_file": "ui/steps/auto/auto_workflow_steps.py",
+        "markers": ["auto", "smoke"]
+      }
+    },
+
+    {
+      "id": "US10002",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to create a new individual customer record so that I can associate the customer with a Personal Auto quote.",
+        "The system should accept all required demographic fields, validate the ZIP code and address, and prevent duplicate customer creation."
+      ],
+      "acceptance_criteria": [
+        "Agent can select CustomerType as 'Individual'",
+        "Agent can enter FirstName, LastName, DOB (MM/DD/YYYY format), PhoneNum (555-XXX-XXXX), and Email",
+        "Agent can enter Address, ZIP (01101), City (Springfield), and State (Massachusetts)",
+        "System accepts and saves the customer record successfully",
+        "Email field accepts dynamic timestamp-based format (name_{timestamp}@auto.com) to ensure uniqueness",
+        "System navigates to Quote Registration after customer creation",
+        "Invalid or missing required fields prevent progression"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.97,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0002", "TC_ID_0003", "TC_ID_0004", "TC_ID_0005"],
+        "page_object": "ui/pages/common/customer_page.py",
+        "markers": ["auto", "smoke"]
+      }
+    },
+
+    {
+      "id": "US10003",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to register a quote by selecting the producer, program, and effective date so that the policy is associated with the correct producer and starts on the right date.",
+        "The system should use today's date as the effective date and load the 'Personal Auto' program from the dropdown without ambiguity."
+      ],
+      "acceptance_criteria": [
+        "Agent can select Producer 'Janis Irey' from the combobox",
+        "Agent can select Program 'Personal Auto' (exact match, no ambiguity with similar program names)",
+        "System waits for FieldProcessorServlet response after Program selection before enabling Effective Date",
+        "Effective date is calculated automatically from today's date",
+        "Agent can click Next to proceed to Quote Summary",
+        "Invalid effective dates (past dates, missing program) are rejected"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.96,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0002", "TC_ID_0003"],
+        "page_object": "ui/pages/auto/quote_registration_page.py",
+        "markers": ["auto"]
+      }
+    },
+
+    {
+      "id": "US10004",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to complete the Quote Summary page by setting billing method and answering disclosure questions so that the quote is properly configured before driver and vehicle entry.",
+        "The system should allow the agent to indicate if the customer provided false/misleading information and if there is prior property damage."
+      ],
+      "acceptance_criteria": [
+        "Agent can set Billing Method to 'Direct Billed' via combobox",
+        "Agent can answer 'False/Misleading Information' question (Yes/No radio)",
+        "Agent can answer 'Prior Damage Information' question (Yes/No radio)",
+        "When Damage Info is 'Yes', a text area for damage description becomes available",
+        "Agent can save the summary and navigate to Driver Info via the driver link",
+        "Driver info link uses the customer's first name for dynamic identification",
+        "FalseInfo and DamageInfo fields are mandatory for save to succeed"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.95,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0002", "TC_ID_0003"],
+        "page_object": "ui/pages/auto/quote_summary_page.py",
+        "markers": ["auto"]
+      }
+    },
+
+    {
+      "id": "US10005",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to enter driver information including demographics and license details so that the underwriting engine can assess risk and apply appropriate rules.",
+        "The system should collect gender, marital status, driver status, employment, occupation, license status, and SR-22 flag for each driver."
+      ],
+      "acceptance_criteria": [
+        "Agent can select Gender (Male/Female)",
+        "Agent can select MaritalStatus (Single/Married/Divorced/Widowed)",
+        "Agent can select DriverStatus as 'Active (rated)'",
+        "Agent can select EmploymentCategory (Employed/Unemployed/Retired/Student)",
+        "Agent can select Occupation (e.g., 'Day Care')",
+        "Agent can select LicenseStatus (Active License/Suspended/Revoked)",
+        "Agent can answer SR-22 'Certificate of Insurance Required?' (Yes/No)",
+        "Agent can optionally answer 'Defensive Driver Course completed in last 3 years' (Yes/No)",
+        "System saves driver info and enables navigation to Vehicle_1 link"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.94,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0002", "TC_ID_0003", "TC_ID_0004", "TC_ID_0005"],
+        "page_object": "ui/pages/auto/driver_info_page.py",
+        "markers": ["auto"]
+      }
+    },
+
+    {
+      "id": "US10006",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to enter vehicle details so that the system can properly rate the policy based on the vehicle being insured.",
+        "The system should support dependent dropdowns for Year/Make/Model and load vehicle specifications after model selection."
+      ],
+      "acceptance_criteria": [
+        "Agent can select VehicleType (e.g., 'Private Passenger Auto')",
+        "Agent can select Year — system waits for FieldProcessorServlet after each selection",
+        "Agent can select Make — dependent on Year selection",
+        "Agent can select Model — dependent on Make selection",
+        "Agent can select Specification from XPath-matched dropdown",
+        "Agent can select VehicleUse (Pleasure/Commute/Business/Farm)",
+        "Agent can select Ownership (Owned/Leased/Financed)",
+        "For 'Owned' vehicles, Loss Payee fields are not shown",
+        "System saves vehicle info and enables navigation to Coverages section"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.93,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0002", "TC_ID_0003", "TC_ID_0004", "TC_ID_0005", "TC_ID_0006"],
+        "page_object": "ui/pages/auto/vehicle_info_page.py",
+        "markers": ["auto"]
+      }
+    },
+
+    {
+      "id": "US10007",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to add a Loss Payee for a leased or financed vehicle so that the lender is properly listed on the policy.",
+        "The system should conditionally show the Loss Payee form only when vehicle ownership is 'Leased' or 'Financed' and require both type and name fields."
+      ],
+      "acceptance_criteria": [
+        "When Ownership is 'Leased', the Add Loss Payee button is displayed",
+        "When Ownership is 'Financed', the Add Loss Payee button is displayed",
+        "When Ownership is 'Owned', the Loss Payee section is not displayed",
+        "Agent can select LossPayeeType (Leased or Financed)",
+        "Agent can enter LossPayeeName (e.g., 'BMW Financial Services')",
+        "Loss Payee information is saved and associated with Vehicle_1",
+        "Missing Loss Payee for Leased/Financed vehicle prevents progression"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.92,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_008", "UW_TC_010"],
+        "page_object": "ui/pages/auto/vehicle_info_page.py",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10008",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to select a coverage tier and rate the quote so that the system applies the correct premium and checks underwriting rules.",
+        "The system should support Bronze, Silver, Gold, and Platinum coverage options and invoke the rating engine upon clicking Rate Quote."
+      ],
+      "acceptance_criteria": [
+        "Agent can select PolicyCoverage: Bronze, Silver, Gold, or Platinum",
+        "System displays a loading spinner during coverage page load",
+        "Agent can click 'Rate Quote' button to invoke the rating engine",
+        "Rating engine completes without error for clean risk profiles",
+        "System detects UW referral conditions at three possible points: before coverage selection, during page load, and on Rate Quote click",
+        "Successful rating transitions agent to policy creation flow",
+        "All four coverage tiers (Bronze/Silver/Gold/Platinum) are tested across TC_ID_0001–TC_ID_0011"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.94,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0002", "TC_ID_0003", "TC_ID_0004"],
+        "page_object": "ui/pages/auto/policy_term_page.py",
+        "markers": ["auto", "smoke"]
+      }
+    },
+
+    {
+      "id": "US10009",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to bind an approved Personal Auto policy so that the customer is covered under a confirmed policy number.",
+        "The system should sequence through Request Issue, Delivery Preferences, Billing Plan, and Verify Billing before completing the bind."
+      ],
+      "acceptance_criteria": [
+        "Agent can click 'Request Issue' to initiate policy issuance",
+        "System navigates to Delivery Preferences page after Request Issue",
+        "Agent can proceed through Delivery Preferences by clicking Next",
+        "System navigates to Billing Plan page",
+        "Billing Plan is completed with PaymentPlan 'Pay In Full'",
+        "Agent can proceed to Verify Billing page",
+        "Agent can click Bind to complete policy binding",
+        "System displays policy summary with a valid policy number after binding",
+        "Loading masks are waited on after each step to ensure stability"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.95,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0011"],
+        "page_object": "ui/pages/auto/create_policy_page.py",
+        "markers": ["auto", "smoke"]
+      }
+    },
+
+    {
+      "id": "US10010",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As a underwriter, I want the system to automatically flag a policy for UW referral when the driver requires an SR-22 / Certificate of Insurance so that the risk is properly reviewed before binding.",
+        "The system should detect the SR-22 flag on the driver record and display the appropriate underwriting condition on the referral page."
+      ],
+      "acceptance_criteria": [
+        "When SR22 field is set to 'Yes' on the driver record, the rating engine routes to the UW Referral page",
+        "The UW Referral page displays the condition: 'SR-22 / Certificate of Insurance Indicator is checked'",
+        "The condition is visible in the Underwriting Issues grid with correct Asset, Type, and Condition columns",
+        "UW referral is triggered regardless of the driver's age or license status when SR-22 is 'Yes'",
+        "Clean profile with SR22='No' does NOT trigger this condition",
+        "Test cases UW_TC_001, UW_TC_013 validate isolated SR-22 triggering"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.96,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_001", "UW_TC_013"],
+        "uw_rule_id": "AUTO_SR22",
+        "uw_condition_text": "SR-22 / Certificate of Insurance Indicator is checked",
+        "page_object": "ui/pages/auto/uw_referral_page.py",
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10011",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want the system to automatically flag a policy for UW referral when the primary driver has a suspended or revoked license so that the risk is properly reviewed before binding.",
+        "The system should detect invalid license status on the driver record and display the appropriate underwriting condition."
+      ],
+      "acceptance_criteria": [
+        "When LicenseStatus is 'Suspended', the rating engine routes to the UW Referral page",
+        "When LicenseStatus is 'Revoked', the rating engine routes to the UW Referral page",
+        "The UW Referral page displays the condition: 'driver license status that is revoked or suspended'",
+        "The condition appears in the Underwriting Issues grid",
+        "Active License status does NOT trigger this condition when SR-22 and age are clean",
+        "Test cases UW_TC_002 (Suspended) and UW_TC_004 (Revoked) validate isolated license triggering"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.96,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_002", "UW_TC_004"],
+        "uw_rule_id": "AUTO_LICENSE",
+        "uw_condition_text": "driver license status that is revoked or suspended",
+        "page_object": "ui/pages/auto/uw_referral_page.py",
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10012",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want the system to automatically flag a policy for UW referral when any driver is under 25 years of age so that the risk is properly reviewed before binding.",
+        "The system should compute the driver's age on the policy effective date and trigger referral if the driver will be younger than 25."
+      ],
+      "acceptance_criteria": [
+        "When a driver's DOB places them under 25 on the policy effective date, the rating engine routes to the UW Referral page",
+        "The UW Referral page displays the condition: 'All drivers under 25 years of age'",
+        "Age boundary is: EffectiveDate minus 25 years minus 6 days",
+        "Driver born one day after the cutoff (24y 364d) triggers the condition",
+        "Driver born on the cutoff date (exactly 25) does NOT trigger this condition",
+        "Test cases UW_TC_003 (age 21), UW_TC_011 (age 18), UW_TC_014 (age 17y 364d) validate the age rule",
+        "UW_TC_014 uses today's effective date to test the minimum age boundary"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.95,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_003", "UW_TC_011", "UW_TC_014"],
+        "uw_rule_id": "AUTO_UNDER25",
+        "uw_condition_text": "All drivers under 25 years of age",
+        "boundary_cases": ["UW_BOUNDARY_25_UNDER", "UW_BOUNDARY_25_EXACT"],
+        "page_object": "ui/pages/auto/uw_referral_page.py",
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10013",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want the system to flag multiple simultaneous UW conditions when a driver is both under 25 and requires an SR-22 so that all risk factors are captured in a single referral.",
+        "The system should list at least 2 conditions in the UW Referral grid for combined risk profiles."
+      ],
+      "acceptance_criteria": [
+        "When SR22='Yes' AND driver age < 25, the UW Referral page is displayed",
+        "The grid shows at minimum 2 conditions: SR-22 condition AND under-25 condition",
+        "Both condition texts are present: 'SR-22 / Certificate of Insurance Indicator is checked' and 'All drivers under 25 years of age'",
+        "Test case UW_TC_005 (age 20, SR-22=Yes) validates this combined scenario",
+        "Conditions appear as separate rows in the Underwriting Issues grid"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.94,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_005"],
+        "uw_rule_id": "AUTO_COMBINED_SR22_UNDER25",
+        "min_conditions": 2,
+        "uw_condition_texts": [
+          "SR-22 / Certificate of Insurance Indicator is checked",
+          "All drivers under 25 years of age"
+        ],
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10014",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want the system to flag multiple simultaneous UW conditions when a driver has an SR-22 requirement combined with a suspended or revoked license so that both risk factors are captured.",
+        "The system should list at least 2 conditions in the UW Referral grid for this severe combined profile."
+      ],
+      "acceptance_criteria": [
+        "When SR22='Yes' AND LicenseStatus='Suspended', at least 2 UW conditions are flagged",
+        "When SR22='Yes' AND LicenseStatus='Revoked', at least 2 UW conditions are flagged",
+        "SR-22 condition text present: 'SR-22 / Certificate of Insurance Indicator is checked'",
+        "License condition text present: 'driver license status that is revoked or suspended'",
+        "Test case UW_TC_006 (SR-22 + Suspended) validates this scenario",
+        "Test case UW_TC_012 (SR-22 + Revoked) validates the most severe license/compliance combo"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.94,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_006", "UW_TC_012"],
+        "uw_rule_id": "AUTO_COMBINED_SR22_LICENSE",
+        "min_conditions": 2,
+        "uw_condition_texts": [
+          "SR-22 / Certificate of Insurance Indicator is checked",
+          "driver license status that is revoked or suspended"
+        ],
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10015",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want the system to flag all three UW conditions simultaneously when a driver is under 25, requires an SR-22, and has a revoked license — the highest-risk profile — so that every risk factor is captured in the referral.",
+        "The system should list at least 3 conditions in the UW Referral grid for the triple-risk profile."
+      ],
+      "acceptance_criteria": [
+        "When SR22='Yes' AND LicenseStatus='Revoked' AND driver age < 25, all 3 UW conditions fire",
+        "The grid shows at minimum 3 conditions",
+        "SR-22 condition present: 'SR-22 / Certificate of Insurance Indicator is checked'",
+        "License condition present: 'driver license status that is revoked or suspended'",
+        "Age condition present: 'All drivers under 25 years of age'",
+        "DamageInfo='Yes' is also set in this scenario, providing a damage description",
+        "Test case UW_TC_007 (age 22, SR-22=Yes, Revoked) validates the triple-risk scenario"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.93,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_007"],
+        "uw_rule_id": "AUTO_TRIPLE_RISK",
+        "min_conditions": 3,
+        "uw_condition_texts": [
+          "SR-22 / Certificate of Insurance Indicator is checked",
+          "driver license status that is revoked or suspended",
+          "All drivers under 25 years of age"
+        ],
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10016",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want to validate the age boundary condition for the under-25 UW rule so that the system correctly includes or excludes drivers at exactly 25 years of age on the effective date.",
+        "The system must apply the exact cutoff: EffectiveDate minus 25 years minus 6 days."
+      ],
+      "acceptance_criteria": [
+        "Driver born exactly on the cutoff date (25 years and 6 days before effective date) does NOT trigger the under-25 condition",
+        "Driver born one day after the cutoff (24 years 364 days on effective date) DOES trigger the under-25 condition",
+        "The boundary is computed per-effective-date, not a fixed calendar date",
+        "Today's effective date validates boundary behavior for same-day policies",
+        "Boundary test UW_BOUNDARY_25_UNDER confirms the trigger fires correctly",
+        "Boundary test UW_BOUNDARY_25_EXACT confirms no false positive at age exactly 25"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.96,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_014", "UW_TC_003", "UW_TC_011"],
+        "uw_rule_id": "AUTO_UNDER25",
+        "boundary_cases": ["UW_BOUNDARY_25_UNDER", "UW_BOUNDARY_25_EXACT"],
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10017",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want to verify that a clean-risk Personal Auto applicant is processed straight-through to policy bind without any UW referral so that low-risk customers are not unnecessarily delayed.",
+        "The system should route clean profiles directly from the rating engine to the policy creation flow."
+      ],
+      "acceptance_criteria": [
+        "Driver with Active License, SR22='No', and age >= 25 does not trigger any UW condition",
+        "After clicking Rate Quote, the system proceeds directly to Request Issue without displaying a UW Referral page",
+        "Policy binding completes successfully for a clean profile",
+        "Negative test UW_NEG_SR22 validates that no SR-22 flag results in no referral",
+        "Negative test UW_NEGATIVE_CLEAN validates the fully-clean profile scenario"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.97,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0011"],
+        "uw_rule_id": "AUTO_CLEAN_BASELINE",
+        "feature_file": "ui/features/auto/personal_auto.feature",
+        "markers": ["auto", "smoke"]
+      }
+    },
+
+    {
+      "id": "US10018",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want to validate UW referral for drivers under 25 with a leased vehicle so that both the age risk and the loss payee requirement are properly captured.",
+        "The system should display the under-25 UW condition while still requiring loss payee information for the leased vehicle."
+      ],
+      "acceptance_criteria": [
+        "Driver under 25 with a leased vehicle triggers the under-25 UW condition",
+        "Loss Payee fields (Type + Name) are required and filled before rating",
+        "UW Referral page shows: 'All drivers under 25 years of age'",
+        "Loss payee data (LossPayeeType, LossPayeeName) is correctly saved to the vehicle record",
+        "Test case UW_TC_008 (age under 25, Ownership=Leased) validates this combined scenario"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.93,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_008"],
+        "uw_rule_id": "AUTO_COMBINED_UNDER25_LEASED",
+        "min_conditions": 1,
+        "uw_condition_texts": ["All drivers under 25 years of age"],
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10019",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an underwriter, I want to validate UW referral for an SR-22 driver with a leased vehicle so that both the certificate of insurance requirement and the loss payee obligation are properly handled.",
+        "The system should display the SR-22 UW condition while also capturing loss payee information for the leased vehicle."
+      ],
+      "acceptance_criteria": [
+        "SR-22='Yes' driver with a leased vehicle triggers the SR-22 UW condition",
+        "Loss Payee fields (Type + Name) are required and correctly captured",
+        "UW Referral page shows: 'SR-22 / Certificate of Insurance Indicator is checked'",
+        "Loss payee data is saved and associated with the vehicle record",
+        "Test case UW_TC_010 (SR-22=Yes, Ownership=Leased) validates this combined scenario"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.93,
+        "last_used": "2026-04-10",
+        "test_ids": ["UW_TC_010"],
+        "uw_rule_id": "AUTO_COMBINED_SR22_LEASED",
+        "min_conditions": 1,
+        "uw_condition_texts": ["SR-22 / Certificate of Insurance Indicator is checked"],
+        "feature_file": "ui/features/auto/auto_uw_rules.feature",
+        "markers": ["auto", "validation"]
+      }
+    },
+
+    {
+      "id": "US10020",
+      "domain": "personal_auto",
+      "lob": "Personal Auto",
+      "description": [
+        "As an agent, I want to test vehicle use variations (Pleasure, Commute, Business, Farm) across coverage tiers so that the rating engine correctly handles all vehicle use and coverage combinations.",
+        "The system should accept all valid VehicleUse values and rate the policy accordingly."
+      ],
+      "acceptance_criteria": [
+        "Agent can select VehicleUse: Pleasure — standard personal use rating applies",
+        "Agent can select VehicleUse: Commute — commuter-rated premium applies",
+        "Agent can select VehicleUse: Business — business-use rating applies",
+        "Agent can select VehicleUse: Farm — farm vehicle rating applies",
+        "Each VehicleUse works with all four coverage tiers: Bronze, Silver, Gold, Platinum",
+        "Test cases TC_ID_0001 through TC_ID_0011 cover VehicleUse and coverage tier combinations",
+        "No system errors occur for any valid VehicleUse + PolicyCoverage combination"
+      ],
+      "metadata": {
+        "environment": "sandbox",
+        "transaction_types": ["NB"],
+        "success_rate": 0.94,
+        "last_used": "2026-04-10",
+        "test_ids": ["TC_ID_0001", "TC_ID_0002", "TC_ID_0003", "TC_ID_0004", "TC_ID_0005", "TC_ID_0006", "TC_ID_0007", "TC_ID_0008", "TC_ID_0009", "TC_ID_0010", "TC_ID_0011"],
+        "page_object": "ui/pages/auto/vehicle_info_page.py",
+        "feature_file": "ui/features/auto/personal_auto.feature",
+        "markers": ["auto"]
+      }
+    }
+  ]
+}

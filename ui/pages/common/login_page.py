@@ -3,7 +3,7 @@ import allure
 from playwright.sync_api import expect
 
 from ui.pages.common.base_page import BasePage
-from utils.performance_metrics import PerformanceMetrics
+from performance_tests.performance_metrics import PerformanceMetrics
 
 
 class LoginPage(BasePage):

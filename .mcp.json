@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "policy-flow-generator": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.policy_flow_generator.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "AI_PROVIDER": "openai",
+        "PYTHONUTF8": "1"
+      }
+    },
+    "uw-rules-validator": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.uw_rules_validator.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "AI_PROVIDER": "openai",
+        "PYTHONUTF8": "1"
+      }
+    },
+    "framework-guided-policy-flow-generator": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.framework_guided_policy_flow_generator.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "PYTHONUTF8": "1"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

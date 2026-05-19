@@ -92,7 +92,7 @@ def _validate_policy_lob(lob: str) -> str:
 
 
 # â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-app = FastAPI(title="Insurance Testing Dashboard", version="1.0.0")
+app = FastAPI(title="Insurance Testing Dashboard", version="1.0.1")
 
 app.add_middleware(
     CORSMiddleware,

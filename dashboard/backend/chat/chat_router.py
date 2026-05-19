@@ -61,9 +61,25 @@ class ChatMessageResp(BaseModel):
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
-def _run_flow_threaded(lob: str, persona: dict) -> dict:
+LOB_DISPLAY = {
+    "auto": "Personal Auto",
+    "cyber": "Cyber",
+    "homeowner": "Homeowner",
+}
+
+
+def _run_flow_threaded(lob: str, persona: dict, progress_callback=None) -> dict:
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(run_flow, lob, persona).result()
+        return pool.submit(run_flow, lob, persona, progress_callback).result()
+
+
+def _make_policy_progress_callback(jid: str, lob: str):
+    detail = LOB_DISPLAY.get(lob.lower(), lob.upper())
+
+    def _update(phase: str, status_detail: str | None = None):
+        job_store.update_job_status(jid, phase, status_detail or detail)
+
+    return _update
 
 
 def _empty_result(lob: str, error: str) -> dict:
@@ -106,12 +122,13 @@ def _format_persona_report(lob: str, description: str, persona_json: str) -> str
 def _dispatch_run_quick_policy(jid: str, params: dict):
     def _run():
         try:
+            job_store.update_job_status(jid, "Generating profile", LOB_DISPLAY.get(params["lob"], params["lob"].upper()))
             persona_json = generate_persona(params["lob"], params["description"])
             data = json.loads(persona_json)
             if "error" in data:
                 job_store.fail_job(jid, data["error"])
                 return
-            result = _run_flow_threaded(params["lob"], data)
+            result = _run_flow_threaded(params["lob"], data, _make_policy_progress_callback(jid, params["lob"]))
             persona_section = _format_persona_report(params["lob"], params["description"], persona_json) + "\n\n---\n\n"
             job_store.complete_job(jid, persona_section + format_result(result))
         except Exception as exc:

@@ -113,11 +113,27 @@ function ActivityCard({ item, index, onOpenReport }) {
 
       <h3>{item.title}</h3>
       <p className="activity-terminal">{item.terminalLine}</p>
+      {item.liveStatus && <LivePolicyStatus status={item.liveStatus} />}
 
       <div className="activity-card-meta">
         <span>{item.meta}</span>
       </div>
     </article>
+  )
+}
+
+function LivePolicyStatus({ status }) {
+  return (
+    <div className="activity-live-tile" aria-live="polite">
+      <div className="activity-live-copy">
+        <span>Current page</span>
+        <strong>{status.phase}</strong>
+      </div>
+      <div className="activity-live-time">
+        <span>Elapsed {status.elapsed}</span>
+        <span>Entered {status.entered}</span>
+      </div>
+    </div>
   )
 }
 
@@ -133,6 +149,8 @@ function buildActivityFeed(jobs) {
       const duration = formatDuration(elapsedSeconds(job))
       const started = formatStartedTime(job.started)
       const meta = `Started ${started} · ${job.id}`
+      const isSinglePolicyFlow = lower.includes('quick policy') || lower.includes('policy journey')
+      const liveStatus = buildLivePolicyStatus(job, isSinglePolicyFlow)
 
       if (lower.includes('build profile')) {
         return {
@@ -194,7 +212,7 @@ function buildActivityFeed(jobs) {
         }
       }
 
-      if (lower.includes('quick policy test') || lower.includes('policy journey')) {
+      if (isSinglePolicyFlow) {
         const isUwReferral = text.includes('uw referral') || text.includes('uw conditions triggered')
         const isPolicyFailed = text.includes('policy creation failed') || text.includes('| **status** | failed') || text.includes('| **outcome** | error')
         const title = isUwReferral
@@ -212,6 +230,7 @@ function buildActivityFeed(jobs) {
           status: job.status,
           statusLabel: isUwReferral ? 'uw referral' : isPolicyFailed ? 'failed' : statusLabel(job.status),
           duration,
+          liveStatus,
           meta,
           canOpenReport: job.status !== 'running',
         }
@@ -237,6 +256,21 @@ function statusLabel(status) {
   return 'running'
 }
 
+function buildLivePolicyStatus(job, isSinglePolicyFlow) {
+  const current = job.current_status
+  if (!isSinglePolicyFlow || job.status !== 'running' || !current?.phase) return null
+
+  return {
+    phase: cleanStatusText(current.phase),
+    elapsed: formatDuration(elapsedSeconds(job)),
+    entered: formatClockTime(current.updated),
+  }
+}
+
+function cleanStatusText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
 function simplifyLabel(label) {
   return label.replace(/^Chat\s[–-]\s*/i, '').replace(/\s+/g, ' ').trim()
 }
@@ -260,10 +294,16 @@ function formatDuration(seconds) {
 
 function formatStartedTime(started) {
   if (!started) return 'just now'
-  return new Date(started * 1000).toLocaleTimeString(undefined, {
+  return formatClockTime(started)
+}
+
+function formatClockTime(timestamp) {
+  if (!timestamp) return 'just now'
+  return new Date(timestamp * 1000).toLocaleTimeString(undefined, {
     hour: 'numeric',
     minute: '2-digit',
-  })
+    hour12: true,
+  }).replace(/\s*(am|pm)$/i, (match) => match.toLowerCase())
 }
 
 function extractRuleId(label, result) {

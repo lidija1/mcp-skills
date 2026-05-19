@@ -9,7 +9,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -31,9 +31,19 @@ _LOB_RUNNERS = {
     "homeowner": run_homeowner_flow,
 }
 _VALID_LOBS = ", ".join(_LOB_RUNNERS)
+ProgressCallback = Callable[[str, str | None], None]
 
 
-def run_flow(lob: str, persona: dict) -> dict[str, Any]:
+def _emit_progress(progress_callback: ProgressCallback | None, phase: str, detail: str | None = None) -> None:
+    if not progress_callback:
+        return
+    try:
+        progress_callback(phase, detail)
+    except Exception:
+        pass
+
+
+def run_flow(lob: str, persona: dict, progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
     """
     Launch a browser, execute the LOB-specific policy flow, and return a result dict.
 
@@ -79,6 +89,7 @@ def run_flow(lob: str, persona: dict) -> dict[str, Any]:
     runner = _LOB_RUNNERS[lob]
     steps = result["steps"]
     wall_start = time.perf_counter()
+    _emit_progress(progress_callback, "Starting browser", lob.upper())
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True, slow_mo=80)
@@ -88,7 +99,7 @@ def run_flow(lob: str, persona: dict) -> dict[str, Any]:
         page.set_default_timeout(90_000)              # 90 s per action (click/fill/wait)
 
         try:
-            runner_result = runner(page, persona, steps)
+            runner_result = runner(page, persona, steps, progress_callback=progress_callback)
 
             result["outcome"] = runner_result.get("outcome", "error")
             result["uw_conditions"] = runner_result.get("uw_conditions", [])
@@ -105,6 +116,7 @@ def run_flow(lob: str, persona: dict) -> dict[str, Any]:
                 result["overall_status"] = "failed"
 
         except Exception as exc:
+            _emit_progress(progress_callback, "Error", "Flow failed")
             result["error"] = traceback.format_exc()
             result["overall_status"] = "failed"
             try:

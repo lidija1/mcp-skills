@@ -48,7 +48,7 @@ function normalizeJobUpdate(job, update) {
     }
   }
 
-  return update.status !== 'running' ? { ...job, ...update } : job
+  return { ...job, ...update }
 }
 
 export default function App() {

@@ -68,16 +68,31 @@ from mcp_tools.uw_rules_validator.validator import validate_case
 import job_store as _job_store
 _new_job = _job_store.new_job
 _log = _job_store.log_job
+_status = _job_store.update_job_status
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
 POLICY_LOBS = {"auto", "cyber", "homeowner"}
+LOB_DISPLAY = {
+    "auto": "Personal Auto",
+    "cyber": "Cyber",
+    "homeowner": "Homeowner",
+}
 
 
-def _run_flow_threaded(lob: str, persona: dict) -> dict:
+def _run_flow_threaded(lob: str, persona: dict, progress_callback=None) -> dict:
     """Run Playwright flow in a dedicated thread to avoid asyncio conflicts."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(run_flow, lob, persona).result()
+        return pool.submit(run_flow, lob, persona, progress_callback).result()
+
+
+def _make_policy_progress_callback(jid: str, lob: str):
+    detail = LOB_DISPLAY.get(lob.lower(), lob.upper())
+
+    def _update(phase: str, status_detail: str | None = None):
+        _status(jid, phase, status_detail or detail)
+
+    return _update
 
 
 def _validate_policy_lob(lob: str) -> str:
@@ -586,8 +601,9 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
 
     def _run():
         try:
+            _status(jid, "Preparing profile", LOB_DISPLAY.get(lob, req.lob.upper()))
             persona = json.loads(req.persona_json)
-            result = _run_flow_threaded(lob, persona)
+            result = _run_flow_threaded(lob, persona, _make_policy_progress_callback(jid, lob))
             persona_section = _format_persona_report(req.lob, '', req.persona_json) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
         except Exception as e:
@@ -605,12 +621,13 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
 
     def _run():
         try:
+            _status(jid, "Generating profile", LOB_DISPLAY.get(lob, req.lob.upper()))
             persona_json = generate_persona(lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
                 return
-            result = _run_flow_threaded(lob, data)
+            result = _run_flow_threaded(lob, data, _make_policy_progress_callback(jid, lob))
             persona_section = _format_persona_report(req.lob, req.description, persona_json) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
         except Exception as e:

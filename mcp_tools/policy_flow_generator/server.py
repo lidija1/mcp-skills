@@ -82,7 +82,8 @@ from mcp_tools.policy_flow_generator.business_reports import (  # noqa: E402
 # Server definition
 # ---------------------------------------------------------------------------
 
-MAX_BATCH_SIZE = 25  # hard cap — each scenario launches a browser session (~60-120 s)
+MAX_BATCH_SIZE = 100        # persona-only cap (no browser; pure AI calls, parallel)
+MAX_FLOW_BATCH_SIZE = 25   # browser-execution cap — each run takes 60-120 s
 
 
 def _run_flow_threaded(lob: str, persona: dict) -> dict:
@@ -171,7 +172,7 @@ def create_batch_personas(scenarios: list) -> str:
               {"lob": "auto", "description": "Young driver aged 19 with one at-fault accident"},
               {"lob": "homeowner", "description": "Coastal property, tile roof, $800k value"}
             ]
-            Up to 25 scenarios per call.
+            Up to 100 scenarios per call.
 
     Returns:
         JSON array where each element is the generated persona object for that
@@ -206,7 +207,7 @@ def create_persona_variations(lob: str, base_description: str, count: int = 5) -
         lob: Line of business — "auto" or "homeowner"
         base_description: Natural-language base persona, e.g.
             "22-year-old driver with SR-22, revoked license, leased BMW, Platinum coverage"
-        count: Number of distinct variations to generate (1–25, default 5)
+        count: Number of distinct variations to generate (1-100, default 5)
 
     Returns:
         JSON array of `count` persona objects, each with a `_variation_index` field.
@@ -335,10 +336,11 @@ def run_batch_flows(scenarios: list) -> str:
     if not scenarios:
         return "**ERROR** — no scenarios provided."
 
-    if len(scenarios) > MAX_BATCH_SIZE:
+    if len(scenarios) > MAX_FLOW_BATCH_SIZE:
         return (
-            f"**ERROR** — batch size {len(scenarios)} exceeds the limit of "
-            f"{MAX_BATCH_SIZE} scenarios per call. Split into smaller batches."
+            f"**ERROR** — batch size {len(scenarios)} exceeds the browser-execution limit of "
+            f"{MAX_FLOW_BATCH_SIZE} scenarios per call. Split into smaller batches, "
+            f"or use create_batch_personas to generate data only (up to {MAX_BATCH_SIZE})."
         )
 
     all_results = []
@@ -413,10 +415,10 @@ def compare_scenarios(scenarios: list, default_lob: str = "auto") -> str:
     """
     if not scenarios:
         return "**ERROR** - no scenarios provided."
-    if len(scenarios) > MAX_BATCH_SIZE:
+    if len(scenarios) > MAX_FLOW_BATCH_SIZE:
         return (
-            f"**ERROR** - scenario count {len(scenarios)} exceeds the limit of "
-            f"{MAX_BATCH_SIZE}. Split into smaller comparison batches."
+            f"**ERROR** - scenario count {len(scenarios)} exceeds the browser-execution limit of "
+            f"{MAX_FLOW_BATCH_SIZE}. Split into smaller comparison batches."
         )
 
     results = []

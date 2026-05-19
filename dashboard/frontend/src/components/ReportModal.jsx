@@ -7,6 +7,7 @@ import {
   Camera,
   Download,
   FileJson,
+  FileSpreadsheet,
   Pencil,
   ShieldAlert,
   X,
@@ -52,6 +53,22 @@ export default function ReportModal({ job, onClose }) {
   const isPolicyFailed = isFailedPolicyReport(report, jobResult)
   const screenshotUrl = isPolicyFailed ? screenshotUrlFromPath(report.screenshotPath) : ''
   const HeaderIcon = isError ? ShieldAlert : isJson ? FileJson : Clipboard
+
+  const exportCsv = () => {
+    const rows = report.personas.length ? report.personas : (report.profileJson ? parseJsonArray(report.profileJson) : [])
+    if (!rows.length) return
+    const clean = rows.map(r => { const { _note, _lob, _provider, _variation_index, _scenario_index, ...rest } = r; return rest })
+    const headers = [...new Set(clean.flatMap(Object.keys))]
+    const escape = v => { const s = v === null || v === undefined ? '' : String(v); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s }
+    const csv = [headers.join(','), ...clean.map(r => headers.map(h => escape(r[h])).join(','))].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${sanitizeFilename(jobLabel || 'personas')}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   const downloadProfile = () => {
     if (!report.profileJson) return
@@ -102,6 +119,12 @@ export default function ReportModal({ job, onClose }) {
               <button onClick={() => window.open(screenshotUrl, '_blank', 'noopener,noreferrer')} className="text-button compact" type="button" title="Open failure screenshot">
                 <Camera size={16} />
                 Screenshot
+              </button>
+            )}
+            {report.personas.length > 0 && (
+              <button onClick={exportCsv} className="text-button compact" type="button" title="Export personas as CSV">
+                <FileSpreadsheet size={16} />
+                Export CSV
               </button>
             )}
             {report.profileJson && (

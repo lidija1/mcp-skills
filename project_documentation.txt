@@ -11,8 +11,8 @@
 ================================================================================
 
 SandboxPlaywright is an enterprise-grade test automation framework designed for
-end-to-end testing of insurance platform workflows (OneShield). It supports UI,
-API, and performance testing within a single unified pytest project.
+end-to-end testing of insurance platform workflows (OneShield). It supports UI
+and API testing within a single unified pytest project.
 
 Key goals:
   - Reliable cross-browser UI automation via Playwright
@@ -161,13 +161,6 @@ SandboxPlaywright/
 │   ├── GUIDE_API_TESTING.md
 │   └── ASSERTION_GUIDE.md
 │
-├── performance_tests/
-│   ├── conftest.py
-│   ├── performance_config.py    Per-environment thresholds
-│   ├── test_login_performance.py
-│   └── guides/
-│       └── PERFORMANCE_GUIDE.md
-│
 ├── testdata/
 │   ├── auth_state.json          Saved browser auth state
 │   └── static/
@@ -183,8 +176,6 @@ SandboxPlaywright/
 │   ├── email_util.py            Timestamp-based unique email generator
 │   ├── file_writer.py           CSV summary append writer
 │   ├── policy_reporter.py       matplotlib trend chart generator
-│   ├── performance_metrics.py   Login/page performance collector
-│   └── performance_assertions.py  Threshold validator
 │
 ├── logs/                        One log file per test session
 ├── screenshots/                 Failure screenshot storage
@@ -237,8 +228,8 @@ Browser options:
 
 Active markers (defined in pytest.ini):
 
-  auto, homeowner, smoke, regression, login, validation, api, performance,
-  stress, empty-fields, invalid-credentials, format-validation, whitespace,
+  auto, homeowner, smoke, regression, login, validation, api, empty-fields,
+  invalid-credentials, format-validation, whitespace,
   case-sensitivity, length, security, ui, navigation, error-messages,
   special-chars, format, edge-case, accessibility, post-login
 

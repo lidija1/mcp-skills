@@ -6,6 +6,8 @@ config/secrets.yaml
 # Claude Code local settings (may contain API keys or sensitive paths)
 .claude/settings.local.json
 .claude/settings.json
+.claude/worktrees/
+.codex/
 
 # Playwright MCP session artifacts (screenshots, snapshots, logs — may contain PII)
 .playwright-mcp/
@@ -64,6 +66,11 @@ reports/traces/
 
 # API replay artifacts may contain live OneShield session/request data
 api_tests/artifacts/
+
+# Generated recorder/probe output
+generated/
+data/processed/
+data/pom_generator/sessions/
 
 # Dashboard frontend generated artifacts
 dashboard/frontend/node_modules/

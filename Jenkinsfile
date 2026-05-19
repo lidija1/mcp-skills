@@ -5,8 +5,6 @@ pipeline {
         string(name: 'BROWSER', defaultValue: 'chromium', description: 'Browser to run the tests on (chromium, firefox, webkit)')
         string(name: 'TEST_PATH', defaultValue: 'ui/', description: 'Path to the test file or directory to run')
         booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: 'Force rebuild Docker image even if it exists')
-        booleanParam(name: 'RUN_LIGHTHOUSE', defaultValue: false, description: 'Run Lighthouse audit after test execution')
-        string(name: 'LIGHTHOUSE_TARGET_URL', defaultValue: 'https://example.com', description: 'URL to audit when RUN_LIGHTHOUSE is enabled')
     }
 
     environment {
@@ -100,22 +98,6 @@ pipeline {
             }
         }
 
-        stage('Run Lighthouse Audit') {
-            when {
-                expression { return params.RUN_LIGHTHOUSE }
-            }
-            steps {
-                bat '''
-                if not exist reports\lighthouse (mkdir reports\lighthouse)
-                docker run --rm ^
-                  --user 0:0 ^
-                  -v "%WORKSPACE%:/workspace" ^
-                  -w /workspace ^
-                  patrickhulce/lhci-client:0.15.1 ^
-                  lhci autorun --config=/workspace/lighthouse/lighthouserc.json --collect.url=%LIGHTHOUSE_TARGET_URL% --collect.numberOfRuns=3 --upload.target=filesystem --upload.outputDir=/workspace/reports/lighthouse
-                '''
-            }
-        }
     }
 
     post {
@@ -124,7 +106,7 @@ pipeline {
             docker rm -f %CONTAINER_NAME% >nul 2>&1
             '''
 
-            archiveArtifacts artifacts: 'reports/**/*, reports/lighthouse/**/*, screenshots/**/*', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'reports/**/*, screenshots/**/*', allowEmptyArchive: true
             allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
         }
         // Image is preserved for reuse - not deleted

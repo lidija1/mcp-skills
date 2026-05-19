@@ -10,6 +10,8 @@ import json
 import os
 import random
 import re
+import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -438,7 +440,7 @@ _LOB_PROMPTS = {
     "homeowner": _HOMEOWNER_SYSTEM_PROMPT,
 }
 _VALID_LOBS = ", ".join(_LOB_PROMPTS)
-_VARIATION_CHUNK_SIZE = 5
+_VARIATION_CHUNK_SIZE = 10
 _EMAIL_SEQUENCE = 0
 
 
@@ -538,6 +540,35 @@ PERSONA_ARCHETYPES = {
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def atomic_write_json(path, data, *, indent: int = 2, encoding: str = "utf-8") -> None:
+    """Write `data` as JSON to `path` atomically.
+
+    Writes to a sibling .tmp file first, then calls os.replace() which is an
+    atomic rename on both Windows NTFS and Linux.  The original file is never
+    partially overwritten — a crash during the write leaves it intact.
+
+    Args:
+        path: str or pathlib.Path destination.
+        data: JSON-serialisable object.
+        indent: JSON pretty-print indent (default 2).
+        encoding: File encoding (default utf-8).
+    """
+    dest = Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data, indent=indent, ensure_ascii=False)
+    fd, tmp_path = tempfile.mkstemp(dir=dest.parent, prefix=dest.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as fh:
+            fh.write(payload)
+        os.replace(tmp_path, dest)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def generate_persona(lob: str, description: str) -> str:
@@ -768,7 +799,7 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
     if lob not in _LOB_PROMPTS:
         return json.dumps({"error": f"Unknown LOB '{lob}'. Valid: {_VALID_LOBS}"})
 
-    count = max(1, min(count, 25))  # hard-clamp
+    count = max(1, min(count, 100))  # hard-clamp
 
     all_vehicles: list = []
     if lob == "auto":
@@ -779,12 +810,17 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
             all_vehicles = _sample_vehicles(count)
 
     try:
-        results = []
+        chunks = []
         for start in range(0, count, _VARIATION_CHUNK_SIZE):
             chunk_count = min(_VARIATION_CHUNK_SIZE, count - start)
             chunk_vehicles = all_vehicles[start:start + chunk_count] if all_vehicles else None
+            chunks.append((start, chunk_count, chunk_vehicles))
+
+        chunk_results: dict[int, list] = {}
+
+        def _run_chunk(start, chunk_count, chunk_vehicles):
             try:
-                chunk = _generate_persona_variation_chunk(
+                return start, _generate_persona_variation_chunk(
                     lob=lob,
                     base_description=base_description,
                     count=chunk_count,
@@ -804,12 +840,45 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
                         start_index=start + offset,
                         vehicles=single_vehicles,
                     ))
-            results.extend(chunk)
+                return start, chunk
+
+        max_workers = min(len(chunks), 10)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_run_chunk, *args): args[0] for args in chunks}
+            for future in as_completed(futures):
+                start_idx, chunk = future.result()
+                chunk_results[start_idx] = chunk
+
+        results = []
+        for start, chunk_count, _ in chunks:
+            results.extend(chunk_results[start])
 
         return json.dumps(results[:count], indent=2)
 
     except Exception as exc:
         return json.dumps({"error": str(exc)})
+
+
+def _generate_one_persona(args: tuple) -> dict:
+    """Worker for parallel batch generation. Returns a persona dict."""
+    i, scenario = args
+    lob = str(scenario.get("lob", "")).lower().strip()
+    description = str(scenario.get("description", "")).strip()
+
+    if not lob or not description:
+        return {"error": f"Scenario {i}: missing 'lob' or 'description'", "_scenario_index": i}
+
+    raw = generate_persona(lob, description)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = {"error": f"Non-JSON response for scenario {i}", "raw": raw}
+
+    parsed["_scenario_index"] = i
+    return parsed
+
+
+_BATCH_MAX_WORKERS = 10  # concurrent AI API calls; tune down if rate-limited
 
 
 def generate_batch_personas(scenarios: list) -> str:
@@ -819,26 +888,21 @@ def generate_batch_personas(scenarios: list) -> str:
     Each item in `scenarios` must be a dict with "lob" and "description" keys.
     Returns a JSON array where each element is the persona object (or an error
     object) for that scenario, with an added "_scenario_index" field.
+
+    AI calls are issued concurrently (up to _BATCH_MAX_WORKERS threads) so
+    large persona batches finish faster than serial generation.
+    Results are sorted by _scenario_index so the output order matches the input.
     """
-    results = []
-    for i, scenario in enumerate(scenarios):
-        lob = str(scenario.get("lob", "")).lower().strip()
-        description = str(scenario.get("description", "")).strip()
+    if not scenarios:
+        return json.dumps([], indent=2)
 
-        if not lob or not description:
-            results.append({
-                "error": f"Scenario {i}: missing 'lob' or 'description'",
-                "_scenario_index": i,
-            })
-            continue
-
-        raw = generate_persona(lob, description)
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            parsed = {"error": f"Non-JSON response for scenario {i}", "raw": raw}
-
-        parsed["_scenario_index"] = i
-        results.append(parsed)
+    workers = min(_BATCH_MAX_WORKERS, len(scenarios))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_generate_one_persona, (i, s)): i
+                   for i, s in enumerate(scenarios)}
+        results = [None] * len(scenarios)
+        for future in as_completed(futures):
+            result = future.result()
+            results[result["_scenario_index"]] = result
 
     return json.dumps(results, indent=2)

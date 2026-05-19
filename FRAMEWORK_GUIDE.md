@@ -3,11 +3,6 @@
 **Last updated:** March 13, 2026
 **Status:** Active
 
-**Companion guides:**
-- Lighthouse: `lighthouse/LIGHTHOUSE_GUIDE.md`
-
----
-
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
@@ -28,12 +23,11 @@
 11. [Logging & Credential Safety](#11-logging--credential-safety)
 12. [Screenshot on Failure](#12-screenshot-on-failure)
 13. [API Testing](#13-api-testing)
-14. [Performance Testing](#14-performance-testing)
-15. [Docker](#15-docker)
-16. [Docker Compose Profiles](#16-docker-compose-profiles)
-17. [CI/CD — Jenkins](#17-cicd--jenkins)
-18. [Configuration Files](#18-configuration-files)
-19. [Troubleshooting](#19-troubleshooting)
+14. [Docker](#14-docker)
+15. [Docker Compose Profiles](#15-docker-compose-profiles)
+16. [CI/CD — Jenkins](#16-cicd--jenkins)
+17. [Configuration Files](#17-configuration-files)
+18. [Troubleshooting](#18-troubleshooting)
 
 ---
 
@@ -125,7 +119,7 @@ SandboxPlaywright/
 │   ├── pages/                   # Page Object Model classes
 │   │   ├── common/
 │   │   │   ├── base_page.py     # Abstract base (smart wrappers, helpers)
-│   │   │   ├── login_page.py    # Splash screen, credentials, perf metrics
+│   │   │   ├── login_page.py    # Splash screen and credentials
 │   │   │   ├── customer_page.py # Customer creation & search
 │   │   │   ├── new_quote_page.py
 │   │   │   └── policy_summary_page.py
@@ -163,13 +157,6 @@ SandboxPlaywright/
 │   ├── GUIDE_API_TESTING.md
 │   └── ASSERTION_GUIDE.md
 │
-├── performance_tests/
-│   ├── conftest.py              # Performance fixtures & thresholds
-│   ├── performance_config.py    # Per-environment thresholds (DEV/TESTING/STAGING/PROD)
-│   ├── test_login_performance.py
-│   └── guides/
-│       └── PERFORMANCE_GUIDE.md
-│
 ├── testdata/
 │   ├── auth_state.json          # Saved browser authentication state
 │   └── static/
@@ -185,8 +172,6 @@ SandboxPlaywright/
 │   ├── email_util.py            # Timestamp-based unique email generator
 │   ├── file_writer.py           # CSV summary writer (append mode)
 │   ├── policy_reporter.py       # matplotlib trend charts
-│   ├── performance_metrics.py   # Login/page performance collector
-│   ├── performance_assertions.py# Performance threshold validator
 │   ├── waiters.py               # Custom wait strategies
 │   └── assertions.py            # Custom assertion helpers
 │
@@ -527,8 +512,6 @@ Defined in `pytest.ini`:
 | `login` | Login flow tests |
 | `validation` | Field validation and error handling |
 | `api` | API/HTTP tests |
-| `performance` | Performance measurement tests |
-| `stress` | Load and stress tests |
 | `empty-fields` | Empty field edge cases |
 | `invalid-credentials` | Bad credential handling |
 | `format-validation` | Field format rules |
@@ -642,33 +625,7 @@ See `api_tests/ASSERTION_GUIDE.md` and `api_tests/GUIDE_API_TESTING.md` for asse
 
 ---
 
-## 14. Performance Testing
-
-Location: `performance_tests/`
-
-**What is measured:** Login page load time, splash button click responsiveness, form element visibility, DNS lookup, TCP connection time, TTFB.
-
-**Performance thresholds** are defined per environment in `performance_config.py`:
-
-| Environment | Page Load | Login Button | TTFB |
-|---|---|---|---|
-| DEV | 5000 ms | 3000 ms | 2000 ms |
-| TESTING | 7000 ms | 4500 ms | 3000 ms |
-| STAGING | 3000 ms | 2500 ms | 1500 ms |
-
-Run performance tests:
-
-```bash
-pytest performance_tests/ -v
-# or by marker
-pytest -m performance -v
-```
-
-See `performance_tests/guides/PERFORMANCE_GUIDE.md` for details.
-
----
-
-## 15. Docker
+## 14. Docker
 
 The `Dockerfile` builds an image from the official Playwright Python base image.
 
@@ -703,7 +660,7 @@ Volumes are not mounted in a direct `docker run`, so artifacts stay inside the c
 
 ---
 
-## 16. Docker Compose Profiles
+## 15. Docker Compose Profiles
 
 `docker-compose.yml` defines isolated services per test suite. Each service:
 - Builds from the same `Dockerfile`
@@ -766,7 +723,7 @@ tests-smoke:
 
 ---
 
-## 17. CI/CD — Jenkins
+## 16. CI/CD — Jenkins
 
 Pipeline defined in `Jenkinsfile`.
 
@@ -779,7 +736,7 @@ Typical stages:
 
 ---
 
-## 18. Configuration Files
+## 17. Configuration Files
 
 | File | Purpose |
 |---|---|
@@ -793,7 +750,7 @@ Typical stages:
 
 ---
 
-## 19. Troubleshooting
+## 18. Troubleshooting
 
 ### `AttributeError: module 'allure' has no attribute 'mask_parameters'`
 

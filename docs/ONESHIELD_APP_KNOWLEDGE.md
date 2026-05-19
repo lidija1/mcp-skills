@@ -631,6 +631,46 @@ Add confirmed behavior below as exploration progresses.
 - Next GL UW candidates to test on the same quote are optional coverages and exclusions with valid supporting fields: `General Liability Manual Coverages`, `Employee Benefits Coverage`, `Hired Auto Coverage`, `Non-Owned Auto Coverage`, `Contractual Liability Exclusion`, `Exclude Employees as Additional Insureds`, and `Hazards in Connection with Designated Premises`.
 - Excess-only rating needs its required excess/SIR fields inventoried before it can be classified as clean vs UW.
 
+### 2026-05-19 - Personal Auto Browserless API Replay
+
+**Context**
+- LOB: Personal Auto
+- Scenario: Browserless API replay from `reports/auto_api_flow_TC_ID_0001_20260519.json`
+- Test data: `testdata/static/auto/AutoData.json`, mainly `TC_ID_0001`
+
+**Confirmed Behavior**
+- Browserless login works through `api_tests/oneshield_api_replay.py` by fetching the live portal page, extracting `pageJSON`, posting credential field processors, and submitting `GatewayServlet` `TX_NAME=Action.3`.
+- The replay can create live quote/customer records before reaching the rate action. A run that stops at `rate` is not read-only.
+- Correct Auto API chain is:
+  - coverage prepare: `auto_coverages_rating`, `TX_NAME=1534748`, response remains on Coverages.
+  - rate: `auto_premium_summary`, `TX_NAME=Action.1753948`, response page `premium | summary`.
+  - request issue: `auto_premium_summary`, `TX_NAME=Action.305905`, response page `Delivery Preferences`.
+  - delivery next: `auto_delivery_preferences`, `TX_NAME=Action.1262048`, response page `billing plan`.
+  - billing next: `auto_billing_plan`, `TX_NAME=Action.1504046`, response page `quote | verify billing choices`.
+  - bind: `auto_verify_billing`, `TX_NAME=Action.1780148`, response page `Policy | Current Summary`.
+- Live API validation for `TC_ID_0011` reached `premium | summary` with premium `$ 2,049.45`, reached `Delivery Preferences`, reached `quote | verify billing choices`, and then bound policy `PA10134896357-00`.
+- The API bind summary was written to `policy_summary/policy_reports_api_auto.csv`.
+
+**Stable Selectors / Methods**
+- Keep API replay code under `api_tests/`; it uses `requests` and must remain separate from the Playwright BDD UI framework.
+- `run-auto` in `oneshield_api_replay.py` is now blocked by default. It requires `--allow-live-create` because it creates live OneShield records.
+- Binding is separately blocked by default and requires `--allow-bind`; keep this guard because the flow creates real policies.
+
+**Required Waits**
+- Not a UI wait issue. The replay must refresh live `pageJSON` state, hvars, `DRAGON_TRANSACTION_ID`, `OBJECT_TREE`, `WORKFLOW_CONTEXT`, and dynamic `bv_<object>_<attribute>` field names after each response.
+
+**Known Failed Approaches**
+- Attempt: Treat `--stop-after rate` as a safe/read-only experiment.
+- Symptom: Multiple live James Smith Personal Auto quote records appeared in the OneShield quote list even though no bind completed.
+- Replacement: Require an explicit live-create flag and keep bind behind a separate explicit flag.
+- Attempt: Map OneShield object IDs only by zip order from `OBJECT_TREE`.
+- Symptom: Dynamic tree nodes and inserted/reordered objects could route navigation to the wrong node.
+- Replacement: Use live tree labels/orders for known navigation nodes such as driver, vehicle, and coverages, plus live layout field-name substitution.
+
+**Open Questions**
+- Existing replay uses a captured happy-path Auto shape and simple test-data substitution. Broader data variation still needs validation before treating it as a generic Auto API.
+- The captured traffic did not include a logout/unlock endpoint; UI exit/logout or OneShield session timeout may still be needed to release visible locks.
+
 ### Template
 
 **Context**

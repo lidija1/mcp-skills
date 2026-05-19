@@ -35,6 +35,15 @@ def _record(steps, name, status, elapsed, detail=""):
     })
 
 
+def _emit_progress(progress_callback, phase: str, detail: str = "Personal Auto"):
+    if not progress_callback:
+        return
+    try:
+        progress_callback(phase, detail)
+    except Exception:
+        pass
+
+
 def _is_uw_referral_visible(page: Page, timeout: int = 2_000) -> bool:
     """Return whether the current page is an underwriting referral screen."""
     from ui.pages.auto.uw_referral_page import UWReferralPage
@@ -49,7 +58,8 @@ def _capture_uw_conditions(page: Page) -> list[str]:
     return UWReferralPage(page).capture_conditions(timeout=5_000)
 
 
-def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str) -> dict:
+def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str, progress_callback=None) -> dict:
+    _emit_progress(progress_callback, "UW Referral", detail)
     uw_conditions = _capture_uw_conditions(page)
     _record(steps, name, "passed", elapsed, detail)
     _record(
@@ -69,7 +79,7 @@ def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str
     }
 
 
-def _create_policy_or_uw(page: Page, steps: list, started_at: float) -> dict | None:
+def _create_policy_or_uw(page: Page, steps: list, started_at: float, progress_callback=None) -> dict | None:
     """Run issue/billing/bind actions, stopping early if UW appears."""
     from ui.pages.auto.create_policy_page import CreatePolicyPage
 
@@ -82,6 +92,7 @@ def _create_policy_or_uw(page: Page, steps: list, started_at: float) -> dict | N
     ]
 
     for action_name, action in actions:
+        _emit_progress(progress_callback, action_name)
         if _is_uw_referral_visible(page, timeout=1_000):
             return _record_uw_outcome(
                 steps,
@@ -89,6 +100,7 @@ def _create_policy_or_uw(page: Page, steps: list, started_at: float) -> dict | N
                 time.perf_counter() - started_at,
                 page,
                 f"UW referral detected before {action_name.lower()}.",
+                progress_callback,
             )
 
         try:
@@ -102,6 +114,7 @@ def _create_policy_or_uw(page: Page, steps: list, started_at: float) -> dict | N
                     time.perf_counter() - started_at,
                     page,
                     f"UW referral detected during {action_name.lower()}.",
+                    progress_callback,
                 )
             raise
 
@@ -112,12 +125,13 @@ def _create_policy_or_uw(page: Page, steps: list, started_at: float) -> dict | N
                 time.perf_counter() - started_at,
                 page,
                 f"UW referral detected after {action_name.lower()}.",
+                progress_callback,
             )
 
     return None
 
 
-def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
+def run_auto_flow(page: Page, persona: dict, steps: list, progress_callback=None) -> dict:
     """
     Execute the Personal Auto quote workflow on an already-open browser page.
 
@@ -147,6 +161,7 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
 
     try:
         # 1. Login
+        _emit_progress(progress_callback, "Login")
         t = time.perf_counter()
         login = LoginPage(page)
         login.navigate()
@@ -158,38 +173,46 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
         _record(steps, "Login", "passed", time.perf_counter() - t)
 
         # 2. New Quote
+        _emit_progress(progress_callback, "New Quote")
         t = time.perf_counter()
         NewQuotePage(page).new_quote_steps()
         _record(steps, "New Quote", "passed", time.perf_counter() - t)
 
         # 3. Customer
+        _emit_progress(progress_callback, "Customer")
         t = time.perf_counter()
         CustomerPage(page).customer_steps(persona)
         _record(steps, "Customer", "passed", time.perf_counter() - t)
 
         # 4. Quote Registration
+        _emit_progress(progress_callback, "Quote Registration")
         t = time.perf_counter()
         QuoteRegistrationPage(page).quote_registration_steps(persona)
         _record(steps, "Quote Registration", "passed", time.perf_counter() - t)
 
         # 5. Quote Summary
+        _emit_progress(progress_callback, "Quote Summary")
         t = time.perf_counter()
         QuoteSummaryPage(page).summary_steps(persona)
         _record(steps, "Quote Summary", "passed", time.perf_counter() - t)
 
         # 6. Driver Info
+        _emit_progress(progress_callback, "Driver Info")
         t = time.perf_counter()
         DriverInfoPage(page).fill_driver_info(persona)
         _record(steps, "Driver Info", "passed", time.perf_counter() - t)
 
         # 7. Vehicle Info
+        _emit_progress(progress_callback, "Vehicle Info")
         t = time.perf_counter()
         VehicleInfoPage(page).fill_vehicle_info(persona)
         _record(steps, "Vehicle Info", "passed", time.perf_counter() - t)
 
         # 8. Coverage & Rate
+        _emit_progress(progress_callback, "Coverage & Rate")
         t = time.perf_counter()
         if _is_uw_referral_visible(page):
+            _emit_progress(progress_callback, "UW Referral", "UW referral detected before rating.")
             uw_conditions = _capture_uw_conditions(page)
             outcome = "uw_referral"
             _record(
@@ -220,6 +243,7 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
             _record(steps, "Coverage & Rate", "passed", time.perf_counter() - t)
         except Exception:
             if _is_uw_referral_visible(page, timeout=5_000):
+                _emit_progress(progress_callback, "UW Referral", "UW referral detected during rating.")
                 uw_conditions = _capture_uw_conditions(page)
                 outcome = "uw_referral"
                 _record(
@@ -249,6 +273,7 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
         # 9. Outcome detection
         t = time.perf_counter()
         if _is_uw_referral_visible(page, timeout=6_000):
+            _emit_progress(progress_callback, "UW Referral")
             uw_conditions = _capture_uw_conditions(page)
             outcome = "uw_referral"
             _record(
@@ -257,11 +282,12 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
                 f"{len(uw_conditions)} condition cell(s) captured",
             )
         else:
-            uw_result = _create_policy_or_uw(page, steps, t)
+            uw_result = _create_policy_or_uw(page, steps, t, progress_callback)
             if uw_result:
                 return uw_result
             outcome = "policy_bound"
             try:
+                _emit_progress(progress_callback, "Policy Summary")
                 policy_page = PolicySummary(page)
                 policy_summary = policy_page.extract_details(persona)
                 policy_page.save_lob_report(policy_summary)
@@ -277,6 +303,7 @@ def run_auto_flow(page: Page, persona: dict, steps: list) -> dict:
                 0,
                 page,
                 "UW referral detected while handling a normal-flow exception.",
+                progress_callback,
             )
 
         error = traceback.format_exc()

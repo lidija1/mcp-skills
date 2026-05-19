@@ -33,6 +33,15 @@ def _record(steps, name, status, elapsed, detail=""):
     })
 
 
+def _emit_progress(progress_callback, phase: str, detail: str = "Cyber"):
+    if not progress_callback:
+        return
+    try:
+        progress_callback(phase, detail)
+    except Exception:
+        pass
+
+
 def _is_uw_referral_visible(page: Page, timeout: int = 2_000) -> bool:
     from ui.pages.auto.uw_referral_page import UWReferralPage
 
@@ -45,7 +54,8 @@ def _capture_uw_conditions(page: Page) -> list[str]:
     return UWReferralPage(page).capture_conditions(timeout=5_000)
 
 
-def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str) -> dict:
+def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str, progress_callback=None) -> dict:
+    _emit_progress(progress_callback, "UW Referral", detail)
     uw_conditions = _capture_uw_conditions(page)
     _record(
         steps,
@@ -64,7 +74,7 @@ def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str
     }
 
 
-def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
+def run_cyber_flow(page: Page, persona: dict, steps: list, progress_callback=None) -> dict:
     """
     Execute the Cyber quote workflow on an already-open browser page.
 
@@ -97,6 +107,7 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
 
     try:
         # 1. Login
+        _emit_progress(progress_callback, "Login")
         t = time.perf_counter()
         login = LoginPage(page)
         login.navigate()
@@ -108,27 +119,32 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
         _record(steps, "Login", "passed", time.perf_counter() - t)
 
         # 2. New Quote
+        _emit_progress(progress_callback, "New Quote")
         t = time.perf_counter()
         NewQuotePage(page).new_quote_steps()
         _record(steps, "New Quote", "passed", time.perf_counter() - t)
 
         # 3. Customer
+        _emit_progress(progress_callback, "Customer")
         t = time.perf_counter()
         CustomerPage(page).customer_steps(persona)
         _record(steps, "Customer", "passed", time.perf_counter() - t)
 
         # 4. Quote Registration
+        _emit_progress(progress_callback, "Quote Registration")
         t = time.perf_counter()
         QuoteRegistrationPage(page).quote_registration_steps(persona)
         _record(steps, "Quote Registration", "passed", time.perf_counter() - t)
 
         # 5. Cyber Quote Details
+        _emit_progress(progress_callback, "Cyber Quote Details")
         t = time.perf_counter()
         cyber_quote = CyberQuotePage(page)
         cyber_quote.fill_cyber_quote_details(persona)
         _record(steps, "Cyber Quote Details", "passed", time.perf_counter() - t)
 
         # 6. Rate Quote
+        _emit_progress(progress_callback, "Rate Quote")
         t = time.perf_counter()
         cyber_quote.click_rate_quote()
         # Wait for page to settle after navigation triggered by rate quote
@@ -140,6 +156,7 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
         try:
             if not _is_uw_referral_visible(page, timeout=6_000):
                 raise RuntimeError("UW referral was not visible after rating.")
+            _emit_progress(progress_callback, "UW Referral")
             uw_conditions = _capture_uw_conditions(page)
             outcome = "uw_referral"
             _record(
@@ -164,7 +181,9 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
                         time.perf_counter() - t,
                         page,
                         "UW referral detected before request issue.",
+                        progress_callback,
                     )
+                _emit_progress(progress_callback, "Request Issue")
                 summary.click_request_issue()
                 if _is_uw_referral_visible(page, timeout=1_000):
                     return _record_uw_outcome(
@@ -173,6 +192,7 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
                         time.perf_counter() - t,
                         page,
                         "UW referral detected after request issue.",
+                        progress_callback,
                     )
             except Exception:
                 if _is_uw_referral_visible(page, timeout=8_000):
@@ -182,12 +202,14 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
                         time.perf_counter() - t,
                         page,
                         "UW referral detected during request issue.",
+                        progress_callback,
                     )
                 raise
             _record(steps, "Request Issue", "passed", time.perf_counter() - t)
 
             t = time.perf_counter()
             try:
+                _emit_progress(progress_callback, "Delivery Preferences")
                 DeliveryPreferencesPage(page).click_next()
             except Exception:
                 if _is_uw_referral_visible(page, timeout=8_000):
@@ -197,12 +219,14 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
                         time.perf_counter() - t,
                         page,
                         "UW referral detected during delivery preferences.",
+                        progress_callback,
                     )
                 raise
             _record(steps, "Delivery Preferences", "passed", time.perf_counter() - t)
 
             t = time.perf_counter()
             try:
+                _emit_progress(progress_callback, "Billing Plan")
                 BillingPlanPage(page).complete_billing_plan(persona)
             except Exception:
                 if _is_uw_referral_visible(page, timeout=8_000):
@@ -212,12 +236,14 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
                         time.perf_counter() - t,
                         page,
                         "UW referral detected during billing plan.",
+                        progress_callback,
                     )
                 raise
             _record(steps, "Billing Plan", "passed", time.perf_counter() - t)
 
             t = time.perf_counter()
             try:
+                _emit_progress(progress_callback, "Bind")
                 VerifyBillingPage(page).click_bind()
             except Exception:
                 if _is_uw_referral_visible(page, timeout=8_000):
@@ -227,10 +253,12 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
                         time.perf_counter() - t,
                         page,
                         "UW referral detected during bind.",
+                        progress_callback,
                     )
                 raise
             outcome = "policy_bound"
             try:
+                _emit_progress(progress_callback, "Policy Summary")
                 policy_page = PolicySummary(page)
                 policy_summary = policy_page.extract_details(persona)
                 policy_page.save_lob_report(policy_summary)
@@ -247,6 +275,7 @@ def run_cyber_flow(page: Page, persona: dict, steps: list) -> dict:
                 0,
                 page,
                 "UW referral detected while handling a normal-flow exception.",
+                progress_callback,
             )
 
         error = traceback.format_exc()

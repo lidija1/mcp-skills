@@ -1284,6 +1284,72 @@ textarea.field { line-height: 1.45; }
   opacity: 0.88;
 }
 
+.activity-live-tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  background: linear-gradient(90deg, rgba(239, 246, 255, 0.96), rgba(240, 253, 244, 0.86));
+  border: 1px solid rgba(147, 197, 253, 0.55);
+  border-radius: 8px;
+}
+
+.activity-live-copy {
+  min-width: 0;
+}
+
+.activity-live-copy span,
+.activity-live-time span {
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.activity-live-copy strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-live-time {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.activity-live-time span {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #1e3a8a;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .activity-live-tile {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-live-time {
+    justify-content: flex-start;
+  }
+}
+
 .activity-card-meta {
   color: inherit;
   font-size: 12px;

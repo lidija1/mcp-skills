@@ -16,6 +16,8 @@ import { cleanDisplayText } from '../utils/text'
 
 export default function ReportModal({ job, onClose }) {
   const ref = useRef(null)
+  const feedbackTimerRef = useRef(null)
+  const [activeAction, setActiveAction] = useState('')
   const jobLabel = cleanDisplayText(job.label || '')
   const jobResult = cleanDisplayText(job.result || '')
   const jobError = cleanDisplayText(job.error || '')
@@ -24,8 +26,21 @@ export default function ReportModal({ job, onClose }) {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
+  useEffect(() => () => window.clearTimeout(feedbackTimerRef.current), [])
 
   const handleBackdrop = e => { if (e.target === ref.current) onClose() }
+  const triggerActionFeedback = action => {
+    setActiveAction(action)
+    window.clearTimeout(feedbackTimerRef.current)
+    feedbackTimerRef.current = window.setTimeout(() => setActiveAction(''), 460)
+  }
+  const reportActionClass = action => (
+    `text-button compact report-action-button ${activeAction === action ? 'is-clicked' : ''}`
+  )
+  const withActionFeedback = (action, handler) => event => {
+    triggerActionFeedback(action)
+    handler(event)
+  }
 
   const isError = job.status === 'error'
   const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : 'Running'
@@ -116,30 +131,30 @@ export default function ReportModal({ job, onClose }) {
 
           <div className="report-actions">
             {screenshotUrl && (
-              <button onClick={() => window.open(screenshotUrl, '_blank', 'noopener,noreferrer')} className="text-button compact" type="button" title="Open failure screenshot">
+              <button onClick={withActionFeedback('screenshot', () => window.open(screenshotUrl, '_blank', 'noopener,noreferrer'))} className={reportActionClass('screenshot')} type="button" title="Open failure screenshot">
                 <Camera size={16} />
                 Screenshot
               </button>
             )}
             {report.personas.length > 0 && (
-              <button onClick={exportCsv} className="text-button compact" type="button" title="Export personas as CSV">
+              <button onClick={withActionFeedback('export-csv', exportCsv)} className={reportActionClass('export-csv')} type="button" title="Export personas as CSV">
                 <FileSpreadsheet size={16} />
                 Export CSV
               </button>
             )}
             {report.profileJson && (
               <>
-                <button onClick={openJsonEditorWindow} className="text-button compact" type="button" title="View and edit profile JSON in a new window">
+                <button onClick={withActionFeedback('view-edit', openJsonEditorWindow)} className={reportActionClass('view-edit')} type="button" title="View and edit profile JSON in a new window">
                   <Pencil size={16} />
                   View & Edit
                 </button>
-                <button onClick={downloadProfile} className="text-button compact" type="button" title="Download profile JSON">
+                <button onClick={withActionFeedback('download', downloadProfile)} className={reportActionClass('download')} type="button" title="Download profile JSON">
                   <Download size={16} />
                   Download
                 </button>
               </>
             )}
-            <button onClick={copyReport} className="text-button compact" type="button">
+            <button onClick={withActionFeedback('copy', copyReport)} className={reportActionClass('copy')} type="button">
               <Copy size={16} />
               Copy
             </button>
@@ -942,6 +957,9 @@ function buildJsonEditorDocument(title, jsonText) {
     }
     .text-button {
       min-height: 34px;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -950,12 +968,53 @@ function buildJsonEditorDocument(title, jsonText) {
       background: #eef4ff;
       border: 0;
       border-radius: 8px;
+      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08), 0 6px 14px rgba(37, 99, 235, 0.08);
       font-size: 13px;
       font-weight: 800;
       cursor: pointer;
       white-space: nowrap;
+      transform: translateY(0) scale(1);
+      transition: transform 130ms ease, background-color 130ms ease, box-shadow 130ms ease, color 130ms ease;
     }
-    .text-button:hover { background: #dbeafe; }
+    .text-button:hover {
+      color: #1d4ed8;
+      background: #dbeafe;
+      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14), 0 10px 20px rgba(37, 99, 235, 0.14);
+      transform: translateY(-1px) scale(1.01);
+    }
+    .text-button:active,
+    .text-button.is-clicked {
+      color: #1e40af;
+      background: #c7ddff;
+      box-shadow: inset 0 2px 5px rgba(30, 64, 175, 0.18), 0 3px 8px rgba(37, 99, 235, 0.10);
+      transform: translateY(1px) scale(0.98);
+    }
+    .text-button::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: 0;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.24);
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.2);
+      pointer-events: none;
+    }
+    .text-button.is-clicked::after {
+      animation: button-pulse 460ms ease-out;
+    }
+    @keyframes button-pulse {
+      0% { opacity: 0.35; transform: translate(-50%, -50%) scale(0.2); }
+      70% { opacity: 0.16; }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(8); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .text-button { transition: none; }
+      .text-button.is-clicked::after { animation: none; }
+    }
     .json-editor-textarea {
       flex: 1;
       width: 100%;
@@ -986,10 +1045,19 @@ function buildJsonEditorDocument(title, jsonText) {
   </div>
   <script>
     const editor = document.getElementById('jsonEditor');
+    const showClick = (button) => {
+      button.classList.remove('is-clicked');
+      void button.offsetWidth;
+      button.classList.add('is-clicked');
+      window.clearTimeout(button.clickTimer);
+      button.clickTimer = window.setTimeout(() => button.classList.remove('is-clicked'), 460);
+    };
     document.getElementById('copyBtn').addEventListener('click', async () => {
+      showClick(document.getElementById('copyBtn'));
       await navigator.clipboard.writeText(editor.value);
     });
     document.getElementById('downloadBtn').addEventListener('click', () => {
+      showClick(document.getElementById('downloadBtn'));
       const blob = new Blob([editor.value], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

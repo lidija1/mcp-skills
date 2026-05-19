@@ -1943,6 +1943,75 @@ textarea.field { line-height: 1.45; }
   flex: 0 0 auto;
 }
 
+.report-action-button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08), 0 6px 14px rgba(37, 99, 235, 0.08);
+  transform: translateY(0) scale(1);
+  transition:
+    transform 130ms ease,
+    background-color 130ms ease,
+    box-shadow 130ms ease,
+    color 130ms ease;
+}
+
+.report-action-button svg {
+  transition: transform 130ms ease;
+}
+
+.report-action-button:hover {
+  color: #1d4ed8;
+  background: #dbeafe;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14), 0 10px 20px rgba(37, 99, 235, 0.14);
+  transform: translateY(-1px) scale(1.01);
+}
+
+.report-action-button:hover svg {
+  transform: translateY(-1px);
+}
+
+.report-action-button:active,
+.report-action-button.is-clicked {
+  color: #1e40af;
+  background: #c7ddff;
+  box-shadow: inset 0 2px 5px rgba(30, 64, 175, 0.18), 0 3px 8px rgba(37, 99, 235, 0.10);
+  transform: translateY(1px) scale(0.98);
+}
+
+.report-action-button::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.24);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.2);
+  pointer-events: none;
+}
+
+.report-action-button.is-clicked::after {
+  animation: report-action-pulse 460ms ease-out;
+}
+
+@keyframes report-action-pulse {
+  0% {
+    opacity: 0.35;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  70% {
+    opacity: 0.16;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(8);
+  }
+}
+
 .modal-close-button {
   width: 38px;
   height: 38px;
@@ -1957,6 +2026,17 @@ textarea.field { line-height: 1.45; }
 .modal-close-button:hover {
   color: #0f172a;
   background: #e2e8f0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-action-button,
+  .report-action-button svg {
+    transition: none;
+  }
+
+  .report-action-button.is-clicked::after {
+    animation: none;
+  }
 }
 
 .report-status {

@@ -212,6 +212,7 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "DriverStatus":       "Active (rated)",
   "EmploymentCategory": "Employed" | "Unemployed" | "Retired" | "Student",
   "SR22":               "Yes" | "No",
+  "SR22FilingState":    "Massachusetts",        // REQUIRED when SR22="Yes"; otherwise omit
   "Occupation":         "Day Care",
   "LicenseStatus":      "Active License" | "Suspended" | "Revoked",
   "VehicleType":        "Private Passenger Auto",

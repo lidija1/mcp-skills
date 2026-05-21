@@ -414,6 +414,19 @@ If records appear locked:
 - Wait for OneShield session timeout.
 - Use an admin session/lock release tool if one exists.
 
+## fast_mode
+
+`run_captured_auto_flow` accepts `fast_mode=True` which skips all `FieldProcessorServlet` events in the main replay loop. Validated 2026-05-21 for `stop_after="rate"`:
+
+```
+normal:    32s  42 requests  completed=True  premium='$ 2,049.45'
+fast_mode: 23s  25 requests  completed=True  premium='$ 2,049.45'
+```
+
+All 17 FieldProcessorServlet calls in the main loop (including TX-named vehicle cascade and driver handlers) were redundant — GatewayServlet payloads already carry the complete field values. The remaining ~23s is server-side GatewayServlet processing: two setup calls (~2.5s and ~3.2s) and the rate computation (~5.1s). These cannot be reduced from the client.
+
+`fast_mode` has not yet been validated for `stop_after` stages beyond `rate`. Validate before enabling it for `request-issue`, `verify-billing`, or `bind`.
+
 ## Recommended Next Improvements
 
 - Add a true dry-run mode that logs generated live-substituted forms without posting them.

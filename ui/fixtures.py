@@ -9,6 +9,7 @@ from ui.pages.common.login_page import LoginPage
 from ui.pages.common.new_quote_page import NewQuotePage
 from ui.pages.common.customer_page import CustomerPage
 from ui.pages.common.policy_summary_page import PolicySummary
+from ui.pages.common.contact_information_page import ContactInformationPage
 
 # Auto insurance page fixtures
 from ui.pages.common.quote_registration_page import QuoteRegistrationPage
@@ -84,6 +85,12 @@ def new_quote_page(page):
 def customer_page(page):
     """Customer page for creating and managing customers."""
     return CustomerPage(page)
+
+
+@pytest.fixture
+def contact_information_page(page):
+    """Contact Information page for post-UW contact permission capture."""
+    return ContactInformationPage(page)
 
 
 # ============================================================================

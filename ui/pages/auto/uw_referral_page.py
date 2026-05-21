@@ -46,6 +46,70 @@ class UWReferralPage(BasePage):
         cells = self.page.get_by_role("gridcell").all()
         return [cell.inner_text().strip() for cell in cells if cell.inner_text().strip()]
 
+    def can_be_overridden(self, timeout: int = 5_000) -> bool:
+        """Return True if every UW condition row has an editable Overridden? cell."""
+        self._wait_for_uw_page(timeout=timeout)
+        return self.page.evaluate("""
+            () => {
+                const rows = document.querySelectorAll('[id^="gridview"] tr.x-grid-row');
+                if (!rows.length) return false;
+                return [...rows].every(row => {
+                    const cells = row.querySelectorAll('td');
+                    const last = cells[cells.length - 1];
+                    return last && !last.classList.contains('gridCellReadOnly');
+                });
+            }
+        """)
+
+    @allure.step("Override all UW conditions and accept")
+    def override_all_and_accept(self, comment: str = "Approved by underwriter - risk accepted.") -> None:
+        """
+        Set Overridden?=Yes and fill comments for every row, then click >>> Accept.
+
+        Precondition: can_be_overridden() must return True for all rows.
+        After this returns the page has navigated past the UW referral screen.
+        Raises RuntimeError if accept is blocked and page remains on UW referral.
+        """
+        self._wait_for_uw_page()
+        row_count: int = self.page.evaluate(
+            "() => document.querySelectorAll('[id^=\"gridview\"] tr.x-grid-row').length"
+        )
+        for i in range(row_count):
+            self._set_overridden_yes(i)
+
+            # Open the Underwriter's Comments cell (second-to-last column) and fill it
+            self.page.evaluate(f"""() => {{
+                const row = document.querySelectorAll('[id^="gridview"] tr.x-grid-row')[{i}];
+                const cells = row.querySelectorAll('td');
+                cells[cells.length - 2].click();
+            }}""")
+            self.page.wait_for_function(
+                "() => document.activeElement && document.activeElement.tagName === 'TEXTAREA'",
+                timeout=3_000,
+            )
+            self.page.evaluate(
+                "(c) => {"
+                " const ta = document.activeElement; ta.value = c;"
+                " ta.dispatchEvent(new Event('input', {bubbles: true}));"
+                " ta.dispatchEvent(new Event('change', {bubbles: true})); }",
+                comment,
+            )
+            self.page.keyboard.press("Tab")
+            self.page.wait_for_timeout(300)
+
+        # Click >>> accept
+        self.smart_click(self.page.get_by_role("button", name=">>> accept"))
+        # Confirm dialog
+        ok_btn = self.page.get_by_role("button", name="OK")
+        ok_btn.wait_for(state="visible", timeout=5_000)
+        ok_btn.click()
+        self.wait_for_loader_to_disappear()
+
+        if self.is_visible(timeout=3_000):
+            raise RuntimeError(
+                "UW accept was blocked — not all conditions could be overridden."
+            )
+
     @allure.step("Assert UW condition: type='{uw_type}', condition contains='{expected_condition}'")
     def assert_uw_condition(self, uw_type: str, expected_condition: str) -> None:
         """
@@ -91,6 +155,63 @@ class UWReferralPage(BasePage):
     def _wait_for_uw_page(self, timeout: int = 20_000) -> None:
         """Wait until the UW referral breadcrumb is visible in the toolbar."""
         self._uw_breadcrumb.first.wait_for(state="visible", timeout=timeout)
+
+    def _set_overridden_yes(self, row_index: int) -> None:
+        """Set the grid row's Overridden? editor to Yes and verify it committed."""
+        self.page.evaluate(f"""() => {{
+            const row = document.querySelectorAll('[id^="gridview"] tr.x-grid-row')[{row_index}];
+            const cells = row.querySelectorAll('td');
+            cells[cells.length - 1].querySelector('div').click();
+        }}""")
+
+        editor = self.page.locator(".x-grid-editor input").last
+        editor.wait_for(state="visible", timeout=3_000)
+        editor.click()
+
+        try:
+            self.page.keyboard.press("ArrowDown")
+            self.page.wait_for_function(
+                """() => [...document.querySelectorAll('.x-boundlist-item')]
+                    .some(el => {
+                        const r = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        return r.width > 0 && r.height > 0
+                            && style.visibility !== 'hidden'
+                            && style.display !== 'none'
+                            && el.textContent.trim() === 'Yes';
+                    })""",
+                timeout=3_000,
+            )
+            self.page.evaluate(
+                """() => {
+                    const items = [...document.querySelectorAll('.x-boundlist-item')];
+                    const visible = items.filter(el => {
+                        const r = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        return r.width > 0 && r.height > 0
+                            && style.visibility !== 'hidden'
+                            && style.display !== 'none';
+                    });
+                    const yes = visible.find(el => el.textContent.trim() === 'Yes');
+                    if (!yes) throw new Error('Yes option not found for UW override editor.');
+                    yes.click();
+                }"""
+            )
+        except Exception:
+            editor.fill("Yes")
+            editor.press("Enter")
+
+        self.page.wait_for_function(
+            """(rowIndex) => {
+                const row = document.querySelectorAll('[id^="gridview"] tr.x-grid-row')[rowIndex];
+                if (!row) return false;
+                const cells = row.querySelectorAll('td');
+                const text = cells[cells.length - 1]?.innerText?.trim();
+                return text === 'Yes';
+            }""",
+            arg=row_index,
+            timeout=5_000,
+        )
 
     def _dump_gridcells(self) -> str:
         """Return text content of every visible gridcell for assertion failure output."""

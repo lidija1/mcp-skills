@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "policy-flow-generator",
+    "uw-rules-validator"
+  ]
+}

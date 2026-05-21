@@ -671,6 +671,192 @@ Add confirmed behavior below as exploration progresses.
 - Existing replay uses a captured happy-path Auto shape and simple test-data substitution. Broader data variation still needs validation before treating it as a generic Auto API.
 - The captured traffic did not include a logout/unlock endpoint; UI exit/logout or OneShield session timeout may still be needed to release visible locks.
 
+### 2026-05-21 - Personal Auto UW Referral Override Interaction
+
+**Context**
+- LOB: Personal Auto
+- Scenario: Live DOM probe on Jacob Smith quote (3 conditions: under-25, SR-22, revoked license)
+- Goal: Understand exact mechanics for overriding soft UW conditions so the policy flow can continue to bind.
+
+**Confirmed Behavior**
+- The UW Issues grid has 6 columns: ASSET | CONDITION | TYPE | PRODUCER/SUB-PRODUCER COMMENTS | UNDERWRITER'S COMMENTS* | OVERRIDDEN?*
+- `OVERRIDDEN?*` is the last column (`x-grid-cell-last`). Its `<td>` carries `gridCellEditable` when the current user can override that condition, or `gridCellReadOnly` when they cannot.
+- `gridCellReadOnly` on the Overridden? cell means the application fully blocks the editor from opening for that row — it is not a Playwright interaction issue. The current user lacks the authority level to clear that condition.
+- `UNDERWRITER'S COMMENTS*` is the second-to-last column. Its `<td>` always carries `gridCellMandatory gridCellEditable` — a comment is required before accept.
+- Clicking the `div` inside an editable Overridden? cell opens a standard HTML `<select>` (not an ExtJS boundlist). Options: `- Select -`, `Yes`, `No`. Use `page.get_by_role("option", name="Yes").click()` after opening.
+- Clicking the Comments cell activates a `<textarea>`. Fill via JS: `document.activeElement.value = comment` + dispatch `input` and `change` events.
+- `>>> accept` button is visible as `page.get_by_role("button", name=">>> accept")`.
+- Clicking `>>> accept` when all rows are not yet set to `Yes` shows dialog: _"You must override every underwriting trigger before accepting this transaction. If the override flag is grayed out, you do not have the authority to clear this..."_
+- When all rows are set correctly, clicking `>>> accept` shows a confirmation dialog (`OK` button). After OK, the app navigates away from the UW referral screen.
+- Jacob Smith's quote could NOT be fully overridden because the revoked-license condition row had `gridCellReadOnly` on the Overridden? cell.
+
+**Stable Selectors / Methods**
+- Check editability via JS: `document.querySelectorAll('[id^="gridview"] tr.x-grid-row')` → for each row, check `cells[cells.length - 1].classList.contains('gridCellReadOnly')`.
+- `can_be_overridden()` returns True only when NO row has `gridCellReadOnly` on the last cell.
+- `override_all_and_accept(comment)` iterates all rows, JS-clicks the last cell `div`, selects "Yes" option, JS-clicks the second-to-last cell, fills the textarea, then clicks `>>> accept` and confirms the dialog.
+- Both methods live in `ui/pages/auto/uw_referral_page.py`.
+
+**Runner Integration**
+- `auto_runner.py` step 9: if UW referral is visible after rating, call `_try_uw_override()`. If override succeeds, fall through to `_create_policy_or_uw()` → bind. If not overridable, record `uw_referral` outcome with note "not overridable by current user".
+- `_create_policy_or_uw()` mid-flow UW checks still return early as `uw_referral` (not extended with override logic yet — this is a safe starting point since override logic in the mid-bind path needs separate validation).
+
+**Known Failed Approaches**
+- Attempt: Click `>>> accept` after overriding only 2 of 3 rows (revoked-license row was read-only).
+- Symptom: Dialog blocked with "must override every underwriting trigger" error.
+- Replacement: `can_be_overridden()` pre-checks ALL rows before attempting override; if any row is read-only, skip override and return `uw_referral` immediately.
+
+**Open Questions**
+- Are there test personas whose conditions are ALL editable (none read-only)? A clean soft-UW profile with 1–2 overridable conditions is needed to validate the full override→bind path end to end.
+- Does `_create_policy_or_uw()`'s mid-flow UW detection also need override logic? Currently it terminates early; this can be extended once the step-9 path is validated.
+
+### 2026-05-21 - Personal Auto SR-22 UW Override Headed Probe
+
+**Context**
+- LOB: Personal Auto
+- Scenario: `python tools\probe_uw_override.py --persona sr22 --headed --slow-mo 500 --hold-ms 30000 --skip-runner`
+- Test data: in-memory `PROBE_SR22` persona in `tools/probe_uw_override.py`
+
+**Confirmed Behavior**
+- The live headed probe reached a one-row SR-22 UW referral after rating.
+- The row's `OVERRIDDEN?*` cell was editable and `UWReferralPage.can_be_overridden()` returned `True`.
+- `UWReferralPage.override_all_and_accept()` successfully set `Overridden?` to `Yes`, filled the underwriter comment, clicked `>>> accept`, confirmed `OK`, and navigated away from the UW referral page.
+- This headed probe used `--skip-runner`, so it validated the manual override/accept interaction but did not run the subsequent full bind path.
+
+**Stable Selectors / Methods**
+- `OVERRIDDEN?*` uses an ExtJS grid cell editor, not a native HTML `<select>`, in this SR-22 case.
+- Activate the last grid cell, target `.x-grid-editor input`, open the visible `.x-boundlist-item` menu, select exact option text `Yes`, and verify the last cell text commits to `Yes`.
+- `tools/probe_uw_override.py` now supports `--headed`, `--slow-mo`, `--hold-ms`, and `--skip-runner` for watchable UW debugging.
+
+**Required Waits**
+- Wait until the committed grid cell text is `Yes` before moving to the comments cell.
+- Hold the headed browser open after the probe when visual inspection is needed.
+
+**Known Failed Approaches**
+- Attempt: Treat the `OVERRIDDEN?*` editor as a visible native `<select>`.
+- Symptom: `override_all_and_accept()` raised `RuntimeError: Could not find visible <select> for Overridden? cell on row 0`.
+- Replacement: Use the ExtJS grid editor input plus visible bound-list option selection, then verify the cell text changed to `Yes`.
+
+**Open Questions**
+- Full runner validation still needs to confirm the accepted SR-22 UW referral can continue through request issue, billing, and bind.
+
+### 2026-05-21 - Personal Auto SR-22 Filing State
+
+**Context**
+- LOB: Personal Auto
+- Page: Driver Information
+- Scenario: headed SR-22 probe after `Certificate of Insurance Required? = Yes`
+
+**Confirmed Behavior**
+- Selecting `Certificate of Insurance Required? = Yes` reveals a conditional `SR-22 Filing State` combobox on Driver Information.
+- Existing tests/data previously did not handle this field; `DriverInfoPage` only answered the SR-22 radio and continued.
+- The live headed probe passed Driver Info after selecting `SR-22 Filing State = Massachusetts`, reached UW, accepted the UW override, completed Contact Information with Email permission, and clicked re-rate.
+
+**Stable Selectors / Methods**
+- `DriverInfoPage.set_sr22_required(data)` now waits for the conditional filing-state field when `SR22` is `Yes`.
+- `DriverInfoPage.set_sr22_filing_state(data)` selects `data["SR22FilingState"]`, `data["SR-22 Filing State"]`, `data["State"]`, or falls back to `Massachusetts`.
+- The probe persona now explicitly includes `SR22FilingState = Massachusetts`.
+- AI-generated Auto personas should include `SR22FilingState` when `SR22 = Yes`.
+
+**Required Waits**
+- Wait for the `SR-22 Filing State` combobox to become visible after answering the SR-22 radio.
+- Use the shared ExtJS option selector for the filing-state combobox.
+
+**Known Failed Approaches**
+- Attempt: Answer SR-22 Yes and immediately save or navigate to Vehicle Info.
+- Symptom: The conditional filing-state field remained unfilled and blocked the SR-22 flow.
+- Replacement: Fill `SR-22 Filing State` before Driver Info save/navigation.
+
+**Open Questions**
+- None for the isolated SR-22 probe; full bind validation after re-rate is still separate.
+
+### 2026-05-21 - Personal Auto Overridable UW Override BDD Outline
+
+**Context**
+- LOB: Personal Auto
+- Scenario: `ui/tests/auto_uw_rules/test_auto_uw_rules.py::test_overridable_uw_referral_to_bind`
+- Feature: `ui/features/auto/auto_uw_rules.feature`
+- Test data: `testdata/static/auto/AutoUWRulesData.json`, `UW_TC_001`, `UW_TC_003`, and `UW_TC_005`
+
+**Confirmed Behavior**
+- A dedicated BDD scenario outline now covers confirmed overridable UW continuation paths: quote creation, UW referral assertion, UW override/accept, Contact Information Email permission, re-rate, normal request issue/delivery/billing/bind, and policy summary extraction.
+- The outline includes SR-22-only (`UW_TC_001`), under-25-only (`UW_TC_003`), and combined SR-22 + under-25 (`UW_TC_005`).
+- The expected condition cell supports semicolon-separated condition substrings so combined UW cases can verify multiple rows.
+- Pytest collection confirmed both examples and all step definitions resolve without launching a browser.
+
+**Stable Selectors / Methods**
+- UW override uses `UWReferralPage.override_all_and_accept()`.
+- Post-UW Contact Information uses `ContactInformationPage.complete_email_permission_if_visible()`.
+- Re-rate uses `CreatePolicyPage.click_re_rate_if_visible()`.
+- Normal bind tail reuses the existing `When I create a policy from the quote` step.
+
+**Required Waits**
+- Reuse each page object's existing app-ready waits after UW accept, contact save/next, re-rate, request issue, next, next, and bind.
+
+**Known Failed Approaches**
+- None for scenario binding/collection.
+
+**Open Questions**
+- The scenario has not yet been run live through final bind in this session; collection only was used to avoid creating another live bound policy without explicit confirmation.
+
+### 2026-05-21 - Personal Auto Under-25 UW Override Probe
+
+**Context**
+- LOB: Personal Auto
+- Scenario: `python tools\probe_uw_override.py --persona under25 --headed --slow-mo 500 --hold-ms 30000 --skip-runner`
+- Test data: in-memory `PROBE_UNDER25` persona in `tools/probe_uw_override.py`
+
+**Confirmed Behavior**
+- The live headed probe reached a one-row under-25 UW referral after rating.
+- The visible condition was `All drivers under 25 years of age.`
+- The row's `OVERRIDDEN?*` cell was editable and `UWReferralPage.can_be_overridden()` returned `True`.
+- `UWReferralPage.override_all_and_accept()` successfully accepted the UW referral.
+- The post-UW sequence matched the SR-22-only flow through re-rate: Contact Information appeared, Email contact permission was selected/saved, the page continued, and `re-rate` was visible and clicked successfully.
+- This probe used `--skip-runner` and did not continue through final bind.
+
+**Stable Selectors / Methods**
+- The same UW override method used for SR-22 also works for the under-25 row.
+- The same Contact Information and re-rate methods work after accepting the under-25 referral.
+
+**Required Waits**
+- Reuse the established waits: commit `Overridden? = Yes`, fill comment, accept/OK, Contact Information save/next, then re-rate.
+
+**Known Failed Approaches**
+- None in the headed under-25 probe.
+
+**Open Questions**
+- Final bind after under-25 re-rate has not been run live in this session.
+
+### 2026-05-21 - Personal Auto SR-22 Plus Under-25 UW Override Probe
+
+**Context**
+- LOB: Personal Auto
+- Scenario: `python tools\probe_uw_override.py --persona sr22-under25 --headed --slow-mo 500 --hold-ms 30000 --skip-runner`
+- Test data: in-memory `PROBE_SR22_UNDER25` persona in `tools/probe_uw_override.py`
+
+**Confirmed Behavior**
+- The live headed probe reached a two-row UW referral after rating.
+- Visible conditions were `SR-22 / Certificate of Insurance Indicator is checked` and `All drivers under 25 years of age.`
+- Both rows had editable `OVERRIDDEN?*` cells and `UWReferralPage.can_be_overridden()` returned `True`.
+- Initial two-row override attempt failed because moving to the next row could cancel the prior comment editor before it committed.
+- After committing each underwriter comment with `Tab`, `UWReferralPage.override_all_and_accept()` successfully accepted both rows.
+- The post-UW sequence matched the SR-22-only and under-25-only flows through re-rate: Contact Information appeared, Email contact permission was selected/saved, the page continued, and `re-rate` was visible and clicked successfully.
+- This probe used `--skip-runner` and did not continue through final bind.
+
+**Stable Selectors / Methods**
+- `override_all_and_accept()` must commit each row comment before editing the next UW row.
+- The same ExtJS override cell editor and Contact Information/re-rate methods work for multi-row UW grids.
+
+**Required Waits**
+- After filling each underwriter comment textarea, press `Tab` and wait briefly so OneShield commits the grid edit before moving to the next row.
+
+**Known Failed Approaches**
+- Attempt: Fill row comments and immediately move to the next override cell.
+- Symptom: `>>> accept` was blocked with `UW accept was blocked — not all conditions could be overridden.`
+- Replacement: Commit each comment edit before continuing to the next row.
+
+**Open Questions**
+- Final bind after combined SR-22 + under-25 re-rate has not been run live in this session.
+
 ### Template
 
 **Context**

@@ -14,6 +14,10 @@ class DriverInfoPage(BasePage):
         self.employment = page.get_by_role("combobox", name="Employment Category")
         self.occupation = page.get_by_role("combobox", name="Occupation")
         self.licence = page.get_by_role("combobox", name="License Status*")
+        self.sr22_filing_state = page.get_by_role(
+            "combobox",
+            name=re.compile(r"SR-?22 Filing State", re.I),
+        )
         self.save_button = page.get_by_role("button", name="save changes")
         self.tree_vehicle_info = page.get_by_role("link", name="Vehicle_1")
 
@@ -56,7 +60,31 @@ class DriverInfoPage(BasePage):
 
     def set_sr22_required(self, data):
         """Answer SR22 required question."""
-        self.answer_question("Certificate of Insurance Required?", data["SR22"])
+        answer = data.get("SR22", "No")
+        self.with_optional_oneshield_response(
+            lambda: self.answer_question("Certificate of Insurance Required?", answer),
+            url_parts=["FieldProcessorServlet"],
+        )
+        self.wait_for_app_ready()
+        if str(answer).strip().lower() == "yes":
+            self.set_sr22_filing_state(data)
+
+    def set_sr22_filing_state(self, data):
+        """Set the conditional SR-22 Filing State field."""
+        filing_state = (
+            data.get("SR22FilingState")
+            or data.get("SR-22 Filing State")
+            or data.get("State")
+            or "Massachusetts"
+        )
+        self.sr22_filing_state.first.wait_for(state="visible", timeout=10_000)
+        self.select_extjs_option(
+            self.sr22_filing_state.first,
+            filing_state,
+            wait_for_response=True,
+            url_parts=["FieldProcessorServlet"],
+        )
+        self.wait_for_app_ready()
 
     def set_defensive_driver(self, data):
         """Answer defensive driver course question if present on the page."""

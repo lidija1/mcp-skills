@@ -35,9 +35,14 @@ from utils.file_writer import save_summary_to_csv
 load_dotenv()
 
 
-DEFAULT_CAPTURE = Path("reports/auto_api_flow_TC_ID_0001_20260519.json")
+def _latest_capture_file() -> Path:
+    candidates = sorted((ROOT_DIR / "reports").glob("auto_api_flow_TC_ID_0001_*.json"))
+    return candidates[-1] if candidates else ROOT_DIR / "reports" / "auto_api_flow_TC_ID_0001_20260519.json"
+
+
+DEFAULT_CAPTURE = _latest_capture_file()
 DEFAULT_BASE_URL = "https://inforcedev.oneshield.com"
-DEFAULT_PAYLOAD_EXPORT = Path("api_tests/artifacts/auto_rate_bind_payloads_20260519.json")
+DEFAULT_PAYLOAD_EXPORT = ROOT_DIR / "api_tests" / "artifacts" / "auto_rate_bind_payloads_latest.json"
 DEFAULT_AUTO_DATA = Path("testdata/static/auto/AutoData.json")
 FIELD_VAR_PATTERN = re.compile(r"\bbv_(\d{6,})_([A-Za-z0-9p]+)\b")
 
@@ -198,16 +203,22 @@ class OneShieldApiReplay:
         test_data: dict[str, Any],
         stop_after: str = "rate",
         allow_bind: bool = False,
+        fast_mode: bool = False,
     ) -> dict[str, Any]:
         """Run the captured Personal Auto API flow with current session state.
 
         This is not a generic OneShield API yet. It replays the known-good
         captured Auto flow, substitutes simple test-data values, and refreshes
         stateful OneShield values after each response.
+
+        fast_mode skips FieldProcessorServlet events in the main replay loop.
+        GatewayServlet payloads already carry all field values, so the intermediate
+        field-echo posts are typically redundant. Validated safe for stop_after=rate.
         """
         if stop_after == "bind" and not allow_bind:
             raise ValueError("Binding is disabled by default. Pass allow_bind=True only for deliberate bind tests.")
 
+        self.replay_trace = []
         self.login()
         response_by_stage: dict[str, requests.Response] = {}
         stop_events = {
@@ -220,7 +231,7 @@ class OneShieldApiReplay:
         target = stop_events[stop_after]
         blocked_reason = ""
 
-        for event in self._auto_replay_events():
+        for event in self._auto_replay_events(skip_field_processor=fast_mode):
             tx_name = self._event_tx_name(event)
             if event.get("page") == "auto_new_quote" and tx_name == "Action.3":
                 continue
@@ -376,14 +387,15 @@ class OneShieldApiReplay:
             and event["request"]["path"].startswith("/oneshield/FieldProcessorServlet")
         ]
 
-    def _auto_replay_events(self) -> list[dict[str, Any]]:
-        return [
+    def _auto_replay_events(self, skip_field_processor: bool = False) -> list[dict[str, Any]]:
+        _fp_path = "/oneshield/FieldProcessorServlet"
+        events = [
             event
             for event in self.capture["events"]
             if event.get("kind") == "api_call"
             and event.get("request", {}).get("method") == "POST"
             and event.get("request", {}).get("path", "").split("?")[0]
-            in {"/oneshield/GatewayServlet", "/oneshield/FieldProcessorServlet"}
+            in {"/oneshield/GatewayServlet", _fp_path}
             and event.get("page")
             in {
                 "auto_new_quote",
@@ -399,6 +411,9 @@ class OneShieldApiReplay:
                 "auto_verify_billing",
             }
         ]
+        if skip_field_processor:
+            return [e for e in events if e.get("request", {}).get("path", "").split("?")[0] != _fp_path]
+        return events
 
     def _event_tx_name(self, event: dict[str, Any]) -> str:
         return self._parse_form(event["request"].get("post_data")).get("TX_NAME", "")
@@ -936,6 +951,11 @@ def load_auto_test_data(path: str | Path, tc_id: str) -> dict[str, Any]:
         if row.get("TC_ID") == tc_id:
             return row
     raise LookupError(f"No auto test data row found for TC_ID={tc_id!r} in {path}")
+
+
+def load_all_auto_tc_ids(path: str | Path = DEFAULT_AUTO_DATA) -> list[str]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [row["TC_ID"] for row in data.get("testCases", []) if "TC_ID" in row]
 
 
 if __name__ == "__main__":

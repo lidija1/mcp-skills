@@ -5,7 +5,8 @@ import PolicyPanel from './components/PolicyPanel'
 import JobsPanel from './components/JobsPanel'
 import ChatPanel from './components/ChatPanel'
 import ReportModal from './components/ReportModal'
-import DashboardLogin from './components/DashboardLogin'
+import LoginPage from './components/LoginPage';
+
 import { api } from './utils/api'
 import {
   AlertTriangle,
@@ -56,10 +57,13 @@ export default function App() {
   const [jobs, setJobs] = useState(() => loadStoredJobs())
   const [jobPopups, setJobPopups] = useState([])
   const [backendOk, setBackendOk] = useState(null)
-  const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
+  const [dashboardUser, setDashboardUser] = useState('')
+  // const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
   const [selectedJob, setSelectedJob] = useState(null)
   const [showHelp, setShowHelp] = useState(false)
   const previousJobStatusRef = useRef(null)
+
+  console.log("dashboardUser:", dashboardUser)
 
   useEffect(() => {
     api.health()
@@ -185,9 +189,13 @@ export default function App() {
     setDashboardUser('')
   }, [])
 
-  if (!dashboardUser) {
-    return <DashboardLogin onLogin={login} />
-  }
+if (!dashboardUser) {
+  return (
+    <div>
+      <LoginPage onLogin={login} />
+    </div>
+  )
+}
 
   return (
     <div className="app-shell">

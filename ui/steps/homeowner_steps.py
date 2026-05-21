@@ -189,8 +189,14 @@ def ho_coverage_info_uw(page, homeowner_coverage_page, homeowner_bind_informatio
 def assert_uw_condition_present(uw_referral_page, uw_type, expected_condition, log):
     allure.dynamic.parameter("UW Type", uw_type)
     allure.dynamic.parameter("Triggered Condition", expected_condition)
-    log.info(f"Asserting UW condition: type='{uw_type}', contains='{expected_condition}'")
-    uw_referral_page.assert_uw_condition(uw_type, expected_condition)
+    expected_conditions = [
+        condition.strip()
+        for condition in expected_condition.split(";")
+        if condition.strip()
+    ]
+    log.info(f"Asserting UW condition(s): type='{uw_type}', contains={expected_conditions}")
+    for condition in expected_conditions:
+        uw_referral_page.assert_uw_condition(uw_type, condition)
     log.info("UW condition assertion passed.")
 
 

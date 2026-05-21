@@ -781,6 +781,7 @@ Add confirmed behavior below as exploration progresses.
 - A dedicated BDD scenario outline now covers confirmed overridable UW continuation paths: quote creation, UW referral assertion, UW override/accept, Contact Information Email permission, re-rate, normal request issue/delivery/billing/bind, and policy summary extraction.
 - The outline includes SR-22-only (`UW_TC_001`), under-25-only (`UW_TC_003`), and combined SR-22 + under-25 (`UW_TC_005`).
 - The expected condition cell supports semicolon-separated condition substrings so combined UW cases can verify multiple rows.
+- The same UW assertion step text is registered in both auto and homeowner step modules, so semicolon-separated condition handling must stay consistent in both modules and in `UWReferralPage.assert_uw_condition()`.
 - Pytest collection confirmed both examples and all step definitions resolve without launching a browser.
 
 **Stable Selectors / Methods**
@@ -793,7 +794,9 @@ Add confirmed behavior below as exploration progresses.
 - Reuse each page object's existing app-ready waits after UW accept, contact save/next, re-rate, request issue, next, next, and bind.
 
 **Known Failed Approaches**
-- None for scenario binding/collection.
+- Attempt: Let only the auto step split semicolon-separated expected conditions.
+- Symptom: Depending on pytest-bdd plugin registration order, the shared homeowner step could receive the auto UW assertion and pass the whole string to the page object, producing a gridcell locator for `SR-22 ...; All drivers under 25...`.
+- Replacement: Split combined expected conditions in both shared step definitions and defensively inside `UWReferralPage.assert_uw_condition()`.
 
 **Open Questions**
 - The scenario has not yet been run live through final bind in this session; collection only was used to avoid creating another live bound policy without explicit confirmation.

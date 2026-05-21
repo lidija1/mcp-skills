@@ -121,6 +121,16 @@ class UWReferralPage(BasePage):
         Raises:
             AssertionError: with a dump of all gridcell texts for debugging.
         """
+        if ";" in expected_condition:
+            expected_conditions = [
+                condition.strip()
+                for condition in expected_condition.split(";")
+                if condition.strip()
+            ]
+            for condition in expected_conditions:
+                self.assert_uw_condition(uw_type, condition)
+            return
+
         self._wait_for_uw_page()
 
         condition_cell = self.page.get_by_role("gridcell").filter(has_text=expected_condition)

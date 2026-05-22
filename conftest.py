@@ -87,6 +87,12 @@ def pytest_addoption(parser):
         default=False,
         help="Include static browser resources in --api-flow-map output"
     )
+    parser.addoption(
+        "--update-premium-baselines",
+        action="store_true",
+        default=False,
+        help="Capture live premiums and write them to premium_baselines.json instead of asserting.",
+    )
 
 # -------------------------
 # Logger

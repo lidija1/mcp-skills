@@ -89,6 +89,12 @@ Optional base URL override:
 ONESHIELD_BASE_URL=https://inforcedev.oneshield.com
 ```
 
+The replay client also accepts an application URL such as
+`https://inforcedev.oneshield.com/oneshield/`. Captured request paths that
+start with `/` stay origin-relative, so `/splash.html` is requested from the
+host root while `/oneshield/...` requests stay under the OneShield servlet
+path.
+
 `USERNAMEE` is intentionally spelled with a double `E`; keep that name.
 
 ## Login Flow
@@ -224,6 +230,12 @@ Run to rate:
 python api_tests\oneshield_api_replay.py --action run-auto --stop-after rate --tc-id TC_ID_0011 --allow-live-create
 ```
 
+Run through rate and open Rating Detail:
+
+```powershell
+python api_tests\oneshield_api_replay.py --action run-auto --stop-after rating-detail --tc-id TC_ID_0011 --allow-live-create
+```
+
 Run to request issue:
 
 ```powershell
@@ -293,6 +305,8 @@ result = client.run_captured_auto_flow(
   "messages": [],
   "trace": [],
   "summary": {},
+  "ui_data": {},
+  "stage_ui_data": {},
   "report_path": "policy_summary\\policy_reports_api_auto.csv"
 }
 ```
@@ -306,6 +320,115 @@ result = client.run_captured_auto_flow(
 - resulting page name
 - workflow context
 - OneShield messages
+
+## UI Data Snapshots
+
+OneShield Gateway responses contain the UI model in `pageJSON.layout`. The
+replay result exposes the assertable part of that model without returning raw
+session-bearing `pageJSON` internals:
+
+- `ui_data`: visible fields, lookup display values, page actions, tabs, and
+  messages for the final page reached.
+- `stage_ui_data`: the same snapshot for each reached replay checkpoint such
+  as `rate`, `rating-detail`, `request-issue`, `verify-billing`, and
+  `bind`.
+
+Example after a rate stop:
+
+```python
+result = oneshield_api_client.run_captured_auto_flow(test_data, stop_after="rate")
+
+rate_ui = result["stage_ui_data"]["rate"]
+assert rate_ui["page_name"] == "premium | summary"
+assert rate_ui["field_values"]["Premium"]
+assert rate_ui["field_values"]["Surcharges"] == ["$ 0.00"]
+```
+
+`fields` keeps both the raw cell `value` and the UI-facing `display_value`.
+That matters for OneShield lookups, where the response may store a code such
+as `1` while the UI shows `Direct Billed`.
+
+Only fields exposed by the page reached at that checkpoint are present. The
+captured rate checkpoint reaches the Premium Summary page, which exposes
+premium summary fields and a `rating detail` tab. Use
+`stop_after="rating-detail"` to post that live tab action and inspect or
+assert `result["stage_ui_data"]["rating-detail"]`.
+
+Rating Detail uses a OneShield grid instead of plain label/value fields. Its
+rows are under `result["stage_ui_data"]["rating-detail"]["grids"]`, keyed by
+UI column names:
+
+```python
+detail_ui = result["stage_ui_data"]["rating-detail"]
+rating_grid = detail_ui["grids"][0]
+base_rate_rows = [row for row in rating_grid["rows"] if row.get("Factor") == "Base Rate"]
+
+assert base_rate_rows
+assert base_rate_rows[0]["F.Value"]
+```
+
+The snapshot omits OneShield object and row identifiers from grid rows.
+Live validation on May 22, 2026 reached `premium | rating detail` for
+`TC_ID_0011` and returned the `premium debug information` grid with `Base
+Rate` rows for Bodily Injury and Property Damage. OneShield loaded 25 rows in
+that first response while the grid reported 124 total rows, so pagination is
+still needed when assertions require later Rating Detail rows.
+
+## API UW Rules Checks
+
+UW API assertions use the same visible page model as the UI assertions. A
+positive UW test runs a rule case to `stop_after="rate"` and asserts the
+Underwriting Referral grid rows from `stage_ui_data["rate"]`:
+
+```python
+result = oneshield_api_client.run_captured_auto_flow(test_data, stop_after="rate")
+uw_ui = result["stage_ui_data"]["rate"]
+
+assert "underwriting" in uw_ui["page_name"].lower()
+assert any(
+    row.get("Type") == "Underwriting"
+    and "All drivers under 25 years of age" in row.get("Condition", "")
+    for grid in uw_ui["grids"]
+    for row in grid["rows"]
+)
+```
+
+`api_tests/test_oneshield_api_uw_rules.py` parametrizes the positive Auto UW
+matrix from `AutoUWRulesData.json`: SR-22, suspended/revoked license,
+under-25, and the combined cases. The replay resolves the live OneShield
+lookup codes from driver-field labels such as `License Status` and
+`SR-22/ Certificate of Insurance Required?` before it posts the captured
+forms. It also records the UW page as the `rate` checkpoint when OneShield
+redirects to Underwriting Referral before the captured Rate Quote action
+finishes.
+
+Leased and other non-owned vehicle data also needs a Loss Payee / Additional
+Interest row before vehicle save. The API replay now reads that block's live
+`Add` button metadata, posts its block object references, and fills the row's
+`Interest Type` and `Loss Payee/Additional Interest Name` fields from the live
+layout before the normal vehicle save action. Current live traffic identifies
+that Add action as `Action.189`.
+
+Live validation on May 22, 2026 passed the full 14-case positive Auto UW API
+matrix:
+
+```powershell
+pytest api_tests\test_oneshield_api_uw_rules.py -v -s -m api -k uw_referral_snapshot_matches_ui_rule
+```
+
+After the leased Loss Payee Add replay was added, focused live validation also
+passed the two leased UW cases, `UW_TC_008` and `UW_TC_010`.
+
+The same test module contains a guarded clean-flow bind assertion for the data
+available after rate, request issue, and bind:
+
+```powershell
+pytest api_tests\test_oneshield_api_uw_rules.py -v -s -m api
+pytest api_tests\test_oneshield_api_uw_rules.py -v -s -m api --oneshield-api-allow-bind
+```
+
+The second command binds a live test policy. Without
+`--oneshield-api-allow-bind`, the bind snapshot test skips.
 
 ## CSV Summary
 
@@ -382,6 +505,10 @@ Current constraints:
 - It replays the known-good captured Personal Auto shape.
 - It assumes the same general happy-path page order as the capture.
 - It uses simple substitution from the JSON data row.
+- Driver and non-owned vehicle fields needed for the positive Auto UW matrix
+  are replayed from live layout lookups. The Loss Payee / Additional Interest
+  Add-row path still depends on OneShield exposing the live block button and
+  current block object references in the vehicle layout.
 - It has been proven for `TC_ID_0011`, but broad variation still needs validation.
 - Captured traffic did not include a logout/unlock endpoint.
 - Server-side quote locks may require UI exit/logout, session timeout, or an admin unlock mechanism.

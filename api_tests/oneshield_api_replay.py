@@ -41,7 +41,7 @@ def _latest_capture_file() -> Path:
 
 
 DEFAULT_CAPTURE = _latest_capture_file()
-DEFAULT_BASE_URL = "https://inforcedev.oneshield.com"
+DEFAULT_BASE_URL = "https://inforcedev.oneshield.com/oneshield/"
 DEFAULT_PAYLOAD_EXPORT = ROOT_DIR / "api_tests" / "artifacts" / "auto_rate_bind_payloads_latest.json"
 DEFAULT_AUTO_DATA = Path("testdata/static/auto/AutoData.json")
 FIELD_VAR_PATTERN = re.compile(r"\bbv_(\d{6,})_([A-Za-z0-9p]+)\b")
@@ -184,10 +184,54 @@ class OneShieldApiReplay:
         """Post the captured Request Issue action before delivery/billing/bind."""
         return self.post_gateway_action(page="auto_premium_summary", tx_name="Action.305905")
 
+    def open_auto_rating_detail(self, test_data: dict[str, Any] | None = None) -> requests.Response:
+        """Open Rating Detail from the live Auto Premium Summary response."""
+        tx_name = self._state_button_action("tabBarButtons", "rating detail")
+        return self.post_gateway_action_from_template(
+            page="auto_premium_summary",
+            template_tx_name="Action.305905",
+            tx_name=tx_name,
+            test_data=test_data,
+        )
+
+    def add_auto_loss_payee_row(self, test_data: dict[str, Any]) -> requests.Response:
+        """Add the vehicle additional-interest row required for non-owned Autos."""
+        event = self.find_gateway_event(page="auto_vehicle", tx_name="Action.128505")
+        request = self._captured_request(event)
+        button = self._state_block_button("Loss Payee / Additional Interest", "Add")
+        tx_name = str(button.get("actionIdText", "")).strip() or "Action.189"
+        current_object = str(button.get("objectId", "")).strip()
+        form = self._stateful_form(request.form, test_data, event)
+        form["TX_NAME"] = tx_name
+        if current_object:
+            form["CURRENT_OBJECT"] = current_object
+            self._add_block_object_reference_fields(form, current_object)
+        response = self._send_form(request, form)
+        self._update_state_from_response(response)
+        self.replay_trace.append(self._action_diagnostics("auto_vehicle", tx_name, response))
+        return response
+
     def post_gateway_action(self, page: str, tx_name: str) -> requests.Response:
         """Find a GatewayServlet form post by logical page and TX_NAME, then send it."""
         event = self.find_gateway_event(page=page, tx_name=tx_name)
         return self.replay_event(event)
+
+    def post_gateway_action_from_template(
+        self,
+        page: str,
+        template_tx_name: str,
+        tx_name: str,
+        test_data: dict[str, Any] | None = None,
+    ) -> requests.Response:
+        """Post a live action using a same-page captured form as the template."""
+        event = self.find_gateway_event(page=page, tx_name=template_tx_name)
+        request = self._captured_request(event)
+        form = self._stateful_form(request.form, test_data or {}, event)
+        form["TX_NAME"] = tx_name
+        response = self._send_form(request, form)
+        self._update_state_from_response(response)
+        self.replay_trace.append(self._action_diagnostics(page, tx_name, response))
+        return response
 
     def replay_event(self, event: dict[str, Any], test_data: dict[str, Any] | None = None) -> requests.Response:
         """Replay one captured event using the current live OneShield state."""
@@ -221,8 +265,10 @@ class OneShieldApiReplay:
         self.replay_trace = []
         self.login()
         response_by_stage: dict[str, requests.Response] = {}
+        ui_data_by_stage: dict[str, dict[str, Any]] = {}
         stop_events = {
             "rate": ("auto_premium_summary", "Action.1753948"),
+            "rating-detail": ("auto_premium_summary", "Action.469805"),
             "request-issue": ("auto_premium_summary", "Action.305905"),
             "billing-plan": ("auto_delivery_preferences", "Action.1262048"),
             "verify-billing": ("auto_billing_plan", "Action.1504046"),
@@ -230,24 +276,62 @@ class OneShieldApiReplay:
         }
         target = stop_events[stop_after]
         blocked_reason = ""
+        loss_payee_row_added = False
 
         for event in self._auto_replay_events(skip_field_processor=fast_mode):
             tx_name = self._event_tx_name(event)
             if event.get("page") == "auto_new_quote" and tx_name == "Action.3":
                 continue
+            if (
+                not loss_payee_row_added
+                and self._requires_auto_loss_payee(test_data)
+                and (event.get("page"), tx_name) == ("auto_vehicle", "Action.128505")
+            ):
+                self.add_auto_loss_payee_row(test_data)
+                loss_payee_row_added = True
             response = self.replay_event(event, test_data)
+            if (event.get("page"), tx_name) == ("auto_vehicle", "Action.189"):
+                loss_payee_row_added = True
+            event_stage = next(
+                (
+                    name
+                    for name, marker in stop_events.items()
+                    if marker == (event.get("page"), tx_name)
+                ),
+                "",
+            )
+            if not event_stage and self._state_page_contains("underwriting"):
+                response_by_stage["rate"] = response
+                ui_data_by_stage["rate"] = self._state_ui_data()
+                if stop_after != "rate":
+                    blocked_reason = self._underwriting_block_before_stage(stop_after)
+                break
             if (event.get("page"), tx_name) in stop_events.values():
-                stage = next(
-                    name for name, marker in stop_events.items() if marker == (event.get("page"), tx_name)
-                )
+                stage = event_stage
                 response_by_stage[stage] = response
+                ui_data_by_stage[stage] = self._state_ui_data()
                 blocked_reason = self._blocking_reason_after_stage(stage)
                 if blocked_reason:
+                    break
+                if stage == "rate" and self._state_page_contains("underwriting") and stop_after != "rate":
+                    blocked_reason = self._underwriting_block_before_stage(stop_after)
+                    break
+                if stage == "rate" and stop_after == "rating-detail":
+                    response = self.open_auto_rating_detail(test_data)
+                    response_by_stage["rating-detail"] = response
+                    ui_data_by_stage["rating-detail"] = self._state_ui_data()
+                    blocked_reason = self._blocking_reason_after_stage("rating-detail")
                     break
             if (event.get("page"), tx_name) == target:
                 break
 
-        result = self._build_auto_result(test_data, response_by_stage.get(stop_after), stop_after, blocked_reason)
+        result = self._build_auto_result(
+            test_data,
+            response_by_stage.get(stop_after),
+            stop_after,
+            blocked_reason,
+            ui_data_by_stage,
+        )
         if stop_after == "bind" and result["policy_number"]:
             result["report_path"] = self.save_api_auto_summary(result["summary"])
         return result
@@ -452,7 +536,153 @@ class OneShieldApiReplay:
             selected_node = self._selected_tree_node_for_event(event, test_data) if event else ""
             if selected_node:
                 form["SELECTED_NODE"] = selected_node
+            self._override_current_auto_form_fields(form, test_data)
         return form
+
+    def _override_current_auto_form_fields(self, form: dict[str, str], test_data: dict[str, Any]) -> None:
+        """Submit test-data values that OneShield exposes as live layout fields."""
+        if not test_data or not self.state:
+            return
+
+        layout_fields = [
+            ("Gender", ("Gender",), test_data.get("Gender")),
+            ("MaritalStatus", ("Marital Status",), test_data.get("MaritalStatus")),
+            ("DriverStatus", ("Driver Status",), test_data.get("DriverStatus")),
+            ("EmploymentCategory", ("Employment Category",), test_data.get("EmploymentCategory")),
+            ("Occupation", ("Occupation",), test_data.get("Occupation")),
+            ("LicenseStatus", ("License Status",), test_data.get("LicenseStatus")),
+            (
+                "SR22",
+                (
+                    "SR-22/ Certificate of Insurance Required?",
+                    "Certificate of Insurance Required?",
+                    "Certificate of Insurance Required",
+                ),
+                test_data.get("SR22"),
+            ),
+            ("VehicleUse", ("Vehicle Use",), test_data.get("VehicleUse")),
+            ("Ownership", ("Ownership",), test_data.get("Ownership")),
+            ("PolicyCoverage", ("Policy Coverage Option",), test_data.get("PolicyCoverage")),
+        ]
+        if str(test_data.get("SR22", "")).strip().lower() == "yes":
+            layout_fields.append(
+                (
+                    "SR22FilingState",
+                    ("SR-22 Filing State", "SR22 Filing State"),
+                    test_data.get("SR22FilingState")
+                    or test_data.get("SR-22 Filing State")
+                    or test_data.get("State"),
+                )
+            )
+        if self._requires_auto_loss_payee(test_data):
+            layout_fields.extend(
+                [
+                    (
+                        "LossPayeeType",
+                        ("Interest Type",),
+                        test_data.get("LossPayeeType") or test_data.get("Ownership"),
+                    ),
+                    (
+                        "LossPayeeName",
+                        (
+                            "Loss Payee/Additional Interest Name",
+                            "Loss Payee / Additional Interest Name",
+                        ),
+                        test_data.get("LossPayeeName", "Leasing Company"),
+                    ),
+                ]
+            )
+
+        for _data_key, labels, display_value in layout_fields:
+            if display_value is None:
+                continue
+            cell = self._state_layout_cell(labels)
+            if cell:
+                self._set_form_cell_value(form, cell, str(display_value))
+
+    def _requires_auto_loss_payee(self, test_data: dict[str, Any]) -> bool:
+        ownership = str(test_data.get("Ownership", "")).strip().lower()
+        return bool(ownership and ownership != "owned")
+
+    def _add_block_object_reference_fields(self, form: dict[str, str], object_id: str) -> None:
+        """Retain OneShield block object references when a one-to-many Add runs."""
+        for suffix in ("32785808", "31814434"):
+            var_name = f"bv_{object_id}_{suffix}"
+            form[var_name] = object_id
+            self._append_namefield(form, var_name)
+
+    def _state_layout_cell(self, labels: tuple[str, ...]) -> dict[str, Any] | None:
+        expected = {self._ui_label_key(label) for label in labels}
+
+        def walk(value: Any) -> dict[str, Any] | None:
+            if isinstance(value, dict):
+                label = self._ui_label_key(str(value.get("label", "")))
+                if label in expected and value.get("varName"):
+                    return value
+                for child in value.values():
+                    found = walk(child)
+                    if found:
+                        return found
+            elif isinstance(value, list):
+                for child in value:
+                    found = walk(child)
+                    if found:
+                        return found
+            return None
+
+        return walk(self.state.get("layout", {}))
+
+    def _set_form_cell_value(self, form: dict[str, str], cell: dict[str, Any], display_value: str) -> None:
+        var_name = str(cell.get("varName", "")).strip()
+        if not var_name.startswith("bv_"):
+            return
+
+        submit_value = self._cell_submit_value(cell, display_value)
+        form[var_name] = submit_value
+        self._append_namefield(form, var_name)
+
+        if form.get("name") == var_name:
+            form["value"] = submit_value
+
+        bv_id = str(cell.get("bvId", "")).strip()
+        if bv_id and form.get("AJX_RULE_BV") == bv_id:
+            form["AJX_RULE_BV_VAL"] = submit_value
+        self._replace_ajax_bv_value(form, bv_id, submit_value)
+
+    def _cell_submit_value(self, cell: dict[str, Any], display_value: str) -> str:
+        desired = self._ui_label_key(display_value)
+        for lookup in cell.get("lookups", []):
+            if not isinstance(lookup, dict):
+                continue
+            if self._ui_label_key(str(lookup.get("displayValue", ""))) == desired:
+                return str(lookup.get("code", display_value))
+        return display_value
+
+    def _append_namefield(self, form: dict[str, str], var_name: str) -> None:
+        if "namefields" not in form:
+            return
+        fields = [field for field in str(form.get("namefields", "")).split(",") if field]
+        if var_name not in fields:
+            fields.append(var_name)
+            form["namefields"] = ",".join(fields)
+
+    def _replace_ajax_bv_value(self, form: dict[str, str], bv_id: str, value: str) -> None:
+        if not bv_id or not form.get("AJX_BV_IDS") or "AJX_BV_VALS" not in form:
+            return
+        ids = str(form["AJX_BV_IDS"]).split("\x04")
+        values = str(form["AJX_BV_VALS"]).split("\x04")
+        if len(ids) != len(values):
+            return
+        changed = False
+        for index, ajax_bv_id in enumerate(ids):
+            if ajax_bv_id == bv_id:
+                values[index] = value
+                changed = True
+        if changed:
+            form["AJX_BV_VALS"] = "\x04".join(values)
+
+    def _ui_label_key(self, value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", value.lower())
 
     def _selected_tree_node_for_event(
         self,
@@ -699,6 +929,7 @@ class OneShieldApiReplay:
         response: requests.Response | None,
         stop_after: str,
         blocked_reason: str = "",
+        stage_ui_data: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         response_text = response.text if response is not None else ""
         policy_number = self._first_match(r"PA\d+-\d+", response_text)
@@ -734,6 +965,8 @@ class OneShieldApiReplay:
             "messages": diagnostics["messages"],
             "trace": self.replay_trace,
             "summary": summary,
+            "ui_data": self._state_ui_data(),
+            "stage_ui_data": stage_ui_data or {},
         }
 
     def _blocking_reason_after_stage(self, stage: str) -> str:
@@ -741,6 +974,12 @@ class OneShieldApiReplay:
             messages = "; ".join(self._state_messages())
             return (
                 "rate did not reach Premium Summary or Underwriting Referral; "
+                f"current page is {self._state_page_name()!r}. {messages}"
+            ).strip()
+        if stage == "rating-detail" and not self._state_page_contains("rating", "underwriting"):
+            messages = "; ".join(self._state_messages())
+            return (
+                "rating detail did not reach a Rating page or Underwriting Referral; "
                 f"current page is {self._state_page_name()!r}. {messages}"
             ).strip()
         if stage == "request-issue" and not self._state_page_contains("delivery", "underwriting"):
@@ -768,6 +1007,13 @@ class OneShieldApiReplay:
                 f"current page is {self._state_page_name()!r}. {messages}"
             ).strip()
         return ""
+
+    def _underwriting_block_before_stage(self, stage: str) -> str:
+        messages = "; ".join(self._state_messages())
+        return (
+            f"underwriting referral reached before {stage}; "
+            f"current page is {self._state_page_name()!r}. {messages}"
+        ).strip()
 
     def _state_page_contains(self, *parts: str) -> bool:
         page_name = self._state_page_name().lower()
@@ -799,11 +1045,251 @@ class OneShieldApiReplay:
             "messages": self._state_messages(),
         }
 
+    def _state_ui_data(self) -> dict[str, Any]:
+        """Return assertable UI data without session-bearing pageJSON internals."""
+        fields = self._visible_layout_fields()
+        return {
+            "page_name": self._state_page_name(),
+            "fields": fields,
+            "field_values": self._field_values_by_label(fields),
+            "grids": self._visible_layout_grids(),
+            "actions": self._visible_button_labels("actionBarButtons"),
+            "tabs": self._visible_button_labels("tabBarButtons"),
+            "messages": self._state_messages(),
+        }
+
+    def _visible_layout_fields(self) -> list[dict[str, Any]]:
+        fields: list[dict[str, Any]] = []
+
+        def walk(value: Any, block_label: str = "", visible: bool = True) -> None:
+            if isinstance(value, dict):
+                if value.get("visible") is False or value.get("visibility") is False:
+                    visible = False
+
+                next_block_label = block_label
+                if "cellRows" in value and value.get("label"):
+                    next_block_label = str(value["label"]).strip()
+
+                if visible and "value" in value and value.get("label"):
+                    lookup_display = self._selected_lookup_display(value)
+                    raw_value = value.get("value", "")
+                    fields.append(
+                        {
+                            "block": block_label,
+                            "label": str(value["label"]).strip(),
+                            "value": raw_value,
+                            "display_value": lookup_display if lookup_display else raw_value,
+                            "read_only": bool(value.get("readOnly", False)),
+                            "mandatory": bool(value.get("mandatory", False)),
+                            "provider": str(value.get("uiProvider", "")),
+                        }
+                    )
+
+                for child in value.values():
+                    walk(child, next_block_label, visible)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child, block_label, visible)
+
+        walk(self.state.get("layout", {}))
+        return fields
+
+    def _visible_layout_grids(self) -> list[dict[str, Any]]:
+        grids: list[dict[str, Any]] = []
+
+        def walk(value: Any, visible: bool = True) -> None:
+            if isinstance(value, dict):
+                if value.get("visible") is False or value.get("visibility") is False:
+                    visible = False
+                if visible and isinstance(value.get("grid"), dict):
+                    grid = value["grid"]
+                    columns = [
+                        self._grid_column(column)
+                        for column in grid.get("columns", [])
+                        if isinstance(column, dict)
+                    ]
+                    public_columns = [
+                        column for column in columns if not self._internal_grid_column(column)
+                    ]
+                    grids.append(
+                        {
+                            "label": str(value.get("label", "")).strip(),
+                            "provider": str(value.get("provider", {}).get("impl", "")),
+                            "total_rows": grid.get("totalRows"),
+                            "columns": public_columns,
+                            "fields": [
+                                self._grid_field(field)
+                                for field in grid.get("fields", [])
+                            ],
+                            "rows": self._grid_rows(grid, public_columns),
+                        }
+                    )
+                for child in value.values():
+                    walk(child, visible)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child, visible)
+
+        walk(self.state.get("layout", {}))
+        return grids
+
+    def _grid_column(self, column: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "label": str(
+                column.get("label")
+                or column.get("text")
+                or column.get("header")
+                or column.get("headerText")
+                or column.get("title")
+                or ""
+            ).strip(),
+            "field": str(
+                column.get("dataIndex")
+                or column.get("field")
+                or column.get("name")
+                or column.get("mapping")
+                or ""
+            ).strip(),
+            "hidden": bool(column.get("hidden", False)),
+        }
+
+    def _internal_grid_column(self, column: dict[str, Any]) -> bool:
+        label = str(column.get("label", "")).replace(" ", "").replace("_", "").lower()
+        return label in {"id", "objectid", "rowobjectid"} or self._internal_ui_key(
+            str(column.get("field", ""))
+        )
+
+    def _grid_field(self, field: Any) -> Any:
+        if not isinstance(field, dict):
+            return field
+        return {
+            key: value
+            for key, value in field.items()
+            if key in {"name", "mapping", "type"}
+        }
+
+    def _grid_rows(self, grid: dict[str, Any], columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        field_labels = {
+            column["field"]: column["label"] or column["field"]
+            for column in columns
+            if column["field"]
+        }
+        rows = []
+        for record in grid.get("valueRecords", []):
+            if not isinstance(record, dict):
+                continue
+            rows.append(
+                {
+                    label: self._sanitize_grid_value(record[field])
+                    for field, label in field_labels.items()
+                    if field in record
+                }
+            )
+        return rows
+
+    def _sanitize_grid_value(self, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: self._sanitize_grid_value(child)
+                for key, child in value.items()
+                if not self._internal_ui_key(str(key))
+            }
+        if isinstance(value, list):
+            return [self._sanitize_grid_value(child) for child in value]
+        return value
+
+    def _internal_ui_key(self, key: str) -> bool:
+        normalized = key.replace("_", "").lower()
+        return (
+            normalized == "id"
+            or normalized.endswith("objectid")
+            or normalized == "immutablestaticidprefix"
+        )
+
+    def _selected_lookup_display(self, cell: dict[str, Any]) -> str:
+        lookups = cell.get("lookups")
+        if not isinstance(lookups, list):
+            return ""
+        selected = [
+            str(lookup.get("displayValue", "")).strip()
+            for lookup in lookups
+            if isinstance(lookup, dict) and lookup.get("selected")
+        ]
+        return ", ".join(value for value in selected if value)
+
+    def _field_values_by_label(self, fields: list[dict[str, Any]]) -> dict[str, list[Any]]:
+        values: dict[str, list[Any]] = {}
+        for field in fields:
+            label = field["label"]
+            value = field["display_value"]
+            bucket = values.setdefault(label, [])
+            if value not in bucket:
+                bucket.append(value)
+        return values
+
+    def _visible_button_labels(self, key: str) -> list[str]:
+        buttons = self.state.get(key)
+        if not isinstance(buttons, list):
+            return []
+        return [
+            str(button["label"]).strip()
+            for button in buttons
+            if isinstance(button, dict) and button.get("enabled", True) and button.get("label")
+        ]
+
+    def _state_button_action(self, key: str, label: str) -> str:
+        buttons = self.state.get(key)
+        if not isinstance(buttons, list):
+            raise LookupError(f"Current page has no {key!r} button list")
+
+        for button in buttons:
+            if not isinstance(button, dict) or not button.get("enabled", True):
+                continue
+            if str(button.get("label", "")).strip().lower() == label.lower():
+                tx_name = str(button.get("actionIdText", "")).strip()
+                if tx_name:
+                    return tx_name
+                raise LookupError(f"Current {label!r} button has no actionIdText")
+
+        raise LookupError(f"Current page has no enabled {label!r} button in {key!r}")
+
+    def _state_block_button(self, block_label: str, button_label: str) -> dict[str, Any]:
+        expected_block_label = self._ui_label_key(block_label)
+        expected_button_label = self._ui_label_key(button_label)
+
+        def find_button(value: Any) -> dict[str, Any] | None:
+            if isinstance(value, dict):
+                if self._ui_label_key(str(value.get("label", ""))) == expected_block_label:
+                    for button_key in ("blockLevelButtons", "blockRowLevelButtons"):
+                        for button in value.get(button_key, []):
+                            if not isinstance(button, dict) or not button.get("enabled", True):
+                                continue
+                            if self._ui_label_key(str(button.get("label", ""))) == expected_button_label:
+                                return button
+                for child in value.values():
+                    found = find_button(child)
+                    if found:
+                        return found
+            elif isinstance(value, list):
+                for child in value:
+                    found = find_button(child)
+                    if found:
+                        return found
+            return None
+
+        button = find_button(self.state.get("layout", {}))
+        if button:
+            return button
+        raise LookupError(f"Current layout has no enabled {button_label!r} button in {block_label!r}")
+
     def _event_diagnostics(self, event: dict[str, Any], response: requests.Response) -> dict[str, Any]:
+        return self._action_diagnostics(event.get("page"), self._event_tx_name(event), response)
+
+    def _action_diagnostics(self, page: str | None, tx_name: str, response: requests.Response) -> dict[str, Any]:
         diagnostics = self._state_diagnostics()
         return {
-            "page": event.get("page"),
-            "tx_name": self._event_tx_name(event),
+            "page": page,
+            "tx_name": tx_name,
             "status_code": response.status_code,
             "response_url": response.url,
             "page_name": diagnostics["page_name"],
@@ -853,7 +1339,7 @@ class OneShieldApiReplay:
         )
 
     def _absolute_url(self, path: str) -> str:
-        return urljoin(f"{self.base_url}/", path.lstrip("/"))
+        return urljoin(f"{self.base_url}/", path)
 
     def _parse_form(self, post_data: str | None) -> dict[str, str]:
         if not post_data:
@@ -877,7 +1363,7 @@ def main() -> None:
     parser.add_argument("--tc-id", default="TC_ID_0001", help="Test case ID from --auto-data.")
     parser.add_argument(
         "--stop-after",
-        choices=["rate", "request-issue", "billing-plan", "verify-billing", "bind"],
+        choices=["rate", "rating-detail", "request-issue", "billing-plan", "verify-billing", "bind"],
         default="rate",
         help="Last stage for --action run-auto.",
     )

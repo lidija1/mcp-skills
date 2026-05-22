@@ -1,72 +1,125 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+import sqlite3
 
-from database import SessionLocal
-from models import User
-from security import verify_password
+router = APIRouter()
 
-router = APIRouter(tags=["Authentication"])
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-from fastapi import APIRouter
-
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+DB_PATH = "users.db"
 
 
-@router.post("/login")
-def login():
-    return {
-        "access_token": "demo-token",
-        "token_type": "bearer"
-    }
+# ─────────────────────────────────────────────────────────────
+# Database setup
+# ─────────────────────────────────────────────────────────────
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
+# ─────────────────────────────────────────────────────────────
+# Models
+# ─────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    first_name: str
+    last_name: str
+    username: str
+    password: str
+
 
 class LoginRequest(BaseModel):
     username: str
     password: str
 
 
-class LoginResponse(BaseModel):
-    success: bool
-    username: str
-    role: str
+# ─────────────────────────────────────────────────────────────
+# Register
+# ─────────────────────────────────────────────────────────────
+
+@router.post("/api/register")
+def register(data: RegisterRequest):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    existing_user = cursor.execute(
+        "SELECT * FROM users WHERE username = ?",
+        (data.username,)
+    ).fetchone()
+
+    if existing_user:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    hashed_password = pwd_context.hash(data.password)
+
+    cursor.execute("""
+        INSERT INTO users (first_name, last_name, username, password)
+        VALUES (?, ?, ?, ?)
+    """, (
+        data.first_name,
+        data.last_name,
+        data.username,
+        hashed_password
+    ))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "message": "User created successfully"
+    }
 
 
-@router.post(
-    "/api/login",
-    response_model=LoginResponse,
-    summary="Authenticate user"
-)
-def login(req: LoginRequest):
-    """
-    Authenticate a user using username and password.
-    """
+# ─────────────────────────────────────────────────────────────
+# Login
+# ─────────────────────────────────────────────────────────────
 
-    db: Session = SessionLocal()
+@router.post("/api/login")
+def login(data: LoginRequest):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-    try:
-        user = (
-            db.query(User)
-            .filter(User.username == req.username)
-            .first()
-        )
+    user = cursor.execute(
+        "SELECT * FROM users WHERE username = ?",
+        (data.username,)
+    ).fetchone()
 
-        if not user:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid username or password"
-            )
+    conn.close()
 
-        if not verify_password(req.password, user.password_hash):
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid username or password"
-            )
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        return LoginResponse(
-            success=True,
-            username=user.username,
-            role=user.role,
-        )
+    stored_password = user[4]
 
-    finally:
-        db.close()
+    if not pwd_context.verify(data.password, stored_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    return {
+        "success": True,
+        "user": {
+            "id": user[0],
+            "first_name": user[1],
+            "last_name": user[2],
+            "username": user[3]
+        }
+    }

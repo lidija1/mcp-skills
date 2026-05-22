@@ -1,15 +1,31 @@
-const post = (url, body) =>
-  fetch(url, {
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('access_token')
+
+  return token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {}
+}
+
+const post = async (url, body) => {
+  const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify(body),
-  }).then(async r => {
-    const data = await r.json()
-    if (!r.ok) {
-      throw new Error(data.detail || data.error || `Request failed with HTTP ${r.status}`)
-    }
-    return data
   })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.error || 'Request failed')
+  }
+
+  return data
+}
 
 export const api = {
   // ── Health ────────────────────────────────────────────────────────────
@@ -44,4 +60,19 @@ export const api = {
       confirmed_tool: confirmedTool,
       confirmed_params: confirmedParams,
     }),
+
+  // ── Auth ──────────────────────────────────────────────────────────────
+login: (username, password) =>
+  post('/api/login', {
+    username,
+    password,
+  }),
+
+register: (first_name, last_name, username, password) =>
+  post('/api/register', {
+    first_name,
+    last_name,
+    username,
+    password,
+  }),
 }

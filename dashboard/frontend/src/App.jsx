@@ -5,7 +5,10 @@ import PolicyPanel from './components/PolicyPanel'
 import JobsPanel from './components/JobsPanel'
 import ChatPanel from './components/ChatPanel'
 import ReportModal from './components/ReportModal'
-import LoginPage from './components/LoginPage';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import LoginPage from './components/LoginPage'
+import RegisterPage from './components/RegisterPage'
+
 
 import { api } from './utils/api'
 import {
@@ -52,13 +55,26 @@ function normalizeJobUpdate(job, update) {
   return { ...job, ...update }
 }
 
-export default function App() {
+export default function AppWrapper() {
+  return (
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  )
+}
+
+function App() {
   const [tab, setTab] = useState('overview')
   const [jobs, setJobs] = useState(() => loadStoredJobs())
   const [jobPopups, setJobPopups] = useState([])
   const [backendOk, setBackendOk] = useState(null)
-  const [dashboardUser, setDashboardUser] = useState('')
-  // const [dashboardUser, setDashboardUser] = useState(() => localStorage.getItem('dashboardUser') || '')
+  const [dashboardUser, setDashboardUser] = useState(() => {
+  const token = localStorage.getItem('access_token')
+  const user = localStorage.getItem('dashboardUser')
+
+  return token && user ? user : ''
+})
+  const [showRegister, setShowRegister] = useState(false)
   const [selectedJob, setSelectedJob] = useState(null)
   const [showHelp, setShowHelp] = useState(false)
   const previousJobStatusRef = useRef(null)
@@ -103,6 +119,10 @@ export default function App() {
       previousJobStatusRef.current = new Map(jobs.map(job => [job.id, job.status]))
       return
     }
+    const token = localStorage.getItem('token')
+    if (!token) {
+  return <LoginPage onLogin={login} />
+}
 
     const previousStatuses = previousJobStatusRef.current
     const completedJobs = jobs.filter(job => previousStatuses.get(job.id) === 'running' && job.status === 'done')
@@ -179,21 +199,32 @@ export default function App() {
     dismissJobPopup(job.id)
   }, [dismissJobPopup, jobs])
 
-  const login = useCallback(username => {
-    localStorage.setItem('dashboardUser', username)
-    setDashboardUser(username)
-  }, [])
+ const login = useCallback((username, token) => {
+  localStorage.setItem('dashboardUser', username)
+  localStorage.setItem('access_token', token)
+  setDashboardUser(username)
+}, [])
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('dashboardUser')
-    setDashboardUser('')
-  }, [])
+ const logout = useCallback(() => {
+  localStorage.removeItem('dashboardUser')
+  localStorage.removeItem('access_token')
+  setDashboardUser('')
+}, [])
 
 if (!dashboardUser) {
+  if (showRegister) {
+    return (
+      <RegisterPage
+        onBackToLogin={() => setShowRegister(false)}
+      />
+    )
+  }
+
   return (
-    <div>
-      <LoginPage onLogin={login} />
-    </div>
+    <LoginPage
+      onLogin={login}
+      onCreateAccount={() => setShowRegister(true)}
+    />
   )
 }
 

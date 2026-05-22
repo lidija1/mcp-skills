@@ -2,14 +2,13 @@ import { useState } from 'react'
 import { api } from '../utils/api'
 import '../styles/auth.css'
 
-export default function LoginPage({
-  onLogin,
-  onCreateAccount,
-}) {
+export default function RegisterPage({ onBackToLogin }) {
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async e => {
     e.preventDefault()
@@ -18,12 +17,18 @@ export default function LoginPage({
     setLoading(true)
 
     try {
-      const data = await api.login(username, password)
+      await api.register(
+        firstName,
+        lastName,
+        username,
+        password
+      )
 
-      onLogin(data.user.username)
+      alert('Account created successfully')
 
+      onBackToLogin()
     } catch (err) {
-      setError(err.message || 'Invalid credentials')
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -32,13 +37,25 @@ export default function LoginPage({
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>INFORCE Dashboard</h1>
-
-        <p className="auth-subtitle">
-          Sign in to continue
-        </p>
+        <h1>Create Account</h1>
 
         <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            placeholder="First name"
+            value={firstName}
+            onChange={e => setFirstName(e.target.value)}
+            required
+          />
+
+          <input
+            type="text"
+            placeholder="Last name"
+            value={lastName}
+            onChange={e => setLastName(e.target.value)}
+            required
+          />
+
           <input
             type="text"
             placeholder="Username"
@@ -62,19 +79,18 @@ export default function LoginPage({
           )}
 
           <button type="submit" disabled={loading}>
-            {loading ? 'Signing in...' : 'Login'}
+            {loading ? 'Creating...' : 'Create Account'}
           </button>
         </form>
 
         <div className="auth-footer">
-          Don't have an account?
-
+          Already have an account?
           <button
             type="button"
             className="link-button"
-            onClick={onCreateAccount}
+            onClick={onBackToLogin}
           >
-            Create Account
+            Login
           </button>
         </div>
       </div>

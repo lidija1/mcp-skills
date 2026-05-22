@@ -7,9 +7,9 @@ session = SessionLocal()
 
 # Create test user
 user = User(
-    username="lidija",
-    password_hash=hash_password("test123"),
-    role="admin"
+    username="ld",
+    password_hash=hash_password("ld123"),
+    role="user"
 )
 
 # Save user

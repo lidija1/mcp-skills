@@ -20,12 +20,12 @@ _CHAT_DIR = Path(__file__).resolve().parent / "chat"
 if str(_CHAT_DIR) not in sys.path:
     sys.path.insert(0, str(_CHAT_DIR))
 
-# Load .env before importing any MCP tool that calls the AI API
+# Load ..env before importing any MCP tool that calls the AI API
 from dotenv import load_dotenv
-load_dotenv(_PROJECT_ROOT / ".env", override=True)
+load_dotenv(_PROJECT_ROOT / "..env", override=True)
 
-# Detect which keys are defined in .env (key names only, not values)
-_env_path = _PROJECT_ROOT / ".env"
+# Detect which keys are defined in ..env (key names only, not values)
+_env_path = _PROJECT_ROOT / "..env"
 _env_keys: set[str] = set()
 if _env_path.exists():
     for _line in _env_path.read_text(encoding="utf-8").splitlines():
@@ -33,7 +33,7 @@ if _env_path.exists():
         if _line and not _line.startswith("#") and "=" in _line:
             _env_keys.add(_line.split("=", 1)[0].strip())
 
-# If ANTHROPIC_API_KEY is not in .env, scrub it from the process environment so
+# If ANTHROPIC_API_KEY is not in ..env, scrub it from the process environment so
 # a stale Windows system variable cannot shadow the OpenAI key.
 if "ANTHROPIC_API_KEY" not in _env_keys:
     os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -45,7 +45,7 @@ elif "ANTHROPIC_API_KEY" in _env_keys:
     os.environ.pop("AI_PROVIDER", None)
     print("[INFO] AI provider: anthropic")
 else:
-    print("[WARN] No AI API key found in .env â€” AI calls will fail")
+    print("[WARN] No AI API key found in ..env â€” AI calls will fail")
 
 import re
 import subprocess
@@ -302,8 +302,8 @@ CODEX_EXPLORER_FORBIDDEN_PATTERNS = [
     r"\bwipe\b",
     r"\bdestroy\b",
     r"\bexfiltrat",
-    r"\b(type|cat|get-content)\s+\.env\b",
-    r"\bprint\s+(env|environment|secrets|credentials)\b",
+    r"\b(type|cat|get-content)\s+\..env\b",
+    r"\bprint\s+(.env|environment|secrets|credentials)\b",
 ]
 
 CODEX_EXPLORER_FIXED_INSTRUCTIONS = f"""
@@ -315,7 +315,7 @@ Non-negotiable safety rules:
 - Work only inside the repository above. Do not edit files outside it.
 - Do not run destructive commands or destructive file operations. This includes recursive delete, mass delete, git reset/clean/checkout --, credential removal, drive formatting, registry edits, or shutdown commands.
 - If a destructive action is needed, stop and explain what approval would be required. Do not attempt it.
-- Do not print, expose, copy, or modify secrets from .env or credential files.
+- Do not print, expose, copy, or modify secrets from ..env or credential files.
 - Use sandboxed, framework-aligned changes only. Keep selectors inside page objects, test data in JSON, features in ui/features, steps in ui/steps, page objects in ui/pages, and tests in ui/tests.
 - Prefer reading and targeted validation before edits.
 

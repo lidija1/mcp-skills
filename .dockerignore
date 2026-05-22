@@ -8,8 +8,8 @@ __pycache__/
 # Virtual environments
 .venv/
 venv/
-ENV/
-env/
+.env/
+.env/
 
 # Test results and reports
 allure-results/

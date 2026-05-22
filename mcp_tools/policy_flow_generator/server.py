@@ -25,7 +25,7 @@ REGISTER IN CLAUDE CODE  (~/.claude/settings.json or project .claude/settings.js
 
 NOTE: Do NOT add API keys to settings.json or settings.local.json.
       The server reads ANTHROPIC_API_KEY (and optionally OPENAI_API_KEY)
-      from the project .env file at startup.  Keep all secrets there.
+      from the project ..env file at startup.  Keep all secrets there.
 
 ──────────────────────────────────────────────────────────────────────────────
 USAGE EXAMPLES

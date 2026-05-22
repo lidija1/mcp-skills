@@ -228,7 +228,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    load_dotenv(ROOT / ".env", override=True)
+    load_dotenv(ROOT / "..env", override=True)
 
     roof_types = args.roof_type if args.roof_type else roof_types_from_options()
     if args.limit:

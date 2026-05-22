@@ -7,7 +7,7 @@ router = APIRouter()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-DB_PATH = "users.db"
+DB_PATH = "data/dashboard.db"
 
 
 # ─────────────────────────────────────────────────────────────

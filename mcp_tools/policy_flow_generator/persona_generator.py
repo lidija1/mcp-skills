@@ -18,7 +18,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(_PROJECT_ROOT / ".env")
+load_dotenv(_PROJECT_ROOT / "..env")
 
 # ---------------------------------------------------------------------------
 # Vehicle catalog (auto LOB) — loaded once, sampled per generation call
@@ -146,7 +146,7 @@ def _vehicle_constraint_text(vehicle: dict, plural: bool = False) -> str:
 # Provider detection
 # ---------------------------------------------------------------------------
 # Priority:
-#   1. AI_PROVIDER env var ("anthropic" or "openai") forces a specific provider
+#   1. AI_PROVIDER .env var ("anthropic" or "openai") forces a specific provider
 #   2. ANTHROPIC_API_KEY present  → use Anthropic
 #   3. OPENAI_API_KEY present     → use OpenAI
 #   4. Neither set                → error reported at call time
@@ -645,7 +645,7 @@ def generate_persona(lob: str, description: str) -> str:
             return json.dumps({
                 "error": (
                     "No AI provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY "
-                    "in your .env file, or set AI_PROVIDER=anthropic|openai explicitly."
+                    "in your ..env file, or set AI_PROVIDER=anthropic|openai explicitly."
                 )
             })
 
@@ -765,7 +765,7 @@ def _generate_persona_variation_chunk(
             return json.dumps({
                 "error": (
                     "No AI provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY "
-                    "in your .env file."
+                    "in your ..env file."
                 )
             })
 

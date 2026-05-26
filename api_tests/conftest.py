@@ -6,7 +6,37 @@ import os
 
 import pytest
 
-from api_tests.oneshield_api_replay import DEFAULT_BASE_URL, DEFAULT_CAPTURE, OneShieldApiReplay
+from api_tests.oneshield_api_replay import (
+    DEFAULT_AUTO_DATA,
+    DEFAULT_BASE_URL,
+    DEFAULT_CAPTURE,
+    OneShieldApiReplay,
+    load_all_auto_tc_ids,
+)
+
+PREMIUM_BASELINES_PATH = (
+    __import__("pathlib").Path(__file__).parent / "artifacts" / "premium_baselines.json"
+)
+DEFAULT_MAX_API_WORKERS = 6
+
+
+def pytest_configure(config):
+    """Auto-set xdist worker count for API tests based on the number of TC_IDs.
+
+    Skipped when already inside a worker process, or when the user passed -n
+    explicitly.  Workers are capped at the CPU count so we don't spawn more
+    processes than the machine can schedule efficiently.
+    """
+    if hasattr(config, "workerinput"):
+        return  # already inside an xdist worker — don't recurse
+    try:
+        current = getattr(config.option, "numprocesses", None)
+        if current in (None, 0):
+            tc_count = len(load_all_auto_tc_ids(DEFAULT_AUTO_DATA))
+            workers = min(tc_count, os.cpu_count() or 4, DEFAULT_MAX_API_WORKERS)
+            config.option.numprocesses = workers
+    except AttributeError:
+        pass  # xdist not installed or option not yet registered
 
 
 def pytest_addoption(parser):
@@ -21,6 +51,12 @@ def pytest_addoption(parser):
         action="store",
         default=os.getenv("ONESHIELD_BASE_URL", DEFAULT_BASE_URL),
         help="OneShield base URL for API replay tests.",
+    )
+    parser.addoption(
+        "--oneshield-api-allow-bind",
+        action="store_true",
+        default=False,
+        help="Allow API pytest tests that deliberately bind a live OneShield policy.",
     )
 
 

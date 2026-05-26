@@ -1,5 +1,13 @@
 {
   "mcpServers": {
+    "oneshield-qa": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.oneshield_qa.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    },
     "policy-flow-generator": {
       "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
       "args": ["-m", "mcp_tools.policy_flow_generator.server"],

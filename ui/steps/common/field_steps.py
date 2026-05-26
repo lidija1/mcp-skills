@@ -374,3 +374,45 @@ def noop_ho_billing_controls(): pass
 
 @step("I review verify billing actions")
 def noop_ho_verify_billing(): pass
+
+
+# Auto UW documentation steps
+
+@step("I select SR-22 filing state when required")
+def noop_sr22_filing_state(): pass
+
+
+@step("I verify the expected underwriting condition")
+def noop_verify_uw_condition(): pass
+
+
+@step("I confirm every UW row is editable")
+def noop_confirm_uw_editable(): pass
+
+
+@step("I set all UW override flags to Yes")
+def noop_set_uw_flags_yes(): pass
+
+
+@step("I enter underwriter comments")
+def noop_enter_uw_comments(): pass
+
+
+@step("I accept the underwriting referral")
+def noop_accept_uw_referral(): pass
+
+
+@step("I select Email contact permission")
+def noop_select_email_contact_permission(): pass
+
+
+@step("I save contact information")
+def noop_save_contact_information(): pass
+
+
+@step("I continue past contact information")
+def noop_continue_contact_information(): pass
+
+
+@step("I click re-rate")
+def noop_click_re_rate(): pass

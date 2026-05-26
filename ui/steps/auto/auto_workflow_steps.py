@@ -145,10 +145,48 @@ def assert_uw_referral_condition(uw_referral_page, uw_type, expected_condition, 
         uw_type: 'Hard-Stop' or 'Underwriting' — must match the Type column exactly.
         expected_condition: Substring to search for inside the Condition column.
     """
-    log.info(f"Asserting UW condition | type='{uw_type}' | contains='{expected_condition}'")
-    with allure.step(f"Verify UW rule: [{uw_type}] — '{expected_condition}'"):
-        uw_referral_page.assert_uw_condition(uw_type, expected_condition)
+    expected_conditions = [
+        condition.strip()
+        for condition in expected_condition.split(";")
+        if condition.strip()
+    ]
+    log.info(f"Asserting UW condition(s) | type='{uw_type}' | contains={expected_conditions}")
+    for condition in expected_conditions:
+        with allure.step(f"Verify UW rule: [{uw_type}] - '{condition}'"):
+            uw_referral_page.assert_uw_condition(uw_type, condition)
     log.info("UW condition assertion passed.")
+
+
+@when("I override all UW conditions and accept")
+def override_all_uw_conditions(uw_referral_page, log):
+    """Override editable UW conditions and accept the referral."""
+    log.info("Checking whether all UW conditions are editable...")
+    assert uw_referral_page.can_be_overridden(), (
+        "UW referral cannot be fully overridden by the current user."
+    )
+    log.info("Overriding all UW conditions and accepting...")
+    uw_referral_page.override_all_and_accept()
+    log.info("UW conditions overridden and accepted.")
+
+
+@when("I complete Contact Information with Email permission")
+def complete_contact_information_with_email(contact_information_page, log):
+    """Complete the post-UW Contact Information page."""
+    log.info("Completing Contact Information with Email permission...")
+    assert contact_information_page.complete_email_permission_if_visible(), (
+        "Contact Information page was not visible after UW accept."
+    )
+    log.info("Contact Information completed with Email permission.")
+
+
+@when("I re-rate the quote after UW override")
+def rerate_quote_after_uw_override(create_policy_page, log):
+    """Re-rate the quote after UW override/contact information."""
+    log.info("Re-rating quote after UW override...")
+    assert create_policy_page.click_re_rate_if_visible(), (
+        "Re-rate button was not visible after Contact Information."
+    )
+    log.info("Quote re-rated after UW override.")
 
 
 @then("I read and extract policy summary page details")

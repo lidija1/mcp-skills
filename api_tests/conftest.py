@@ -17,6 +17,7 @@ from api_tests.oneshield_api_replay import (
 PREMIUM_BASELINES_PATH = (
     __import__("pathlib").Path(__file__).parent / "artifacts" / "premium_baselines.json"
 )
+DEFAULT_MAX_API_WORKERS = 6
 
 
 def pytest_configure(config):
@@ -32,7 +33,7 @@ def pytest_configure(config):
         current = getattr(config.option, "numprocesses", None)
         if current in (None, 0):
             tc_count = len(load_all_auto_tc_ids(DEFAULT_AUTO_DATA))
-            workers = min(tc_count, os.cpu_count() or 4)
+            workers = min(tc_count, os.cpu_count() or 4, DEFAULT_MAX_API_WORKERS)
             config.option.numprocesses = workers
     except AttributeError:
         pass  # xdist not installed or option not yet registered

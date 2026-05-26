@@ -374,6 +374,28 @@ Rate` rows for Bodily Injury and Property Damage. OneShield loaded 25 rows in
 that first response while the grid reported 124 total rows, so pagination is
 still needed when assertions require later Rating Detail rows.
 
+The API replay can now collect paged Rating Detail rows from the
+`premium debug information` datamart grid through `DataSearchServlet` using
+OneShield's list-navigation action values. The initial UI snapshot still shows
+the first page only, but `result["rating_factors"]` exposes the collected rows
+and a smaller `business_values` object for practical assertions:
+
+```python
+result = oneshield_api_client.run_captured_auto_flow(test_data, stop_after="rating-detail")
+
+factors = result["rating_factors"]
+assert factors["complete"]
+assert factors["row_count"] == factors["total_rows"]
+
+business = factors["business_values"]
+assert business["base_rates"]
+assert business["coverage_premiums"]
+assert business["calculated_total_premium"]
+```
+
+Live validation on May 25, 2026 for `UW_TC_010` collected all 124 Rating
+Detail rows over five pages and returned `complete=True`.
+
 ## API UW Rules Checks
 
 UW API assertions use the same visible page model as the UI assertions. A
@@ -553,6 +575,28 @@ fast_mode: 23s  25 requests  completed=True  premium='$ 2,049.45'
 All 17 FieldProcessorServlet calls in the main loop (including TX-named vehicle cascade and driver handlers) were redundant — GatewayServlet payloads already carry the complete field values. The remaining ~23s is server-side GatewayServlet processing: two setup calls (~2.5s and ~3.2s) and the rate computation (~5.1s). These cannot be reduced from the client.
 
 `fast_mode` has not yet been validated for `stop_after` stages beyond `rate`. Validate before enabling it for `request-issue`, `verify-billing`, or `bind`.
+
+Validated 2026-05-25 for Auto UW referral checks with `stop_after="rate"`:
+`UW_TC_001` reached `quote | underwriting referral | underwriter` in 25.76s
+with 18 replayed requests, and leased case `UW_TC_010` reached the same page
+in 24.78s with 19 replayed requests while preserving the vehicle
+Loss Payee/Add-row action (`Action.189`). The UW referral snapshot pytest now
+uses `fast_mode=True`.
+
+Additional rate-stop profiling on 2026-05-25 showed the fast-mode path spends
+about 3.4s in login, 5.8s in the final Rate Quote action, and the rest building
+the live quote/customer/driver/vehicle/coverage workflow state. Posting the
+captured Rate Quote action directly after login returned HTTP 200 but remained
+on `carrier portal`, so the rate action cannot be dropped onto a fresh session.
+Removing `bv_*` business-value fields from the final Rate Quote payload still
+reached UW for `UW_TC_001`, but the rate call took 5.72s, effectively the same
+as the full payload. The rate form is small; the bottleneck is server-side
+rating and mandatory workflow setup, not upload size.
+
+API pytest auto-parallelism is capped at 6 workers by default. A 10-worker run
+of the 14-case UW referral matrix passed, but individual calls stretched to
+about 60s under server load, so 6 is the safer default ceiling for routine
+validation. Passing `-n` explicitly still overrides the automatic default.
 
 ## Recommended Next Improvements
 

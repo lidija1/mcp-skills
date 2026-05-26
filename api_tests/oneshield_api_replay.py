@@ -185,7 +185,27 @@ class OneShieldApiReplay:
         return self.post_gateway_action(page="auto_premium_summary", tx_name="Action.305905")
 
     def open_auto_rating_detail(self, test_data: dict[str, Any] | None = None) -> requests.Response:
-        """Open Rating Detail from the live Auto Premium Summary response."""
+        """Open Rating Detail from the live Auto Premium Summary response.
+
+        For UW-referred quotes the current page is the Underwriting Referral tab,
+        not the Premium Summary tab — but the Summary tab is still available in the
+        tab bar.  Before switching to Rating Detail, navigate to Summary first so
+        that the premium regex has a chance to match a '$' value in the response
+        text.  The matched value is stored in self._captured_summary_premium and
+        used by _build_auto_result() when the final response carries no premium.
+        """
+        summary_tx = self._state_button_action("tabBarButtons", "summary")
+        if summary_tx:
+            summary_resp = self.post_gateway_action_from_template(
+                page="auto_premium_summary",
+                template_tx_name="Action.305905",
+                tx_name=summary_tx,
+                test_data=test_data,
+            )
+            self._captured_summary_premium = self._first_match(
+                r"\$ ?[0-9,]+\.\d{2}", summary_resp.text
+            )
+
         tx_name = self._state_button_action("tabBarButtons", "rating detail")
         return self.post_gateway_action_from_template(
             page="auto_premium_summary",
@@ -193,6 +213,229 @@ class OneShieldApiReplay:
             tx_name=tx_name,
             test_data=test_data,
         )
+
+    def get_rating_detail_factors(self) -> dict[str, Any]:
+        """Parse rating factors from the current Rating Detail page state.
+
+        Returns a dict with:
+          - base_rates: list of {coverage, value} for all Base Rate rows
+          - factors: all rows as list of dicts with column-label keys
+          - total_out: highest 'Out' value seen (approximate total premium contribution)
+        """
+        grid_rows = self._collect_grid_rows("premium debug information")
+        rows = grid_rows["rows"]
+
+        base_rates = [
+            {"coverage": r.get("Coverage", ""), "value": r.get("F.Value", "")}
+            for r in rows if r.get("Factor") == "Base Rate"
+        ]
+        out_vals = []
+        for r in rows:
+            try:
+                out_vals.append(float(str(r.get("Out", "")).replace(",", "")))
+            except (ValueError, TypeError):
+                pass
+
+        return {
+            "base_rates": base_rates,
+            "factors": rows,
+            "total_out": max(out_vals) if out_vals else None,
+            "summary_premium": getattr(self, "_captured_summary_premium", None) or "",
+            "row_count": len(rows),
+            "total_rows": grid_rows["total_rows"],
+            "loaded_pages": grid_rows["loaded_pages"],
+            "complete": grid_rows["complete"],
+            "business_values": self._rating_business_values(rows),
+        }
+
+    def _collect_grid_rows(
+        self,
+        label_contains: str,
+        max_pages: int = 20,
+    ) -> dict[str, Any]:
+        """Collect all available rows for a paged OneShield grid/list block.
+
+        OneShield only loads the current grid page into `valueRecords`. When the
+        block exposes list-navigation metadata, use the same block-level "next"
+        action that the UI uses and append each returned page until totalRows is
+        satisfied or the server stops returning a new page.
+        """
+        snapshot = self._visible_grid_by_label(label_contains)
+        if not snapshot:
+            return {
+                "rows": [],
+                "total_rows": 0,
+                "loaded_pages": 0,
+                "complete": True,
+            }
+
+        rows = list(snapshot["rows"])
+        total_rows = self._to_int(snapshot.get("total_rows")) or len(rows)
+        loaded_pages = 1 if rows else 0
+        page_signatures = {self._rows_signature(rows)} if rows else set()
+
+        while total_rows and len(rows) < total_rows and loaded_pages < max_pages:
+            block = self._visible_grid_block_by_label(label_contains)
+            if not block:
+                break
+
+            if block.get("datamart") is True:
+                snapshot = self._load_datamart_grid_page(block, list_action="91")
+            elif isinstance(block.get("listNavNext"), dict):
+                self._post_grid_navigation(block, direction="next")
+                snapshot = self._visible_grid_by_label(label_contains)
+            else:
+                break
+
+            if not snapshot:
+                break
+
+            page_rows = list(snapshot["rows"])
+            signature = self._rows_signature(page_rows)
+            if not page_rows or signature in page_signatures:
+                break
+
+            rows.extend(page_rows)
+            page_signatures.add(signature)
+            loaded_pages += 1
+            total_rows = self._to_int(snapshot.get("total_rows")) or total_rows
+
+        return {
+            "rows": rows,
+            "total_rows": total_rows,
+            "loaded_pages": loaded_pages,
+            "complete": not total_rows or len(rows) >= total_rows,
+        }
+
+    def _load_datamart_grid_page(
+        self,
+        block: dict[str, Any],
+        list_action: str,
+    ) -> dict[str, Any]:
+        """Load the next page for a datamart grid through DataSearchServlet."""
+        grid = block.get("grid", {})
+        raw_columns = [
+            column
+            for column in grid.get("columns", [])
+            if isinstance(column, dict) and column.get("dataIndex")
+        ]
+        public_columns = [
+            self._grid_column(column)
+            for column in raw_columns
+            if not self._internal_grid_column(self._grid_column(column))
+        ]
+        diagnostics = self.state.get("diagnostics", {})
+        hvars = self._hvars(self.state)
+        workflow_context = str(self.state.get("workflowContext", ""))
+        action_id = workflow_context.split(",")[0] if "," in workflow_context else workflow_context
+        params = {
+            "transactionId": str(
+                diagnostics.get("transactionId")
+                or hvars.get("DRAGON_TRANSACTION_ID", "")
+            ),
+            "USER_SESSION_GUID": str(self.state.get("browserTabId", "")),
+            "blockId": str(block.get("id", "")),
+            "listObjectId": str(block.get("listObjectId") or block.get("objectId", "")),
+            "actionId": action_id,
+            "listAction": list_action,
+            "multiSortString": "",
+            "dataIndices": ",".join(str(column.get("dataIndex", "")) for column in raw_columns),
+            "cellBvIds": ",".join(str(column.get("cellBvId", "")) for column in raw_columns),
+            "cellFESs": ",".join(str(column.get("fes", "")) for column in raw_columns),
+        }
+        response = self.session.post(
+            self._absolute_url("/oneshield/DataSearchServlet"),
+            data=params,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        page_grid = {"valueRecords": payload.get("valueRecords", [])}
+        return {
+            "label": str(block.get("label", "")).strip(),
+            "total_rows": payload.get("totalRows"),
+            "start_row": payload.get("startRow"),
+            "end_row": payload.get("endRow"),
+            "rows": self._grid_rows(page_grid, public_columns),
+        }
+
+    def _post_grid_navigation(
+        self,
+        block: dict[str, Any],
+        direction: str,
+    ) -> requests.Response:
+        nav_keys = {
+            "first": ("listNavFirst", "first"),
+            "previous": ("listNavPrevious", "prev"),
+            "next": ("listNavNext", "next"),
+            "last": ("listNavLast", "last"),
+        }
+        if direction not in nav_keys:
+            raise ValueError(f"Unsupported grid navigation direction: {direction!r}")
+
+        nav_key, button_label = nav_keys[direction]
+        nav = block.get(nav_key)
+        if not isinstance(nav, dict):
+            raise LookupError(f"Current grid block has no {nav_key!r} metadata")
+
+        event = self.find_gateway_event(page="auto_premium_summary", tx_name="Action.305905")
+        request = self._captured_request(event)
+        form = self._stateful_form(request.form, {}, event)
+        button = self._state_layout_block_button(button_label)
+        tx_name = str(button.get("actionIdText", "")).strip()
+        if not tx_name:
+            raise LookupError(f"Current layout block button {button_label!r} has no actionIdText")
+
+        form["TX_NAME"] = tx_name
+        form["validateFlag"] = str(button.get("validationType", form.get("validateFlag", "0")))
+
+        nav_object_id = str(nav.get("objectId") or block.get("objectId") or "").strip()
+        if nav_object_id:
+            form["CURRENT_OBJECT"] = nav_object_id
+
+        nav_name = str(nav.get("name", "")).strip()
+        if nav_name:
+            form.setdefault(nav_name, "")
+            self._append_namefield(form, nav_name)
+
+        response = self._send_form(request, form)
+        self._update_state_from_response(response)
+        self.replay_trace.append(self._action_diagnostics("rating_detail_grid", tx_name, response))
+        return response
+
+    def _rating_business_values(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return the small assertion-oriented summary from Rating Detail rows."""
+        coverage_premiums: dict[str, float] = {}
+        policy_term_rows = []
+        base_rate_rows = []
+
+        for row in rows:
+            factor = row.get("Factor")
+            coverage = str(row.get("Coverage", "")).strip()
+            if factor == "Base Rate":
+                base_rate_rows.append(
+                    {
+                        "coverage": coverage,
+                        "value": self._maybe_float(row.get("F.Value")),
+                    }
+                )
+            if factor == "Policy Term Factor":
+                out = self._maybe_float(row.get("Out"))
+                policy_term_rows.append({"coverage": coverage, "out": out})
+                if out is not None:
+                    coverage_premiums[coverage] = out
+
+        calculated_total = (
+            round(sum(coverage_premiums.values()), 2)
+            if coverage_premiums
+            else None
+        )
+        return {
+            "base_rates": base_rate_rows,
+            "policy_term_factors": policy_term_rows,
+            "coverage_premiums": coverage_premiums,
+            "calculated_total_premium": calculated_total,
+        }
 
     def add_auto_loss_payee_row(self, test_data: dict[str, Any]) -> requests.Response:
         """Add the vehicle additional-interest row required for non-owned Autos."""
@@ -303,7 +546,11 @@ class OneShieldApiReplay:
             if not event_stage and self._state_page_contains("underwriting"):
                 response_by_stage["rate"] = response
                 ui_data_by_stage["rate"] = self._state_ui_data()
-                if stop_after != "rate":
+                if stop_after == "rating-detail":
+                    rd_response = self.open_auto_rating_detail(test_data)
+                    response_by_stage["rating-detail"] = rd_response
+                    ui_data_by_stage["rating-detail"] = self._state_ui_data()
+                elif stop_after != "rate":
                     blocked_reason = self._underwriting_block_before_stage(stop_after)
                 break
             if (event.get("page"), tx_name) in stop_events.values():
@@ -313,7 +560,7 @@ class OneShieldApiReplay:
                 blocked_reason = self._blocking_reason_after_stage(stage)
                 if blocked_reason:
                     break
-                if stage == "rate" and self._state_page_contains("underwriting") and stop_after != "rate":
+                if stage == "rate" and self._state_page_contains("underwriting") and stop_after not in ("rate", "rating-detail"):
                     blocked_reason = self._underwriting_block_before_stage(stop_after)
                     break
                 if stage == "rate" and stop_after == "rating-detail":
@@ -933,7 +1180,11 @@ class OneShieldApiReplay:
     ) -> dict[str, Any]:
         response_text = response.text if response is not None else ""
         policy_number = self._first_match(r"PA\d+-\d+", response_text)
-        premium = self._first_match(r"\$ ?[0-9,]+\.\d{2}", response_text)
+        premium = (
+            self._first_match(r"\$ ?[0-9,]+\.\d{2}", response_text)
+            or getattr(self, "_captured_summary_premium", None)
+            or ""
+        )
         diagnostics = self._state_diagnostics()
         summary = {
             "Source": "api_auto",
@@ -954,6 +1205,11 @@ class OneShieldApiReplay:
             "Vehicle Make": test_data.get("Make"),
             "Vehicle Model": test_data.get("Model"),
         }
+        rating_factors = (
+            self.get_rating_detail_factors()
+            if stop_after == "rating-detail" and not blocked_reason
+            else {}
+        )
         return {
             "stop_after": stop_after,
             "completed": bool(policy_number) if stop_after == "bind" else not blocked_reason,
@@ -965,6 +1221,7 @@ class OneShieldApiReplay:
             "messages": diagnostics["messages"],
             "trace": self.replay_trace,
             "summary": summary,
+            "rating_factors": rating_factors,
             "ui_data": self._state_ui_data(),
             "stage_ui_data": stage_ui_data or {},
         }
@@ -1095,35 +1352,20 @@ class OneShieldApiReplay:
         return fields
 
     def _visible_layout_grids(self) -> list[dict[str, Any]]:
-        grids: list[dict[str, Any]] = []
+        return [
+            self._grid_snapshot(block)
+            for block in self._visible_grid_blocks()
+        ]
+
+    def _visible_grid_blocks(self) -> list[dict[str, Any]]:
+        blocks: list[dict[str, Any]] = []
 
         def walk(value: Any, visible: bool = True) -> None:
             if isinstance(value, dict):
                 if value.get("visible") is False or value.get("visibility") is False:
                     visible = False
                 if visible and isinstance(value.get("grid"), dict):
-                    grid = value["grid"]
-                    columns = [
-                        self._grid_column(column)
-                        for column in grid.get("columns", [])
-                        if isinstance(column, dict)
-                    ]
-                    public_columns = [
-                        column for column in columns if not self._internal_grid_column(column)
-                    ]
-                    grids.append(
-                        {
-                            "label": str(value.get("label", "")).strip(),
-                            "provider": str(value.get("provider", {}).get("impl", "")),
-                            "total_rows": grid.get("totalRows"),
-                            "columns": public_columns,
-                            "fields": [
-                                self._grid_field(field)
-                                for field in grid.get("fields", [])
-                            ],
-                            "rows": self._grid_rows(grid, public_columns),
-                        }
-                    )
+                    blocks.append(value)
                 for child in value.values():
                     walk(child, visible)
             elif isinstance(value, list):
@@ -1131,7 +1373,48 @@ class OneShieldApiReplay:
                     walk(child, visible)
 
         walk(self.state.get("layout", {}))
-        return grids
+        return blocks
+
+    def _visible_grid_by_label(self, label_contains: str) -> dict[str, Any] | None:
+        block = self._visible_grid_block_by_label(label_contains)
+        return self._grid_snapshot(block) if block else None
+
+    def _visible_grid_block_by_label(self, label_contains: str) -> dict[str, Any] | None:
+        expected = label_contains.lower()
+        for block in self._visible_grid_blocks():
+            label = str(block.get("label", "")).strip().lower()
+            if expected in label:
+                return block
+        return None
+
+    def _grid_snapshot(self, block: dict[str, Any]) -> dict[str, Any]:
+        grid = block["grid"]
+        columns = [
+            self._grid_column(column)
+            for column in grid.get("columns", [])
+            if isinstance(column, dict)
+        ]
+        public_columns = [
+            column for column in columns if not self._internal_grid_column(column)
+        ]
+        rows = self._grid_rows(grid, public_columns)
+        total_rows = grid.get("totalRows")
+        loaded_rows = len(rows)
+        total_rows_int = self._to_int(total_rows)
+        provider = block.get("provider", {})
+        return {
+            "label": str(block.get("label", "")).strip(),
+            "provider": str(provider.get("impl", "") if isinstance(provider, dict) else provider),
+            "total_rows": total_rows,
+            "loaded_rows": loaded_rows,
+            "complete": total_rows_int is None or loaded_rows >= total_rows_int,
+            "columns": public_columns,
+            "fields": [
+                self._grid_field(field)
+                for field in grid.get("fields", [])
+            ],
+            "rows": rows,
+        }
 
     def _grid_column(self, column: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -1155,7 +1438,9 @@ class OneShieldApiReplay:
 
     def _internal_grid_column(self, column: dict[str, Any]) -> bool:
         label = str(column.get("label", "")).replace(" ", "").replace("_", "").lower()
-        return label in {"id", "objectid", "rowobjectid"} or self._internal_ui_key(
+        return (
+            bool(column.get("hidden")) and not label
+        ) or label in {"id", "objectid", "rowobjectid"} or self._internal_ui_key(
             str(column.get("field", ""))
         )
 
@@ -1253,6 +1538,19 @@ class OneShieldApiReplay:
 
         raise LookupError(f"Current page has no enabled {label!r} button in {key!r}")
 
+    def _state_layout_block_button(self, label: str) -> dict[str, Any]:
+        buttons = self.state.get("layoutBlockButtons")
+        if not isinstance(buttons, list):
+            raise LookupError("Current page has no layoutBlockButtons list")
+
+        for button in buttons:
+            if not isinstance(button, dict) or not button.get("enabled", True):
+                continue
+            if str(button.get("label", "")).strip().lower() == label.lower():
+                return button
+
+        raise LookupError(f"Current page has no enabled layout block button {label!r}")
+
     def _state_block_button(self, block_label: str, button_label: str) -> dict[str, Any]:
         expected_block_label = self._ui_label_key(block_label)
         expected_button_label = self._ui_label_key(button_label)
@@ -1300,6 +1598,21 @@ class OneShieldApiReplay:
     def _first_match(self, pattern: str, text: str) -> str:
         match = re.search(pattern, text)
         return match.group(0) if match else ""
+
+    def _to_int(self, value: Any) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _maybe_float(self, value: Any) -> float | None:
+        try:
+            return float(str(value).replace(",", ""))
+        except (TypeError, ValueError):
+            return None
+
+    def _rows_signature(self, rows: list[dict[str, Any]]) -> str:
+        return json.dumps(rows, sort_keys=True, default=str)
 
     def _send(self, request: CapturedRequest) -> requests.Response:
         if request.method == "GET":

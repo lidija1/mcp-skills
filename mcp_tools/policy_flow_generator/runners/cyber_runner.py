@@ -111,7 +111,6 @@ def run_cyber_flow(page: Page, persona: dict, steps: list, progress_callback=Non
         t = time.perf_counter()
         login = LoginPage(page)
         login.navigate()
-        login.click_splash_button()
         login.wait_for_login_page()
         login.fill_credentials_from_env()
         login.click_login()

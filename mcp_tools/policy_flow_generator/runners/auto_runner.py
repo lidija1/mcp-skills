@@ -113,7 +113,7 @@ def _record_uw_outcome(steps, name: str, elapsed: float, page: Page, detail: str
 
 
 def _create_policy_or_uw(page: Page, steps: list, started_at: float, progress_callback=None) -> dict | None:
-    """Run issue/billing/bind actions, stopping early if UW appears and cannot be overridden."""
+    """Run issue/billing/bind actions, stopping early if UW appears."""
     from ui.pages.auto.create_policy_page import CreatePolicyPage
 
     create_policy = CreatePolicyPage(page)
@@ -127,14 +127,12 @@ def _create_policy_or_uw(page: Page, steps: list, started_at: float, progress_ca
     for action_name, action in actions:
         _emit_progress(progress_callback, action_name)
         if _is_uw_referral_visible(page, timeout=1_000):
-            if _try_uw_override(page, steps, started_at, progress_callback):
-                continue
             return _record_uw_outcome(
                 steps,
                 f"Outcome: UW Referral ({action_name})",
                 time.perf_counter() - started_at,
                 page,
-                f"UW referral detected before {action_name.lower()} — not overridable.",
+                f"UW referral detected before {action_name.lower()}.",
                 progress_callback,
             )
 
@@ -143,27 +141,23 @@ def _create_policy_or_uw(page: Page, steps: list, started_at: float, progress_ca
             create_policy.wait_for_loader_to_disappear()
         except Exception:
             if _is_uw_referral_visible(page, timeout=8_000):
-                if _try_uw_override(page, steps, started_at, progress_callback):
-                    continue
                 return _record_uw_outcome(
                     steps,
                     f"Outcome: UW Referral ({action_name})",
                     time.perf_counter() - started_at,
                     page,
-                    f"UW referral detected during {action_name.lower()} — not overridable.",
+                    f"UW referral detected during {action_name.lower()}.",
                     progress_callback,
                 )
             raise
 
         if _is_uw_referral_visible(page, timeout=1_000):
-            if _try_uw_override(page, steps, started_at, progress_callback):
-                continue
             return _record_uw_outcome(
                 steps,
                 f"Outcome: UW Referral ({action_name})",
                 time.perf_counter() - started_at,
                 page,
-                f"UW referral detected after {action_name.lower()} — not overridable.",
+                f"UW referral detected after {action_name.lower()}.",
                 progress_callback,
             )
 
@@ -204,7 +198,6 @@ def run_auto_flow(page: Page, persona: dict, steps: list, progress_callback=None
         t = time.perf_counter()
         login = LoginPage(page)
         login.navigate()
-        login.click_splash_button()
         login.wait_for_login_page()
         login.fill_credentials_from_env()
         login.click_login()
@@ -313,28 +306,21 @@ def run_auto_flow(page: Page, persona: dict, steps: list, progress_callback=None
         t = time.perf_counter()
         if _is_uw_referral_visible(page, timeout=6_000):
             _emit_progress(progress_callback, "UW Referral")
-            if _try_uw_override(page, steps, t, progress_callback):
-                # Override succeeded — fall through to bind
-                uw_result = _create_policy_or_uw(page, steps, t, progress_callback)
-                if uw_result:
-                    return uw_result
-                outcome = "policy_bound"
-                try:
-                    _emit_progress(progress_callback, "Policy Summary")
-                    policy_page = PolicySummary(page)
-                    policy_summary = policy_page.extract_details(persona)
-                    policy_page.save_lob_report(policy_summary)
-                except Exception:
-                    policy_summary = None
-                _record(steps, "Outcome: Policy Bound", "passed", time.perf_counter() - t)
-            else:
-                uw_conditions = _capture_uw_conditions(page)
-                outcome = "uw_referral"
-                _record(
-                    steps, "Outcome: UW Referral", "passed",
-                    time.perf_counter() - t,
-                    f"{len(uw_conditions)} condition cell(s) captured — not overridable by current user",
-                )
+            uw_conditions = _capture_uw_conditions(page)
+            outcome = "uw_referral"
+            _record(
+                steps, "Outcome: UW Referral", "passed",
+                time.perf_counter() - t,
+                f"{len(uw_conditions)} condition cell(s) captured",
+            )
+            return {
+                "outcome": outcome,
+                "uw_conditions": uw_conditions,
+                "error": None,
+                "screenshot_path": None,
+                "policy_summary": None,
+                "premium": None,
+            }
         else:
             uw_result = _create_policy_or_uw(page, steps, t, progress_callback)
             if uw_result:

@@ -213,12 +213,12 @@ function RunJourneyCard({ lob, run, loading }) {
     <ToolCard>
       <div className="card-copy">
         <h2>Run Policy Journey</h2>
-        <p>Paste profile JSON from Build Customer Profile</p>
+        <p>Paste profile JSON from Build Customer Profile or enter a TC_ID</p>
       </div>
       <div className="field-wrap">
         <textarea
           className="field mono"
-          placeholder='Paste JSON from "Build Customer Profile"...'
+          placeholder='Paste JSON from "Build Customer Profile" or enter TC_ID_0001...'
           value={personaJson}
           onChange={e => setPersonaJson(e.target.value)}
         />

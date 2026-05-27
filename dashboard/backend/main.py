@@ -78,6 +78,11 @@ LOB_DISPLAY = {
     "cyber": "Cyber",
     "homeowner": "Homeowner",
 }
+POLICY_DATA_FILES = {
+    "auto": _PROJECT_ROOT / "testdata" / "static" / "auto" / "AutoData.json",
+    "cyber": _PROJECT_ROOT / "testdata" / "static" / "cyber" / "CyberData.json",
+    "homeowner": _PROJECT_ROOT / "testdata" / "static" / "homeowner" / "HomeData.json",
+}
 
 
 def _run_flow_threaded(lob: str, persona: dict, progress_callback=None) -> dict:
@@ -104,6 +109,51 @@ def _validate_policy_lob(lob: str) -> str:
             detail=f"Unsupported policy-flow LOB '{lob}'. Valid options: {valid}.",
         )
     return normalized
+
+
+def _normalize_policy_tc_id(raw: str) -> str | None:
+    """Accept dashboard shorthand like tc0001 and return canonical TC_ID_0001."""
+    value = raw.strip().strip('"').strip("'")
+    if not value:
+        return None
+    upper = value.upper()
+    if re.fullmatch(r"TC_ID_\d{4}", upper):
+        return upper
+    match = re.fullmatch(r"TC[_ -]?ID[_ -]?(\d{1,4})", upper)
+    if match:
+        return f"TC_ID_{int(match.group(1)):04d}"
+    match = re.fullmatch(r"TC[_ -]?(\d{1,4})", upper)
+    if match:
+        return f"TC_ID_{int(match.group(1)):04d}"
+    return None
+
+
+def _load_policy_persona_from_tc_id(lob: str, tc_id: str) -> dict:
+    path = POLICY_DATA_FILES[lob]
+    with path.open(encoding="utf-8") as fh:
+        data = json.load(fh)
+    for row in data.get("testCases", []):
+        if str(row.get("TC_ID", "")).strip().upper() == tc_id:
+            return row
+    available = [row.get("TC_ID") for row in data.get("testCases", [])[:10]]
+    raise ValueError(f"TC_ID '{tc_id}' was not found in {path.relative_to(_PROJECT_ROOT)}. First IDs: {available}")
+
+
+def _parse_policy_persona_input(lob: str, persona_input: str) -> dict:
+    """Run Policy Journey accepts either profile JSON or a static test-case ID."""
+    text = persona_input.strip()
+    tc_id = _normalize_policy_tc_id(text)
+    if tc_id:
+        return _load_policy_persona_from_tc_id(lob, tc_id)
+
+    parsed = json.loads(text)
+    if isinstance(parsed, str):
+        tc_id = _normalize_policy_tc_id(parsed)
+        if tc_id:
+            return _load_policy_persona_from_tc_id(lob, tc_id)
+    if not isinstance(parsed, dict):
+        raise ValueError("Run Policy Journey expects profile JSON or a TC_ID such as TC_ID_0001.")
+    return parsed
 
 
 # â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -602,9 +652,9 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     def _run():
         try:
             _status(jid, "Preparing profile", LOB_DISPLAY.get(lob, req.lob.upper()))
-            persona = json.loads(req.persona_json)
+            persona = _parse_policy_persona_input(lob, req.persona_json)
             result = _run_flow_threaded(lob, persona, _make_policy_progress_callback(jid, lob))
-            persona_section = _format_persona_report(req.lob, '', req.persona_json) + "\n\n---\n\n"
+            persona_section = _format_persona_report(req.lob, '', json.dumps(persona)) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
         except Exception as e:
             _fail(jid, str(e))

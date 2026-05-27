@@ -154,7 +154,7 @@ export default function App() {
         }
     }, [jobs, selectedJob])
 
-    const submitJob = useCallback(async (apiFn, label) => {
+    const submitJob = useCallback(async (apiFn, label, options = {}) => {
         const data = await apiFn()
         if (!data.job_id) return
         const placeholder = {
@@ -165,12 +165,13 @@ export default function App() {
             result: null,
             error: null,
             finished: null,
+            metadata: options.metadata || {},
         }
         setJobs(prev => [placeholder, ...prev])
         return data.job_id
     }, [])
 
-    const trackJob = useCallback((jobId, label) => {
+    const trackJob = useCallback((jobId, label, options = {}) => {
         const placeholder = {
             id: jobId,
             label,
@@ -179,6 +180,7 @@ export default function App() {
             result: null,
             error: null,
             finished: null,
+            metadata: options.metadata || {},
         }
         setJobs(prev => {
             if (prev.some(j => j.id === jobId)) return prev

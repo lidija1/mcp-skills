@@ -9,6 +9,7 @@ import {
     X,
 } from 'lucide-react'
 import {useNavigate, useParams} from 'react-router-dom'
+import {metadataForPolicyLob} from '../utils/jobLob'
 
 const LOBS = [
     {id: 'personal-auto', label: 'Personal Auto'},
@@ -51,7 +52,7 @@ export default function PolicyPanel({submitJob}) {
     const run = async (label, apiFn) => {
         setLoading(label)
         try {
-            await submitJob(apiFn, label)
+            await submitJob(apiFn, label, {metadata: metadataForPolicyLob(lob)})
         } finally {
             setLoading('')
         }
@@ -142,7 +143,7 @@ function ClearButton({onClick}) {
 function QuickTestCard({lob, run, loading}) {
     const [description, setDescription] = useState('')
     const [submitted, setSubmitted] = useState(false)
-    const key = `Quick Policy Test - ${lob.toUpperCase()}`
+    const key = `Quick Policy Test - ${LOBS.find(l => l.id === lob)?.label || lob}`
 
     const handleRun = async () => {
         if (!description.trim()) return
@@ -184,7 +185,7 @@ function QuickTestCard({lob, run, loading}) {
 function BuildProfileCard({lob, run, loading}) {
     const [description, setDescription] = useState('')
     const [submitted, setSubmitted] = useState(false)
-    const key = `Build Profile - ${lob.toUpperCase()}`
+    const key = `Build Profile - ${LOBS.find(l => l.id === lob)?.label || lob}`
 
     const handleRun = async () => {
         if (!description.trim()) return
@@ -226,7 +227,7 @@ function BuildProfileCard({lob, run, loading}) {
 function RunJourneyCard({lob, run, loading}) {
     const [personaJson, setPersonaJson] = useState('')
     const [submitted, setSubmitted] = useState(false)
-    const key = `Policy Journey - ${lob.toUpperCase()}`
+    const key = `Policy Journey - ${LOBS.find(l => l.id === lob)?.label || lob}`
 
     const handleRun = async () => {
         if (!personaJson.trim()) return

@@ -1,4 +1,5 @@
 import { cleanDisplayText } from '../utils/text'
+import { resolveJobLobDisplay, sortLobGroupKeys } from '../utils/jobLob'
 
 const STATUS_CONFIG = {
   running: { color: '#2563eb', label: 'Running' },
@@ -42,19 +43,10 @@ function dayLabel(job) {
   })
 }
 
-function inferLob(job) {
-  const text = `${cleanDisplayText(job.label) || ''} ${cleanDisplayText(job.result) || ''}`.toLowerCase()
-  if (text.includes('all lob')) return 'All LOBs'
-  if (text.includes('homeowner') || text.includes('home ') || text.includes('ho_')) return 'Homeowner'
-  if (text.includes('cyber')) return 'Cyber'
-  if (text.includes('personal auto') || text.includes(' auto') || text.endsWith('auto')) return 'Personal Auto'
-  return 'General'
-}
-
 function groupJobs(jobs) {
   return jobs.reduce((days, job) => {
     const day = dayLabel(job)
-    const lob = inferLob(job)
+    const lob = resolveJobLobDisplay(job)
 
     if (!days[day]) days[day] = {}
     if (!days[day][lob]) days[day][lob] = []
@@ -122,7 +114,9 @@ export default function JobsPanel({ jobs, onSelect, onClearHistory }) {
                     <span className="jobs-collapse-marker">v</span>
                   </div>
 
-                  {Object.entries(lobs).map(([lob, lobJobs]) => (
+                  {sortLobGroupKeys(Object.keys(lobs)).map(lob => {
+                    const lobJobs = lobs[lob]
+                    return (
                     <div className="jobs-lob-group" key={`${day}-${lob}`}>
                       <div className="jobs-group-row jobs-lob-row">
                         <div className="jobs-group-title">
@@ -135,7 +129,8 @@ export default function JobsPanel({ jobs, onSelect, onClearHistory }) {
                         <HistoryRow key={job.id} job={job} onSelect={onSelect} />
                       ))}
                     </div>
-                  ))}
+                    )
+                  })}
                 </section>
               )
             })}

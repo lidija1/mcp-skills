@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   X,
 } from 'lucide-react'
+import { metadataForUwLob } from '../utils/jobLob'
 
 const LOBS = [
   { id: 'auto', label: 'Personal Auto' },
@@ -40,7 +41,7 @@ export default function UWPanel({ submitJob }) {
   const run = async (label, apiFn) => {
     setLoading(label)
     try {
-      await submitJob(apiFn, label)
+      await submitJob(apiFn, label, { metadata: metadataForUwLob(lob) })
     } finally {
       setLoading('')
     }

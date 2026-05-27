@@ -139,6 +139,22 @@ def _validate_policy_lob(lob: str) -> str:
     return normalized
 
 
+def _job_lob_metadata(policy_lob: str, **extra) -> dict:
+    """Canonical lob + display label stored on every job for the Jobs UI."""
+    if policy_lob == "all":
+        meta = {"lob": "all", "lob_display": "All LOBs"}
+    elif policy_lob == "multi":
+        meta = {"lob": "multi", "lob_display": "Multi-LOB"}
+    else:
+        canonical = _canonical_policy_lob(policy_lob)
+        if canonical not in POLICY_LOBS and canonical == "auto":
+            canonical = "personal-auto"
+        display = LOB_DISPLAY.get(canonical, canonical.replace("-", " ").title())
+        meta = {"lob": canonical, "lob_display": display}
+    meta.update(extra)
+    return meta
+
+
 def _normalize_policy_tc_id(raw: str) -> str | None:
     """Accept dashboard shorthand like tc0001 and return canonical TC_ID_0001."""
     value = raw.strip().strip('"').strip("'")
@@ -759,10 +775,11 @@ def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
 def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
     policy_lob = _validate_policy_lob(req.lob)
     engine_lob = _to_flow_engine_lob(policy_lob)
+    display = LOB_DISPLAY[policy_lob]
     jid = _new_job(
-        f"Build Profile - {req.lob.upper()}",
+        f"Build Profile - {display}",
         execution_type="create_persona",
-        metadata={"lob": policy_lob, "description": req.description},
+        metadata=_job_lob_metadata(policy_lob, description=req.description),
     )
 
     def _run():
@@ -786,9 +803,9 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     policy_lob, engine_lob = _resolve_run_flow_lob(req.lob)
     display = LOB_DISPLAY.get(policy_lob, req.lob.strip().upper() or "PERSONAL AUTO")
     jid = _new_job(
-        f"Policy Journey - {display.upper()}",
+        f"Policy Journey - {display}",
         execution_type="policy_flow",
-        metadata={"lob": policy_lob, "requested_lob": req.lob},
+        metadata=_job_lob_metadata(policy_lob, requested_lob=req.lob),
     )
 
     def _run():
@@ -812,10 +829,11 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
 def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     policy_lob = _validate_policy_lob(req.lob)
     engine_lob = _to_flow_engine_lob(policy_lob)
+    display = LOB_DISPLAY[policy_lob]
     jid = _new_job(
-        f"Quick Policy Test - {req.lob.upper()}",
+        f"Quick Policy Test - {display}",
         execution_type="quick_run",
-        metadata={"lob": policy_lob, "description": req.description},
+        metadata=_job_lob_metadata(policy_lob, description=req.description),
     )
 
     def _run():
@@ -843,10 +861,18 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
 def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
     for scenario in req.scenarios:
         _validate_policy_lob(str(scenario.get("lob", "personal-auto")))
+    scenario_lobs = {
+        _validate_policy_lob(str(s.get("lob", "personal-auto"))) for s in req.scenarios[:25]
+    }
+    batch_meta = (
+        _job_lob_metadata(next(iter(scenario_lobs)), scenario_count=len(req.scenarios))
+        if len(scenario_lobs) == 1
+        else _job_lob_metadata("multi", scenario_count=len(req.scenarios))
+    )
     jid = _new_job(
         f"Batch Test â€” {len(req.scenarios)} scenarios",
         execution_type="batch_run",
-        metadata={"scenario_count": len(req.scenarios)},
+        metadata=batch_meta,
     )
 
     def _run():
@@ -950,10 +976,12 @@ def list_rules(lob: str = ""):
 # â”€â”€ UW: Department Audit (browser Ã— all LOB cases) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/audit")
 def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
+    audit_lob = _canonical_policy_lob(req.lob)
+    audit_display = LOB_DISPLAY.get(audit_lob, req.lob.replace("-", " ").title())
     jid = _new_job(
-        f"Department Audit â€” {req.lob.upper()}",
+        f"Department Audit â€” {audit_display}",
         execution_type="underwriting_audit",
-        metadata={"lob": req.lob.lower()},
+        metadata=_job_lob_metadata(audit_lob),
     )
 
     def _run():
@@ -974,10 +1002,11 @@ def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
 # â”€â”€ UW: Single Rule Cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/rule-cases")
 def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
+    rule_lob = _canonical_policy_lob(req.lob)
     jid = _new_job(
         f"Rule Test â€” {req.rule_id}",
         execution_type="uw_rule",
-        metadata={"lob": req.lob.lower(), "rule_id": req.rule_id},
+        metadata=_job_lob_metadata(rule_lob, rule_id=req.rule_id),
     )
 
     def _run():
@@ -998,10 +1027,12 @@ def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
 # â”€â”€ UW: Custom Boundary Test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/custom-boundary")
 def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
+    boundary_lob = _canonical_policy_lob(req.lob)
+    boundary_display = LOB_DISPLAY.get(boundary_lob, req.lob.replace("-", " ").title())
     jid = _new_job(
-        f"Edge Case â€” {req.lob.upper()}",
+        f"Edge Case â€” {boundary_display}",
         execution_type="uw_custom_boundary",
-        metadata={"lob": req.lob.lower(), "description": req.description},
+        metadata=_job_lob_metadata(boundary_lob, description=req.description),
     )
 
     def _run():
@@ -1047,7 +1078,11 @@ def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
 # â”€â”€ UW: Full System Audit (all LOBs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/full-audit")
 def full_audit_ep(bg: BackgroundTasks):
-    jid = _new_job("Full System Audit â€” ALL LOBs", execution_type="underwriting_audit", metadata={"lob": "all"})
+    jid = _new_job(
+        "Full System Audit â€” ALL LOBs",
+        execution_type="underwriting_audit",
+        metadata=_job_lob_metadata("all"),
+    )
 
     def _run():
         try:

@@ -18,7 +18,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(_PROJECT_ROOT / "..env")
+load_dotenv(_PROJECT_ROOT / ".env")
 
 # ---------------------------------------------------------------------------
 # Vehicle catalog (auto LOB) — loaded once, sampled per generation call
@@ -146,19 +146,21 @@ def _vehicle_constraint_text(vehicle: dict, plural: bool = False) -> str:
 # Provider detection
 # ---------------------------------------------------------------------------
 # Priority:
-#   1. AI_PROVIDER .env var ("anthropic" or "openai") forces a specific provider
+#   1. AI_PROVIDER env var ("anthropic" or "openai") forces a specific provider
 #   2. ANTHROPIC_API_KEY present  → use Anthropic
 #   3. OPENAI_API_KEY present     → use OpenAI
 #   4. Neither set                → error reported at call time
 
 _ANTHROPIC_MODEL = "claude-opus-4-6"
 _OPENAI_MODEL = "gpt-4o"
+_OLLAMA_BASE_URL = "http://localhost:11434/v1"
+_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 
 
 def _detect_provider() -> str:
-    """Return 'anthropic', 'openai', or 'none'."""
+    """Return 'anthropic', 'openai', 'ollama', or 'none'."""
     forced = os.getenv("AI_PROVIDER", "").lower().strip()
-    if forced in ("anthropic", "openai"):
+    if forced in ("anthropic", "openai", "ollama"):
         return forced
     if os.getenv("ANTHROPIC_API_KEY"):
         return "anthropic"
@@ -491,6 +493,8 @@ def _ensure_unique_email(persona: dict, lob: str, extra: str = "") -> None:
 def _clean_model_json(raw: str) -> str:
     """Return the likely JSON payload from a model response."""
     cleaned = (raw or "").strip()
+    # Strip <think>...</think> blocks emitted by reasoning models (e.g. qwen3)
+    cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
     cleaned = re.sub(r"\s*```$", "", cleaned)
 
@@ -642,11 +646,25 @@ def generate_persona(lob: str, description: str) -> str:
             )
             raw = response.choices[0].message.content.strip()
 
+        elif provider == "ollama":
+            import openai as _openai
+            client = _openai.OpenAI(base_url=_OLLAMA_BASE_URL, api_key="ollama")
+            response = client.chat.completions.create(
+                model=_OLLAMA_MODEL,
+                max_tokens=2048,
+                extra_body={"think": False},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+            raw = response.choices[0].message.content.strip()
+
         else:
             return json.dumps({
                 "error": (
                     "No AI provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY "
-                    "in your ..env file, or set AI_PROVIDER=anthropic|openai explicitly."
+                    "in your .env file, or set AI_PROVIDER=anthropic|openai|ollama explicitly."
                 )
             })
 
@@ -762,11 +780,25 @@ def _generate_persona_variation_chunk(
             )
             raw = response.choices[0].message.content.strip()
 
+        elif provider == "ollama":
+            import openai as _openai
+            client = _openai.OpenAI(base_url=_OLLAMA_BASE_URL, api_key="ollama")
+            response = client.chat.completions.create(
+                model=_OLLAMA_MODEL,
+                max_tokens=8192,
+                extra_body={"think": False},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+            raw = response.choices[0].message.content.strip()
+
         else:
             return json.dumps({
                 "error": (
                     "No AI provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY "
-                    "in your ..env file."
+                    "in your .env file."
                 )
             })
 

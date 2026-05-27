@@ -25,6 +25,15 @@
         "AI_PROVIDER": "openai",
         "PYTHONUTF8": "1"
       }
+    },
+    "local-inference": {
+      "command": "C:/Programming/SandboxPlaywrightMCP/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_tools.local_inference.server"],
+      "cwd": "C:/Programming/SandboxPlaywrightMCP",
+      "env": {
+        "OLLAMA_MODEL": "oneshield-qwen3",
+        "PYTHONUTF8": "1"
+      }
     }
   }
 }

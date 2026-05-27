@@ -20,7 +20,7 @@ class LoginPage(BasePage):
     @allure.step("Navigate to URL: {url}")
     def navigate(self, url=None):
         """Navigate to the login page."""
-        target = url or 'https://inforcedev.oneshield.com/splash.html'
+        target = url or 'https://inforcedev.oneshield.com/oneshield/'
         self.logger.info(f"Navigating to: {target}")
         self.page.goto(target)
 
@@ -33,7 +33,7 @@ class LoginPage(BasePage):
     def wait_for_login_page(self):
         """Wait for the login page to be ready."""
         self.logger.info("Waiting for login page to be ready")
-        expect(self.partner_num).to_be_visible(timeout=10000)  # Wait for partner number field
+        expect(self.partner_num).to_be_visible(timeout=30000)  # Wait for partner number field
         self.logger.info("Login page is ready")
 
     @allure.step("Fill credentials from Environment Variables")

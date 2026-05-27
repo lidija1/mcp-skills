@@ -10,7 +10,7 @@ def user_login(login_page, log, api_flow_recorder):
     log.info("Starting login process...")
     api_flow_recorder.mark_page("login")
     login_page.navigate()
-    login_page.click_splash_button()
+    login_page.wait_for_login_page()
     login_page.fill_credentials_from_env()
     login_page.click_login()
     api_flow_recorder.mark_page("post_login_home")

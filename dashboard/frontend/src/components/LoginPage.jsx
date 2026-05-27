@@ -20,7 +20,7 @@ export default function LoginPage({
     try {
       const data = await api.login(username, password)
 
-      onLogin(data.user.username)
+      onLogin(data.user)
 
     } catch (err) {
       setError(err.message || 'Invalid credentials')
@@ -32,28 +32,40 @@ export default function LoginPage({
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>INFORCE Dashboard</h1>
-
-        <p className="auth-subtitle">
-          Sign in to continue
-        </p>
+        <div className="auth-brand">
+          <div className="auth-mark">IF</div>
+          <div>
+            <h1>INFORCE Dashboard</h1>
+            <p className="auth-subtitle">Sign in to run and review dashboard executions.</p>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            required
-          />
+          <div className="auth-field">
+            <label htmlFor="dashboard-username">Username</label>
+            <input
+              id="dashboard-username"
+              type="text"
+              placeholder="e.g. ldubovac"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </div>
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
+          <div className="auth-field">
+            <label htmlFor="dashboard-password">Password</label>
+            <input
+              id="dashboard-password"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
 
           {error && (
             <div className="auth-error">

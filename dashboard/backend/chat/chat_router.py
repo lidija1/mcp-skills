@@ -407,7 +407,11 @@ def chat_message(req: ChatMessageReq, bg: BackgroundTasks):
             return ChatMessageResp(reply=f"No dispatch handler for {tool_name!r}.", status="error")
 
         label = _job_label(tool_name, cleaned)
-        jid = job_store.new_job(label)
+        jid = job_store.new_job(
+            label,
+            execution_type="chat_execution",
+            metadata={"tool": tool_name, "params": cleaned},
+        )
         bg.add_task(dispatch_fn(jid, cleaned))
         return ChatMessageResp(
             reply=f"Started. Job `{jid}` is running — check the Jobs panel for results.",
@@ -465,7 +469,11 @@ def chat_message(req: ChatMessageReq, bg: BackgroundTasks):
         return ChatMessageResp(reply=f"No dispatch handler for {tool_name!r}.", status="error")
 
     label = _job_label(tool_name, cleaned)
-    jid = job_store.new_job(label)
+    jid = job_store.new_job(
+        label,
+        execution_type="chat_execution",
+        metadata={"tool": tool_name, "params": cleaned},
+    )
     bg.add_task(dispatch_fn(jid, cleaned))
     return ChatMessageResp(
         reply=reply_text or "Job started — check the Jobs panel for results.",

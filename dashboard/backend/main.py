@@ -51,8 +51,9 @@ import subprocess
 import shutil
 import tempfile
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -167,6 +168,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from auth import router as _auth_router, user_from_request
+import dashboard_db
+
+
+_PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/login",
+    "/api/register",
+    "/api/auth/login",
+    "/api/auth/me",
+    "/api/auth/logout",
+}
+
+
+@app.middleware("http")
+async def dashboard_auth_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    path = request.url.path
+    token = None
+    protected_dashboard_path = (
+        (path.startswith("/api") and path not in _PUBLIC_API_PATHS)
+        or path.startswith("/screenshots")
+        or path.startswith("/allure")
+    )
+    if protected_dashboard_path:
+        user = user_from_request(request)
+        if not user:
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+        token = dashboard_db.set_current_user(user)
+
+    try:
+        return await call_next(request)
+    finally:
+        if token is not None:
+            dashboard_db.reset_current_user(token)
+
+
+app.include_router(_auth_router)
+
 # Serve allure-report/ as a static site at /allure/
 # The directory is created (empty) if it doesn't exist so the mount never errors.
 _ALLURE_REPORT_DIR = _PROJECT_ROOT / "allure-report"
@@ -178,7 +220,7 @@ _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/screenshots", StaticFiles(directory=str(_SCREENSHOTS_DIR)), name="screenshots")
 
 # Chat router — imports after sys.path is set
-from chat_router import router as _chat_router
+from chat.chat_router import router as _chat_router
 app.include_router(_chat_router)
 
 
@@ -588,7 +630,7 @@ def explorer_run_ep(req: ExplorerRunReq, bg: BackgroundTasks):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    jid = _new_job(f"Explorer - {req.prompt[:60]}")
+    jid = _new_job(f"Explorer - {req.prompt[:60]}", execution_type="explorer_run", metadata={"prompt": req.prompt})
 
     def _run():
         try:
@@ -609,7 +651,7 @@ def explorer_run_ep(req: ExplorerRunReq, bg: BackgroundTasks):
 
 @app.post("/api/explorer/prompt")
 def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
-    jid = _new_job("Explorer Prompt")
+    jid = _new_job("Explorer Prompt", execution_type="explorer_prompt", metadata={"prompt": req.prompt})
 
     def _run():
         try:
@@ -626,7 +668,11 @@ def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
 @app.post("/api/policy/create-persona")
 def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Build Profile - {req.lob.upper()}")
+    jid = _new_job(
+        f"Build Profile - {req.lob.upper()}",
+        execution_type="create_persona",
+        metadata={"lob": lob, "description": req.description},
+    )
 
     def _run():
         try:
@@ -647,7 +693,11 @@ def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
 @app.post("/api/policy/run-flow")
 def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Policy Journey - {req.lob.upper()}")
+    jid = _new_job(
+        f"Policy Journey - {req.lob.upper()}",
+        execution_type="policy_flow",
+        metadata={"lob": lob},
+    )
 
     def _run():
         try:
@@ -667,7 +717,11 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
 @app.post("/api/policy/quick-run")
 def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Quick Policy Test - {req.lob.upper()}")
+    jid = _new_job(
+        f"Quick Policy Test - {req.lob.upper()}",
+        execution_type="quick_run",
+        metadata={"lob": lob, "description": req.description},
+    )
 
     def _run():
         try:
@@ -692,7 +746,11 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
 def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
     for scenario in req.scenarios:
         _validate_policy_lob(str(scenario.get("lob", "auto")))
-    jid = _new_job(f"Batch Test â€” {len(req.scenarios)} scenarios")
+    jid = _new_job(
+        f"Batch Test â€” {len(req.scenarios)} scenarios",
+        execution_type="batch_run",
+        metadata={"scenario_count": len(req.scenarios)},
+    )
 
     def _run():
         try:
@@ -789,7 +847,11 @@ def list_rules(lob: str = ""):
 # â”€â”€ UW: Department Audit (browser Ã— all LOB cases) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/audit")
 def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
-    jid = _new_job(f"Department Audit â€” {req.lob.upper()}")
+    jid = _new_job(
+        f"Department Audit â€” {req.lob.upper()}",
+        execution_type="underwriting_audit",
+        metadata={"lob": req.lob.lower()},
+    )
 
     def _run():
         try:
@@ -809,7 +871,11 @@ def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
 # â”€â”€ UW: Single Rule Cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/rule-cases")
 def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
-    jid = _new_job(f"Rule Test â€” {req.rule_id}")
+    jid = _new_job(
+        f"Rule Test â€” {req.rule_id}",
+        execution_type="uw_rule",
+        metadata={"lob": req.lob.lower(), "rule_id": req.rule_id},
+    )
 
     def _run():
         try:
@@ -829,7 +895,11 @@ def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
 # â”€â”€ UW: Custom Boundary Test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/custom-boundary")
 def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
-    jid = _new_job(f"Edge Case â€” {req.lob.upper()}")
+    jid = _new_job(
+        f"Edge Case â€” {req.lob.upper()}",
+        execution_type="uw_custom_boundary",
+        metadata={"lob": req.lob.lower(), "description": req.description},
+    )
 
     def _run():
         try:
@@ -874,7 +944,7 @@ def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
 # â”€â”€ UW: Full System Audit (all LOBs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/full-audit")
 def full_audit_ep(bg: BackgroundTasks):
-    jid = _new_job("Full System Audit â€” ALL LOBs")
+    jid = _new_job("Full System Audit â€” ALL LOBs", execution_type="underwriting_audit", metadata={"lob": "all"})
 
     def _run():
         try:

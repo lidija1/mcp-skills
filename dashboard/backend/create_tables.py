@@ -1,13 +1,5 @@
-# Import Base i engine
-from database import Base, engine
-
-# Import svih modela
-# VEOMA VAŽNO:
-# SQLAlchemy mora da "vidi" modele
-from models import User
+import dashboard_db
 
 
-# Kreira sve tabele koje ne postoje
-Base.metadata.create_all(bind=engine)
-
-print("Tables created successfully")
+dashboard_db.init_db()
+print(f"Dashboard tables are ready at {dashboard_db.DB_PATH}")

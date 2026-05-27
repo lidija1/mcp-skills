@@ -1,19 +1,17 @@
-from database import SessionLocal
-from models import User
-from security import hash_password
+import dashboard_db
 
-# Open DB session
-session = SessionLocal()
 
-# Create test user
-user = User(
-    username="ld",
-    password_hash=hash_password("ld123"),
-    role="user"
-)
-
-# Save user
-session.add(user)
-session.commit()
-
-print("Test user created")
+try:
+    user = dashboard_db.create_user(
+        username="ld",
+        password="ld123",
+        first_name="Lidija",
+        last_name="Dubovac",
+        role="admin",
+    )
+    print(f"Test user created: {user['username']} ({user['role']})")
+except Exception as exc:
+    if "UNIQUE constraint failed" in str(exc):
+        print("Test user already exists")
+    else:
+        raise

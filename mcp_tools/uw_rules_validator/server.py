@@ -346,7 +346,8 @@ def test_custom_boundary(
         "min_conditions": len(expected_conditions) if expected_conditions else None,
     }
 
-    flow_result = run_flow(lob, persona)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        flow_result = pool.submit(run_flow, lob, persona).result()
     findings = validate_case(synthetic_case, flow_result)
 
     report = format_boundary_report(

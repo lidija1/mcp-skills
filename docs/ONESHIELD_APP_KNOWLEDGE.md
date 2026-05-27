@@ -52,6 +52,22 @@ Record failed approaches here. Do not retry them unchanged.
 
 Add confirmed behavior below as exploration progresses.
 
+### 2026-05-26 - Auto Policy Journey Stops At UW Referral
+
+**Context**
+- LOB: Personal Auto
+- Scenario: Dashboard Run Policy Journey with generated/pasted auto persona that triggers UW before request issue.
+
+**Confirmed Behavior**
+- Run Policy Journey should treat a visible UW referral page as a terminal `uw_referral` outcome, not automatically override conditions and continue to bind.
+- UW conditions can be a valid passed test outcome when the profile is intentionally risky.
+- The auto policy-flow runner now captures UW grid cells and returns `uw_referral` before request issue, during request issue, after request issue, after rating, or during normal-flow exceptions.
+
+**Known Failed Approaches**
+- Attempt: Automatically call `_try_uw_override()` when the current user can edit UW rows.
+- Symptom: The flow continued from the UW referral page to policy summary/bind, hiding the expected referral outcome.
+- Replacement: Stop at UW, capture triggered rules, and report `UW Referral` as the result.
+
 ### 2026-05-05 - Live Homeowner Policy Flow
 
 **Context**

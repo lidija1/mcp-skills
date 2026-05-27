@@ -88,6 +88,13 @@ AUTO_UW_EXPECTED: dict[str, list[str]] = {
     "UW_TC_012": [_SR22, _LIC],
     "UW_TC_013": [_SR22],
     "UW_TC_014": [_U25],
+    # Edge-case batch — added 2026-05-27
+    # Cases #5 (prior losses) and #6 (refusal history) omitted: no API field available.
+    "UW_TC_015": [_SR22],          # DUI→SR22 proxy; age 30; violations field absent from API
+    "UW_TC_016": [_U25],           # Age 16; multi-driver not testable via API replay
+    "UW_TC_019": [_SR22],          # SR22+losses combo; only SR22 side testable; loss field absent
+    "UW_TC_020": [_U25],           # Age 19 + violations; only under-25 side testable
+    "UW_TC_021": [_LIC],           # Suspended + losses; only license side testable; loss field absent
 }
 
 _UW_DATA   = _PROJECT_ROOT / "testdata" / "static" / "auto" / "AutoUWRulesData.json"

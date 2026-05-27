@@ -55,7 +55,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # â”€â”€ MCP Tool imports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 from mcp_tools.policy_flow_generator.flow_runner import run_flow
@@ -73,14 +73,14 @@ _status = _job_store.update_job_status
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
-POLICY_LOBS = {"auto", "cyber", "homeowner"}
+POLICY_LOBS = {"personal-auto", "cyber", "homeowner"}
 LOB_DISPLAY = {
-    "auto": "Personal Auto",
+    "personal-auto": "Personal Auto",
     "cyber": "Cyber",
     "homeowner": "Homeowner",
 }
 POLICY_DATA_FILES = {
-    "auto": _PROJECT_ROOT / "testdata" / "static" / "auto" / "AutoData.json",
+    "personal-auto": _PROJECT_ROOT / "testdata" / "static" / "auto" / "AutoData.json",
     "cyber": _PROJECT_ROOT / "testdata" / "static" / "cyber" / "CyberData.json",
     "homeowner": _PROJECT_ROOT / "testdata" / "static" / "homeowner" / "HomeData.json",
 }
@@ -101,8 +101,35 @@ def _make_policy_progress_callback(jid: str, lob: str):
     return _update
 
 
+def _canonical_policy_lob(raw: str, *, unknown_fallback: str | None = None) -> str:
+    """Normalize dashboard LOB strings (personal-auto variants, auto alias, etc.)."""
+    key = re.sub(r"[\s_]+", "-", (raw or "").strip().lower())
+    if key in ("personal-auto", "personalauto", "auto", "car", "vehicle"):
+        return "personal-auto"
+    if key == "cyber":
+        return "cyber"
+    if key in ("homeowner", "home"):
+        return "homeowner"
+    if unknown_fallback is not None:
+        return unknown_fallback
+    return key
+
+
+def _to_flow_engine_lob(policy_lob: str) -> str:
+    """Map dashboard policy LOB keys to flow_runner / persona_generator keys."""
+    if policy_lob == "personal-auto":
+        return "auto"
+    return policy_lob
+
+
+def _resolve_run_flow_lob(raw: str) -> tuple[str, str]:
+    """Resolve Run Policy Journey LOB without HTTP errors. Unknown → personal-auto."""
+    policy_lob = _canonical_policy_lob(raw or "personal-auto", unknown_fallback="personal-auto")
+    return policy_lob, _to_flow_engine_lob(policy_lob)
+
+
 def _validate_policy_lob(lob: str) -> str:
-    normalized = lob.lower().strip()
+    normalized = _canonical_policy_lob(lob)
     if normalized not in POLICY_LOBS:
         valid = ", ".join(sorted(POLICY_LOBS))
         raise HTTPException(
@@ -154,6 +181,52 @@ def _parse_policy_persona_input(lob: str, persona_input: str) -> dict:
             return _load_policy_persona_from_tc_id(lob, tc_id)
     if not isinstance(parsed, dict):
         raise ValueError("Run Policy Journey expects profile JSON or a TC_ID such as TC_ID_0001.")
+    return parsed
+
+
+def _parse_run_flow_persona(policy_lob: str, persona_input: str | dict) -> dict:
+    """Lenient persona parsing for Run Policy Journey (errors surface in job logs)."""
+    if isinstance(persona_input, dict):
+        return persona_input
+
+    if not isinstance(persona_input, str):
+        raise ValueError("persona_json must be a JSON string or object.")
+
+    text = persona_input.strip()
+    if not text:
+        raise ValueError("persona_json is empty — paste profile JSON or a TC_ID such as TC_ID_0001.")
+
+    tc_id = _normalize_policy_tc_id(text)
+    if tc_id:
+        try:
+            return _load_policy_persona_from_tc_id(policy_lob, tc_id)
+        except Exception as exc:
+            raise ValueError(f"Could not load test case {tc_id}: {exc}") from exc
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"persona_json is not valid JSON: {exc}") from exc
+
+    if isinstance(parsed, str):
+        nested = parsed.strip()
+        tc_id = _normalize_policy_tc_id(nested)
+        if tc_id:
+            try:
+                return _load_policy_persona_from_tc_id(policy_lob, tc_id)
+            except Exception as exc:
+                raise ValueError(f"Could not load test case {tc_id}: {exc}") from exc
+        try:
+            parsed = json.loads(nested)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"persona_json contained a string that is not valid JSON: {exc}"
+            ) from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            "Run Policy Journey expects a profile JSON object or a TC_ID such as TC_ID_0001."
+        )
     return parsed
 
 
@@ -313,8 +386,9 @@ def get_job(job_id: str):
 @app.get("/api/policy/archetypes")
 def get_archetypes(lob: str = ""):
     if lob:
-        _validate_policy_lob(lob)
-    return {"result": list_archetypes(lob or None)}
+        policy_lob = _validate_policy_lob(lob)
+        return {"result": list_archetypes(_to_flow_engine_lob(policy_lob))}
+    return {"result": list_archetypes(None)}
 
 
 # â”€â”€ Pydantic models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -324,8 +398,24 @@ class PersonaReq(BaseModel):
 
 
 class FlowReq(BaseModel):
-    lob: str
-    persona_json: str
+    lob: str = "personal-auto"
+    persona_json: str | dict = ""
+
+    @field_validator("lob", mode="before")
+    @classmethod
+    def _coerce_flow_lob(cls, value):
+        if value is None:
+            return "personal-auto"
+        return str(value)
+
+    @field_validator("persona_json", mode="before")
+    @classmethod
+    def _coerce_flow_persona(cls, value):
+        if value is None:
+            return ""
+        if isinstance(value, dict):
+            return value
+        return str(value)
 
 
 class BatchReq(BaseModel):
@@ -582,12 +672,12 @@ def _parse_explorer_intent(prompt: str) -> dict:
         "You are a routing assistant for an insurance testing dashboard. "
         "Parse the user's request and return a JSON object with no extra text.\n\n"
         "Possible types:\n"
-        '- "policy_flow": run a policy flow. Requires "lob" (auto|homeowner) '
+        '- "policy_flow": run a policy flow. Requires "lob" (personal-auto|homeowner) '
         'and "description".\n'
         '- "uw_audit": run underwriting rules audit. Requires "lob".\n'
         '- "unknown": cannot determine the action.\n\n'
         "Examples:\n"
-        '"test a young driver with DUI" â†’ {"type":"policy_flow","lob":"auto",'
+        '"test a young driver with DUI" â†’ {"type":"policy_flow","lob":"personal-auto",'
         '"description":"young driver with DUI history"}\n'
         '"audit homeowner UW rules" â†’ {"type":"uw_audit","lob":"homeowner"}'
     )
@@ -667,16 +757,17 @@ def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Build Profile (AI call only, ~5s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/create-persona")
 def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
-    lob = _validate_policy_lob(req.lob)
+    policy_lob = _validate_policy_lob(req.lob)
+    engine_lob = _to_flow_engine_lob(policy_lob)
     jid = _new_job(
         f"Build Profile - {req.lob.upper()}",
         execution_type="create_persona",
-        metadata={"lob": lob, "description": req.description},
+        metadata={"lob": policy_lob, "description": req.description},
     )
 
     def _run():
         try:
-            persona_json = generate_persona(lob, req.description)
+            persona_json = generate_persona(engine_lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
@@ -692,19 +783,22 @@ def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Run Journey (browser, ~90s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/run-flow")
 def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
-    lob = _validate_policy_lob(req.lob)
+    policy_lob, engine_lob = _resolve_run_flow_lob(req.lob)
+    display = LOB_DISPLAY.get(policy_lob, req.lob.strip().upper() or "PERSONAL AUTO")
     jid = _new_job(
-        f"Policy Journey - {req.lob.upper()}",
+        f"Policy Journey - {display.upper()}",
         execution_type="policy_flow",
-        metadata={"lob": lob},
+        metadata={"lob": policy_lob, "requested_lob": req.lob},
     )
 
     def _run():
         try:
-            _status(jid, "Preparing profile", LOB_DISPLAY.get(lob, req.lob.upper()))
-            persona = _parse_policy_persona_input(lob, req.persona_json)
-            result = _run_flow_threaded(lob, persona, _make_policy_progress_callback(jid, lob))
-            persona_section = _format_persona_report(req.lob, '', json.dumps(persona)) + "\n\n---\n\n"
+            _status(jid, "Preparing profile", display)
+            persona = _parse_run_flow_persona(policy_lob, req.persona_json)
+            result = _run_flow_threaded(
+                engine_lob, persona, _make_policy_progress_callback(jid, policy_lob)
+            )
+            persona_section = _format_persona_report(display, "", json.dumps(persona)) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
         except Exception as e:
             _fail(jid, str(e))
@@ -716,22 +810,25 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Quick Run (AI + browser, ~100s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/quick-run")
 def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
-    lob = _validate_policy_lob(req.lob)
+    policy_lob = _validate_policy_lob(req.lob)
+    engine_lob = _to_flow_engine_lob(policy_lob)
     jid = _new_job(
         f"Quick Policy Test - {req.lob.upper()}",
         execution_type="quick_run",
-        metadata={"lob": lob, "description": req.description},
+        metadata={"lob": policy_lob, "description": req.description},
     )
 
     def _run():
         try:
-            _status(jid, "Generating profile", LOB_DISPLAY.get(lob, req.lob.upper()))
-            persona_json = generate_persona(lob, req.description)
+            _status(jid, "Generating profile", LOB_DISPLAY.get(policy_lob, req.lob.upper()))
+            persona_json = generate_persona(engine_lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
                 return
-            result = _run_flow_threaded(lob, data, _make_policy_progress_callback(jid, lob))
+            result = _run_flow_threaded(
+                engine_lob, data, _make_policy_progress_callback(jid, policy_lob)
+            )
             persona_section = _format_persona_report(req.lob, req.description, persona_json) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
         except Exception as e:
@@ -745,7 +842,7 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
 @app.post("/api/policy/batch-run")
 def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
     for scenario in req.scenarios:
-        _validate_policy_lob(str(scenario.get("lob", "auto")))
+        _validate_policy_lob(str(scenario.get("lob", "personal-auto")))
     jid = _new_job(
         f"Batch Test â€” {len(req.scenarios)} scenarios",
         execution_type="batch_run",
@@ -756,16 +853,17 @@ def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
         try:
             results = []
             for s in req.scenarios[:25]:
-                lob = _validate_policy_lob(str(s.get("lob", "auto")))
-                pjson = generate_persona(lob, s.get("description", ""))
+                policy_lob = _validate_policy_lob(str(s.get("lob", "personal-auto")))
+                engine_lob = _to_flow_engine_lob(policy_lob)
+                pjson = generate_persona(engine_lob, s.get("description", ""))
                 try:
                     p = json.loads(pjson)
                     if "error" in p:
-                        r = _empty_result(lob, p.get("error", "persona error"))
+                        r = _empty_result(engine_lob, p.get("error", "persona error"))
                     else:
-                        r = _run_flow_threaded(lob, p)
+                        r = _run_flow_threaded(engine_lob, p)
                 except Exception as ex:
-                    r = _empty_result(lob, str(ex))
+                    r = _empty_result(engine_lob, str(ex))
                 results.append(r)
             _done(jid, format_batch_summary(results))
         except Exception as e:
@@ -814,7 +912,12 @@ def _format_persona_report(lob: str, description: str, persona_json: str) -> str
 @app.get("/api/uw/rules")
 def list_rules(lob: str = ""):
     target = lob.lower().strip() if lob else None
-    lob_display = {"auto": "Personal Auto", "cyber": "Cyber", "homeowner": "Homeowner"}
+    lob_display = {
+        "auto": "Personal Auto",
+        "personal-auto": "Personal Auto",
+        "cyber": "Cyber",
+        "homeowner": "Homeowner",
+    }
     sev_icon = {"critical": "ðŸ”´", "high": "ðŸŸ ", "warning": "ðŸŸ¡"}
     lob_groups: dict[str, list] = {}
 

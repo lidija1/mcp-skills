@@ -158,10 +158,15 @@ function SummaryMetric({ label, value }) {
 function HistoryRow({ job, onSelect }) {
   const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.running
   const canOpen = job.status === 'done' || job.status === 'error'
+  const owner = job.created_by_user
+  const ownerName = owner?.display_name || owner?.username
 
   return (
     <article className={`jobs-table-row ${job.status === 'error' ? 'has-error' : ''}`}>
-      <div className="jobs-job-title">{cleanDisplayText(job.label)}</div>
+      <div className="jobs-job-title">
+        {cleanDisplayText(job.label)}
+        {ownerName && <small className="jobs-owner">Created by {ownerName}</small>}
+      </div>
       <div>
         <span className="job-status" style={{ color: cfg.color }}>
           <i style={{ background: cfg.color }} />

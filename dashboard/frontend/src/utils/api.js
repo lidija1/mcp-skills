@@ -1,35 +1,67 @@
-const post = (url, body) =>
-  fetch(url, {
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('access_token')
+
+  return token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : {}
+}
+
+const post = async (url, body) => {
+  const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify(body),
-  }).then(async r => {
-    const data = await r.json()
-    if (!r.ok) {
-      throw new Error(data.detail || data.error || `Request failed with HTTP ${r.status}`)
-    }
-    return data
   })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.error || 'Request failed')
+  }
+
+  return data
+}
+
+const get = async url => {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.error || 'Request failed')
+  }
+
+  return data
+}
 
 export const api = {
   // ── Health ────────────────────────────────────────────────────────────
-  health: () => fetch('/api/health').then(r => r.json()),
+  health: () => get('/api/health'),
 
   // ── Jobs ──────────────────────────────────────────────────────────────
-  listJobs: () => fetch('/api/jobs').then(r => r.json()),
-  getJob: id => fetch(`/api/jobs/${id}`).then(r => r.json()),
+  listJobs: () => get('/api/jobs'),
+  getJob: id => get(`/api/jobs/${id}`),
   explorerPrompt: prompt => post('/api/explorer/prompt', { prompt }),
   explorerRun: prompt => post('/api/explorer/run', { prompt }),
 
   // ── Policy ────────────────────────────────────────────────────────────
-  getArchetypes: (lob = '') => fetch(`/api/policy/archetypes?lob=${lob}`).then(r => r.json()),
+  getArchetypes: (lob = '') => get(`/api/policy/archetypes?lob=${lob}`),
   createPersona: (lob, description) => post('/api/policy/create-persona', { lob, description }),
   runFlow: (lob, persona_json) => post('/api/policy/run-flow', { lob, persona_json }),
   quickRun: (lob, description) => post('/api/policy/quick-run', { lob, description }),
   batchRun: scenarios => post('/api/policy/batch-run', { scenarios }),
 
   // ── UW ────────────────────────────────────────────────────────────────
-  listRules: (lob = '') => fetch(`/api/uw/rules?lob=${lob}`).then(r => r.json()),
+  listRules: (lob = '') => get(`/api/uw/rules?lob=${lob}`),
   runAudit: lob => post('/api/uw/audit', { lob }),
   runRuleCases: (lob, rule_id) => post('/api/uw/rule-cases', { lob, rule_id }),
   runCustomBoundary: (lob, description, expected_outcome, expected_conditions) =>
@@ -37,11 +69,30 @@ export const api = {
   runFullAudit: () => post('/api/uw/full-audit', {}),
 
   // ── Chat ──────────────────────────────────────────────────────────────
-  chatGreeting: () => fetch('/api/chat/greeting').then(r => r.json()),
+  chatGreeting: () => get('/api/chat/greeting'),
   chat: (message, confirmedTool = null, confirmedParams = null) =>
     post('/api/chat/message', {
       message,
       confirmed_tool: confirmedTool,
       confirmed_params: confirmedParams,
     }),
+
+  // ── Auth ──────────────────────────────────────────────────────────────
+login: (username, password) =>
+  post('/api/login', {
+    username,
+    password,
+  }),
+
+register: (first_name, last_name, username, password) =>
+  post('/api/register', {
+    first_name,
+    last_name,
+    username,
+    password,
+  }),
+
+me: () => get('/api/auth/me'),
+
+logout: () => post('/api/auth/logout', {}),
 }

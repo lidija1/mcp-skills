@@ -653,7 +653,7 @@ docker build -t playwright-tests:latest .
 **Run directly:**
 
 ```bash
-docker run --rm --env-file .env playwright-tests:latest pytest -m auto -n 4 -v
+docker run --rm --.env-file ..env playwright-tests:latest pytest -m auto -n 4 -v
 ```
 
 Volumes are not mounted in a direct `docker run`, so artifacts stay inside the container and are lost when it exits. Use Docker Compose for artifact persistence.
@@ -707,7 +707,7 @@ tests-smoke:
     context: .
     dockerfile: Dockerfile
   env_file:
-    - .env
+    - ..env
   volumes:
     - ./reports:/app/reports
     - ./allure-results:/app/allure-results

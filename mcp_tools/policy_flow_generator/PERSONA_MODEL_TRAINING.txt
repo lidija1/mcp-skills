@@ -1,0 +1,59 @@
+Persona JSON Model Tuning
+=========================
+
+This is the fast local tuning path for persona test-data generation.
+
+It does not fine-tune model weights. It creates a specialized Ollama model with:
+
+- deterministic generation parameters
+- OneShield persona JSON rules
+- a few in-context examples
+- a local eval harness for Auto and Homeowner prompt coverage
+
+Create the local model:
+
+  ollama create oneshield-persona-json -f mcp_tools\policy_flow_generator\Modelfile.persona-json
+
+Use it:
+
+  $env:AI_PROVIDER = "ollama"
+  $env:OLLAMA_MODEL = "oneshield-persona-json"
+
+Persona generation is model-only. Invalid model output is rejected by the Pydantic validator and returned as a validation error.
+
+Evaluate the model:
+
+  python tools\eval_persona_model.py --model oneshield-persona-json --out reports\persona_model_eval.json
+
+The eval checks:
+
+- valid JSON
+- expected key fields from the prompt
+- provider used by the generator
+- validation error count
+- elapsed time per case
+
+Current baseline after creating oneshield-persona-json:
+
+  passed=8/8
+  validation_errors=0
+  avg_ms=25264
+
+Add more training/eval examples in:
+
+  mcp_tools/policy_flow_generator/persona_eval_cases.json
+
+Each case should include:
+
+  {
+    "id": "short_unique_name",
+    "lob": "auto",
+    "prompt": "natural language prompt",
+    "expect": {
+      "FieldName": "ExpectedValue"
+    }
+  }
+
+Run the eval again after every model prompt or generator change.
+
+Move to LoRA or full fine-tuning only after collecting at least 100-300 high-quality examples with expected JSON. The eval file is the seed for that dataset.

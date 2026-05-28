@@ -1,0 +1,104 @@
+[
+  {
+    "id": "auto_sr22_revoked_leased_bmw",
+    "lob": "auto",
+    "prompt": "22-year-old driver with SR-22, revoked license, leased BMW, Platinum coverage",
+    "expect": {
+      "Program": "Personal Auto",
+      "SR22": "Yes",
+      "SR22FilingState": "Massachusetts",
+      "LicenseStatus": "Revoked",
+      "Ownership": "Leased",
+      "LossPayeeType": "Leased",
+      "PolicyCoverage": "Platinum",
+      "Make": "BMW"
+    }
+  },
+  {
+    "id": "auto_suspended_financed_commute_silver",
+    "lob": "auto",
+    "prompt": "suspended license, financed SUV, commute use, silver coverage, no accidents",
+    "expect": {
+      "Program": "Personal Auto",
+      "SR22": "No",
+      "LicenseStatus": "Suspended",
+      "Ownership": "Financed",
+      "LossPayeeType": "Financed",
+      "VehicleUse": "Commute",
+      "PolicyCoverage": "Silver",
+      "DamageInfo": "No"
+    }
+  },
+  {
+    "id": "auto_clean_retired_owned_gold",
+    "lob": "auto",
+    "prompt": "retired clean driver over 70, active license, owned vehicle, gold coverage",
+    "expect": {
+      "Program": "Personal Auto",
+      "EmploymentCategory": "Retired",
+      "SR22": "No",
+      "LicenseStatus": "Active License",
+      "Ownership": "Owned",
+      "PolicyCoverage": "Gold"
+    }
+  },
+  {
+    "id": "auto_business_damage_bronze",
+    "lob": "auto",
+    "prompt": "business-use vehicle with prior accident damage, active license, bronze coverage",
+    "expect": {
+      "Program": "Personal Auto",
+      "VehicleUse": "Business",
+      "DamageInfo": "Yes",
+      "LicenseStatus": "Active License",
+      "PolicyCoverage": "Bronze"
+    }
+  },
+  {
+    "id": "home_coastal_masonry_tile_platinum",
+    "lob": "homeowner",
+    "prompt": "coastal property with masonry construction, tile roof, platinum coverage, high liability",
+    "expect": {
+      "Program": "Homeowner",
+      "ConstructionType": "Masonry",
+      "RoofType": "Concrete Tile",
+      "PolicyCoverageOption": "Platinum",
+      "WindstormDeductable": "5%",
+      "Liability": "500,000"
+    }
+  },
+  {
+    "id": "home_old_losses_renovation_bronze",
+    "lob": "homeowner",
+    "prompt": "older home with prior losses and renovation in progress, bronze coverage",
+    "expect": {
+      "Program": "Homeowner",
+      "Loses": "Yes",
+      "Renovation": "Yes",
+      "PolicyCoverageOption": "Bronze"
+    }
+  },
+  {
+    "id": "home_rented_animals_silver",
+    "lob": "homeowner",
+    "prompt": "rented investment property with animals, silver coverage, no prior losses",
+    "expect": {
+      "Program": "Homeowner",
+      "ResidenceRented": "Yes",
+      "Animals": "Yes",
+      "Loses": "No",
+      "PolicyCoverageOption": "Silver"
+    }
+  },
+  {
+    "id": "home_refused_declined_losses",
+    "lob": "homeowner",
+    "prompt": "homeowner was refused and declined by prior carrier and had prior losses",
+    "expect": {
+      "Program": "Homeowner",
+      "Refused": "Yes",
+      "Declined": "Yes",
+      "Loses": "Yes"
+    }
+  }
+]

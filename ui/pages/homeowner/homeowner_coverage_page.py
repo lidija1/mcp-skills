@@ -78,6 +78,9 @@ class HomeownerCoveragePage(BasePage):
         self._open_and_select(self.policy_coverage, data["PolicyCoverageOption"])
 
     def set_residency(self, data):
+        self.wait_for_loader_to_disappear()
+        self.wait_for_app_ready()
+        self.residence_type.wait_for(state="visible", timeout=30_000)
         self._open_and_select(self.residence_type, data["ResidenceType"])
         self.wait_for_loader_to_disappear()
 

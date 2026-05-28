@@ -141,7 +141,9 @@ def run_homeowner_flow(page: Page, persona: dict, steps: list, progress_callback
     from ui.pages.common.customer_page import CustomerPage
     from ui.pages.common.quote_registration_page import QuoteRegistrationPage
     from ui.pages.homeowner.homeowner_quote_summary_page import HomeOwnerQuoteSummaryPage
+    from ui.pages.homeowner.homeowner_city_information_page import HomeownerCityInformationPage
     from ui.pages.homeowner.homeowner_coverage_page import HomeownerCoveragePage
+    from ui.pages.homeowner.homeowner_bind_information_page import HomeownerBindInformationPage
     from ui.pages.common.policy_summary_page import PolicySummary
 
     outcome = "error"
@@ -180,20 +182,25 @@ def run_homeowner_flow(page: Page, persona: dict, steps: list, progress_callback
         QuoteRegistrationPage(page).quote_registration_steps(persona)
         _record(steps, "Quote Registration", "passed", time.perf_counter() - t)
 
-        # 5. Homeowner Quote Summary
-        # summary_steps navigates: fills billing/program/radios → saves → clicks city link
-        #                          → saves → clicks homeowners link (lands on coverage tab)
+        # 5. Homeowner Quote Summary → City Information → Location Coverage
         _emit_progress(progress_callback, "Quote Summary")
         t = time.perf_counter()
         HomeOwnerQuoteSummaryPage(page).summary_steps(persona)
+        city_page = HomeownerCityInformationPage(page)
+        city_page.click_save()
+        city_page.click_homeowners_link(persona)
         _record(steps, "Quote Summary (HO)", "passed", time.perf_counter() - t)
 
-        # 6. Location Coverage + Rate Quote
-        # coverage_steps fills all property/construction/risk fields and ends with click_rate_quote()
+        # 6. Location Coverage + Bind Information + Rate Quote
         _emit_progress(progress_callback, "Location Coverage & Rate")
         t = time.perf_counter()
         HomeownerCoveragePage(page).coverage_steps(persona)
-        # Wait for post-rate-quote navigation to settle
+        bind_page = HomeownerBindInformationPage(page)
+        bind_page.set_existing_client(persona)
+        bind_page.set_refused_in_the_past(persona)
+        bind_page.set_denied_coverage(persona)
+        bind_page.click_save()
+        bind_page.click_rate_quote()
         page.wait_for_load_state("networkidle", timeout=30_000)
         _record(steps, "Location Coverage & Rate", "passed", time.perf_counter() - t)
 

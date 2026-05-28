@@ -32,21 +32,21 @@ export default function PolicyPanel({submitJob}) {
 
     const validLobs = LOBS.map(l => l.id)
 
-    const initialLob = validLobs.includes(lobFromUrl)
-        ? lobFromUrl
-        : 'personal-auto'
 
-    const [lob, setLob] = useState(initialLob)
+    const savedLob = localStorage.getItem('selectedLob') || 'personal-auto'
+
+    const lob = validLobs.includes(lobFromUrl)
+        ? lobFromUrl
+        : savedLob
     const [loading, setLoading] = useState('')
 
-    useEffect(() => {
-        if (lobFromUrl && lobFromUrl !== lob) {
-            setLob(lobFromUrl)
-        }
-    }, [lobFromUrl])
+
+    // useEffect(() => {
+    //     navigate(`/policy-flow/${lob}`)
+    // }, [lob])
 
     useEffect(() => {
-        navigate(`/policy-flow/${lob}`)
+        localStorage.setItem('selectedLob', lob)
     }, [lob])
 
     const run = async (label, apiFn) => {
@@ -75,7 +75,7 @@ export default function PolicyPanel({submitJob}) {
                 lobs={LOBS}
                 selected={lob}
                 onSelect={value => {
-                    setLob(value)
+                    navigate(`/policy-flow/${value}`)
                 }}
             />
 

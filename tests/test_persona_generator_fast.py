@@ -3,101 +3,163 @@ import json
 import mcp_tools.policy_flow_generator.persona_generator as persona_generator
 
 
-def _fast_persona(monkeypatch, lob: str, description: str) -> dict:
+def _model_persona(monkeypatch, lob: str, description: str, payload: dict) -> dict:
     monkeypatch.setenv("AI_PROVIDER", "ollama")
-    monkeypatch.setenv("PERSONA_FAST_LOCAL", "1")
+    monkeypatch.setenv("OLLAMA_MODEL", "oneshield-persona-json")
+    monkeypatch.setattr(persona_generator, "_ollama_chat", lambda *args, **kwargs: json.dumps(payload))
     return json.loads(persona_generator.generate_persona(lob, description))
 
 
-def test_fast_auto_persona_maps_high_risk_keywords(monkeypatch):
-    persona = _fast_persona(
+def test_auto_model_output_is_validated_and_normalized(monkeypatch):
+    persona = _model_persona(
         monkeypatch,
         "auto",
         "22-year-old driver with SR-22, revoked license, leased BMW, Platinum coverage",
+        {
+            "TC_ID": "AI_123456",
+            "CustomerType": "Individual",
+            "FirstName": "Jordan",
+            "LastName": "Parker",
+            "DOB": "04/15/2004",
+            "PhoneNum": "413-555-1834",
+            "Email": "jordan_{timestamp}@uwtest.com",
+            "Address": "225 Maple Street",
+            "ZIP": "01101",
+            "State": "Massachusetts",
+            "City": "Springfield",
+            "Producer": "Janis Irey",
+            "EffectiveDate": "05/29/2026",
+            "Program": "Personal Auto",
+            "BillingMethod": "Direct Billed",
+            "FalseInfo": "No",
+            "DamageInfo": "No",
+            "Gender": "Male",
+            "MaritalStatus": "Single",
+            "DriverStatus": "Active (rated)",
+            "EmploymentCategory": "Student",
+            "SR2022": "Yes",
+            "SR22FilingState": "Massachusetts",
+            "Occupation": "Day Care",
+            "LicenseStatus": "Revoked",
+            "VehicleType": "Private Passenger Auto",
+            "Year": "2019",
+            "Make": "BMW",
+            "Model": "X6 50I AWD",
+            "Spec": "Utility Vehicle - Four-Wheel Drive 4-Door | 4WD | 4.4 Ltrs | 4x4",
+            "VehicleUse": "Pleasure",
+            "Ownership": "Leased",
+            "LossPayeeType": "Leased",
+            "LossPayeeName": "BMW Financial Services",
+            "PolicyCoverage": "Platinum",
+            "PaymentPlan": "Pay In Full",
+        },
     )
 
-    assert persona["_provider"] == "local-fast"
+    assert persona["_provider"] == "ollama"
     assert persona["_persona_type"] == "triple_risk"
-    assert persona["Program"] == "Personal Auto"
     assert persona["SR22"] == "Yes"
-    assert persona["LicenseStatus"] == "Revoked"
+    assert "SR2022" not in persona
     assert persona["Ownership"] == "Leased"
     assert persona["PolicyCoverage"] == "Platinum"
-    assert persona["LossPayeeType"] == "Leased"
 
 
-def test_fast_homeowner_persona_has_runnable_required_fields(monkeypatch):
-    persona = _fast_persona(
+def test_homeowner_model_output_is_validated(monkeypatch):
+    persona = _model_persona(
         monkeypatch,
         "homeowner",
         "coastal property with prior losses and renovation",
+        {
+            "TC_ID": "AI_654321",
+            "CustomerType": "Individual",
+            "FirstName": "Morgan",
+            "LastName": "Rivera",
+            "DOB": "06/12/1984",
+            "PhoneNum": "413-555-2841",
+            "Email": "morgan_{timestamp}@hometest.com",
+            "Address": "714 Shoreline Avenue",
+            "ZIP": "01101",
+            "State": "Massachusetts",
+            "City": "Springfield",
+            "Producer": "Janis Irey",
+            "Program": "Homeowner",
+            "EffectiveDate": "05/29/2026",
+            "BillingMethod": "Direct Billed",
+            "ProgramType": "Basic",
+            "DayCare": "No",
+            "UndergroundOil": "No",
+            "ResidenceRented": "No",
+            "ResidenceVacant": "No",
+            "Animals": "No",
+            "PolicyCoverageOption": "Platinum",
+            "ResidenceType": "Homeowner",
+            "ReplacementCost": "1,200,000",
+            "Contents": "720,000",
+            "AllPerilsDeductable": "10,000",
+            "WindstormDeductable": "5%",
+            "Liability": "500,000",
+            "MedPayments": "5,000",
+            "Renovation": "Yes",
+            "LivedHere": "No",
+            "YearBuilt": "2018",
+            "ConstructionType": "Masonry",
+            "RoofType": "Concrete Tile",
+            "Loses": "Yes",
+            "ExistingClient": "No",
+            "Refused": "No",
+            "Declined": "No",
+            "PaymentPlan": "Pay In Full",
+        },
     )
 
-    assert persona["_provider"] == "local-fast"
+    assert persona["_provider"] == "ollama"
     assert persona["Program"] == "Homeowner"
-    assert persona["ProgramType"] == "Basic"
     assert persona["WindstormDeductable"] == "5%"
     assert persona["Loses"] == "Yes"
     assert persona["Renovation"] == "Yes"
-    assert persona["PaymentPlan"] == "Pay In Full"
 
 
-def test_fast_cyber_persona_is_supported(monkeypatch):
-    persona = _fast_persona(
-        monkeypatch,
-        "cyber",
-        "healthcare company with ransomware and no training",
+def test_invalid_model_output_returns_validation_error_without_fallback(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "ollama")
+    monkeypatch.setattr(
+        persona_generator,
+        "_ollama_chat",
+        lambda *args, **kwargs: json.dumps({"Program": "Personal Auto", "SR2022": "Yes"}),
     )
 
-    assert persona["_provider"] == "local-fast"
-    assert persona["Program"] == "Cyber"
-    assert persona["NatureOfBusiness"] == "Healthcare"
-    assert persona["SituationsLast3Years"] == "Ransomware Attack"
-    assert persona["CyberTraining"] == "No"
-    assert persona["AggregateLimit"] == "2,000,000"
+    result = json.loads(persona_generator.generate_persona("auto", "SR-22 driver"))
+
+    assert result["error"] == "Persona validation failed"
+    assert result["lob"] == "auto"
+    assert result["validation_errors"]
+    assert result.get("_provider") != "local-fast"
 
 
-def test_fast_persona_variations_skip_model_chunks(monkeypatch):
+def test_model_failure_returns_error_without_fallback(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "ollama")
-    monkeypatch.setenv("PERSONA_FAST_LOCAL", "1")
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("local fast variations should not call model chunk generation")
+    def fail_model(*args, **kwargs):
+        raise RuntimeError("model unavailable")
 
-    monkeypatch.setattr(persona_generator, "_generate_persona_variation_chunk", fail_if_called)
+    monkeypatch.setattr(persona_generator, "_ollama_chat", fail_model)
 
-    raw = persona_generator.generate_persona_variations(
-        "auto",
-        "22-year-old driver with SR-22 and revoked license",
-        6,
-    )
-    personas = json.loads(raw)
+    result = json.loads(persona_generator.generate_persona("auto", "leased BMW with Platinum coverage"))
 
-    assert len(personas) == 6
-    assert [p["_variation_index"] for p in personas] == list(range(6))
-    assert {p["_provider"] for p in personas} == {"local-fast"}
-    assert len({p["_note"] for p in personas}) == 6
-    assert all(p["SR22"] == "Yes" for p in personas)
+    assert result == {"error": "model unavailable"}
 
 
-def test_fast_batch_personas_skip_single_model_path(monkeypatch):
+def test_batch_personas_do_not_fall_back_when_model_fails(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "ollama")
-    monkeypatch.setenv("PERSONA_FAST_LOCAL", "1")
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("local fast batch should not call generate_persona")
+    def fail_model(*args, **kwargs):
+        raise RuntimeError("model unavailable")
 
-    monkeypatch.setattr(persona_generator, "generate_persona", fail_if_called)
+    monkeypatch.setattr(persona_generator, "_ollama_chat", fail_model)
 
-    raw = persona_generator.generate_batch_personas([
+    personas = json.loads(persona_generator.generate_batch_personas([
         {"lob": "auto", "description": "leased BMW with Platinum coverage"},
         {"lob": "homeowner", "description": "coastal property with prior losses"},
-        {"lob": "cyber", "description": "healthcare company with ransomware"},
-    ])
-    personas = json.loads(raw)
+    ]))
 
-    assert [p["_scenario_index"] for p in personas] == [0, 1, 2]
-    assert {p["_provider"] for p in personas} == {"local-fast"}
-    assert personas[0]["Ownership"] == "Leased"
-    assert personas[1]["Program"] == "Homeowner"
-    assert personas[2]["NatureOfBusiness"] == "Healthcare"
+    assert [p["_scenario_index"] for p in personas] == [0, 1]
+    assert [p["error"] for p in personas] == ["model unavailable", "model unavailable"]
+    assert all(p.get("_provider") != "local-fast" for p in personas)

@@ -11,11 +11,18 @@ import os
 import random
 import re
 import tempfile
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from mcp_tools.policy_flow_generator.persona_validator import (
+    PersonaValidationError,
+    validate_persona,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(_PROJECT_ROOT / ".env")
@@ -140,6 +147,97 @@ def _vehicle_constraint_text(vehicle: dict, plural: bool = False) -> str:
         f"  Year={vehicle['Year']}  Make={vehicle['Make']}  "
         f"Model={vehicle['Model']}  Spec={vehicle['Spec']}"
     )
+
+
+def _ollama_base_url() -> str:
+    base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip().rstrip("/")
+    if base.endswith("/v1"):
+        base = base[:-3]
+    return base
+
+
+def _ollama_chat(system_prompt: str, user_message: str, max_tokens: int) -> str:
+    payload = {
+        "model": _OLLAMA_MODEL,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "options": {
+            "temperature": 0,
+            "num_predict": max_tokens,
+        },
+        "format": "json",
+    }
+    data = json.dumps(payload).encode("utf-8")
+    attempts = max(1, int(os.getenv("PERSONA_OLLAMA_RETRIES", "2")))
+    last_error = "Ollama response did not contain message.content."
+
+    for _ in range(attempts):
+        req = urllib.request.Request(
+            f"{_ollama_base_url()}/api/chat",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"Ollama is not reachable at {_ollama_base_url()}. Start Ollama or update OLLAMA_BASE_URL."
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Ollama returned a non-JSON HTTP response.") from exc
+
+        message = body.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        last_error = f"{last_error} done_reason={body.get('done_reason')!r}"
+
+    raise RuntimeError(last_error)
+
+
+def _generate_persona_with_ollama(lob: str, system_prompt: str, user_message: str, description: str) -> str:
+    raw = _ollama_chat(system_prompt, user_message, max_tokens=2048)
+    parsed = _parse_model_json(raw)
+    parsed = _normalize_model_persona(lob, parsed)
+    parsed["_lob"] = lob
+    parsed["_provider"] = "ollama"
+    _ensure_persona_type(lob, parsed, description)
+    _ensure_unique_email(parsed, lob)
+    parsed = validate_persona(lob, parsed)
+    return json.dumps(parsed)
+
+
+def _generate_persona_variations_with_ollama(
+    lob: str,
+    count: int,
+    system_prompt: str,
+    user_message: str,
+    base_description: str,
+) -> str:
+    raw = _ollama_chat(system_prompt, user_message, max_tokens=8192)
+    parsed = _parse_model_json(raw)
+    if not isinstance(parsed, list):
+        parsed = [parsed]
+    if len(parsed) < count:
+        raise ValueError(f"Model returned only {len(parsed)} variation(s), expected {count}.")
+
+    for idx, persona in enumerate(parsed):
+        if isinstance(persona, dict):
+            persona = _normalize_model_persona(lob, persona)
+            parsed[idx] = persona
+            persona["_lob"] = lob
+            persona["_provider"] = "ollama"
+            persona["_variation_index"] = idx
+            _ensure_persona_type(lob, persona, base_description)
+            _ensure_unique_email(persona, lob, extra=idx)
+            parsed[idx] = validate_persona(lob, persona)
+
+    return json.dumps(parsed[:count], indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +589,84 @@ def _ensure_unique_email(persona: dict, lob: str, extra: str = "") -> None:
     persona["Email"] = f"{_email_local_part(first_name)}_{timestamp}@{_email_domain_for_lob(lob)}"
 
 
+def _age_from_dob(dob: object) -> int | None:
+    try:
+        parsed = datetime.strptime(str(dob), "%m/%d/%Y").date()
+    except (TypeError, ValueError):
+        return None
+    age = _TODAY.year - parsed.year - (( _TODAY.month, _TODAY.day) < (parsed.month, parsed.day))
+    return age
+
+
+def _ensure_persona_type(lob: str, persona: dict, description: str = "") -> None:
+    if not isinstance(persona, dict) or persona.get("_persona_type"):
+        return
+
+    text = str(description or "").lower()
+    if lob == "auto":
+        age = _age_from_dob(persona.get("DOB"))
+        sr22 = str(persona.get("SR22")) == "Yes"
+        license_status = str(persona.get("LicenseStatus") or "")
+        ownership = str(persona.get("Ownership") or "")
+        vehicle_use = str(persona.get("VehicleUse") or "")
+
+        if sr22 and license_status in {"Revoked", "Suspended"} and age is not None and age < 25:
+            persona["_persona_type"] = "triple_risk"
+        elif sr22 or license_status in {"Revoked", "Suspended"}:
+            persona["_persona_type"] = "high_risk_driver"
+        elif age is not None and age < 25:
+            persona["_persona_type"] = "young_driver"
+        elif vehicle_use == "Business" or "business" in text:
+            persona["_persona_type"] = "business_driver"
+        elif ownership == "Leased" and _contains_any(text, "bmw", "luxury", "leased"):
+            persona["_persona_type"] = "leased_luxury"
+        else:
+            persona["_persona_type"] = "clean_standard"
+        return
+
+    if lob == "homeowner":
+        loses = str(persona.get("Loses")) == "Yes"
+        refused = str(persona.get("Refused")) == "Yes"
+        declined = str(persona.get("Declined")) == "Yes"
+        renovation = str(persona.get("Renovation")) == "Yes"
+        rented = str(persona.get("ResidenceRented")) == "Yes"
+        year_built = str(persona.get("YearBuilt") or "")
+        replacement_cost = str(persona.get("ReplacementCost") or "").replace(",", "")
+        try:
+            replacement_num = int(replacement_cost)
+        except ValueError:
+            replacement_num = 0
+        coastal = _contains_any(text, "coastal", "wind", "shore", "beach") or str(persona.get("WindstormDeductable")) == "5%"
+        high_value = replacement_num >= 800000 or str(persona.get("PolicyCoverageOption")) == "Platinum"
+
+        if refused and declined and loses:
+            persona["_persona_type"] = "risk_flagged"
+        elif high_value:
+            persona["_persona_type"] = "high_value_home"
+        elif coastal:
+            persona["_persona_type"] = "coastal_exposure"
+        elif rented:
+            persona["_persona_type"] = "investment_property"
+        elif year_built.isdigit() and int(year_built) >= 2018:
+            persona["_persona_type"] = "new_construction"
+        elif loses or refused or declined or renovation or (year_built.isdigit() and int(year_built) < 1950):
+            persona["_persona_type"] = "risky_property"
+        else:
+            persona["_persona_type"] = "standard_homeowner"
+        return
+
+    if lob == "cyber":
+        if str(persona.get("CyberTraining")) == "No" or str(persona.get("CyberRegulations")) == "No" or str(persona.get("SituationsLast3Years")) != "None":
+            persona["_persona_type"] = "high_risk_startup"
+        elif str(persona.get("NatureOfBusiness")) == "Healthcare":
+            persona["_persona_type"] = "healthcare_provider"
+        else:
+            persona["_persona_type"] = "small_office"
+        return
+
+    persona["_persona_type"] = "custom"
+
+
 def _clean_model_json(raw: str) -> str:
     """Return the likely JSON payload from a model response."""
     cleaned = (raw or "").strip()
@@ -514,6 +690,24 @@ def _clean_model_json(raw: str) -> str:
 
 def _parse_model_json(raw: str):
     return json.loads(_clean_model_json(raw))
+
+
+def _normalize_model_persona(lob: str, persona):
+    if not isinstance(persona, dict):
+        return persona
+
+    if lob == "auto":
+        sr22_aliases = ("SR2022", "SR_22", "SR-22", "SR22Indicator")
+        if "SR22" not in persona:
+            for alias in sr22_aliases:
+                if alias in persona:
+                    persona["SR22"] = persona.pop(alias)
+                    break
+        else:
+            for alias in sr22_aliases:
+                persona.pop(alias, None)
+
+    return persona
 
 
 # ---------------------------------------------------------------------------
@@ -548,11 +742,6 @@ _STREET_NAMES = [
     "Main Street",
     "Birch Lane",
 ]
-
-
-def _fast_local_enabled() -> bool:
-    raw = os.getenv("PERSONA_FAST_LOCAL", "1").strip().lower()
-    return raw not in {"0", "false", "no", "off"}
 
 
 def _contains_any(text: str, *terms: str) -> bool:
@@ -1048,12 +1237,6 @@ def generate_persona(lob: str, description: str) -> str:
             vehicle = requested_vehicle
             vehicle_constraint = _vehicle_constraint_text(requested_vehicle)
 
-    if provider == "ollama" and _fast_local_enabled():
-        try:
-            return json.dumps(_build_fast_persona(lob, description, vehicle))
-        except Exception as exc:
-            return json.dumps({"error": str(exc)})
-
     user_message = f"Generate test data for this {lob.upper()} persona: {description}{vehicle_constraint}"
     raw = ""
 
@@ -1083,18 +1266,7 @@ def generate_persona(lob: str, description: str) -> str:
             raw = response.choices[0].message.content.strip()
 
         elif provider == "ollama":
-            import openai as _openai
-            client = _openai.OpenAI(base_url=_OLLAMA_BASE_URL, api_key="ollama")
-            response = client.chat.completions.create(
-                model=_OLLAMA_MODEL,
-                max_tokens=2048,
-                extra_body={"think": False},
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-            )
-            raw = response.choices[0].message.content.strip()
+            return _generate_persona_with_ollama(lob, system_prompt, user_message, description)
 
         else:
             return json.dumps({
@@ -1105,13 +1277,22 @@ def generate_persona(lob: str, description: str) -> str:
             })
 
         parsed = _parse_model_json(raw)
+        parsed = _normalize_model_persona(lob, parsed)
         parsed["_lob"] = lob
         parsed["_provider"] = provider
+        _ensure_persona_type(lob, parsed, description)
         _ensure_unique_email(parsed, lob)
+        parsed = validate_persona(lob, parsed)
         return json.dumps(parsed)
 
     except json.JSONDecodeError as exc:
         return json.dumps({"error": f"Model returned non-JSON: {exc}", "raw": raw})
+    except PersonaValidationError as exc:
+        return json.dumps({
+            "error": "Persona validation failed",
+            "lob": exc.lob,
+            "validation_errors": exc.errors,
+        })
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -1217,18 +1398,7 @@ def _generate_persona_variation_chunk(
             raw = response.choices[0].message.content.strip()
 
         elif provider == "ollama":
-            import openai as _openai
-            client = _openai.OpenAI(base_url=_OLLAMA_BASE_URL, api_key="ollama")
-            response = client.chat.completions.create(
-                model=_OLLAMA_MODEL,
-                max_tokens=8192,
-                extra_body={"think": False},
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-            )
-            raw = response.choices[0].message.content.strip()
+            raw = _ollama_chat(system_prompt, user_message, max_tokens=8192)
 
         else:
             return json.dumps({
@@ -1244,9 +1414,12 @@ def _generate_persona_variation_chunk(
 
         for idx, persona in enumerate(parsed):
             if isinstance(persona, dict):
+                persona = _normalize_model_persona(lob, persona)
+                parsed[idx] = persona
                 persona["_lob"] = lob
                 persona["_provider"] = provider
                 persona["_variation_index"] = start_index + idx
+                _ensure_persona_type(lob, persona, base_description)
                 _ensure_unique_email(persona, lob, extra=start_index + idx)
 
         return parsed[:count]
@@ -1278,14 +1451,41 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
         else:
             all_vehicles = _sample_vehicles(count)
 
-    if _detect_provider() == "ollama" and _fast_local_enabled():
-        try:
-            return json.dumps(
-                _build_fast_persona_variations(lob, base_description, count, all_vehicles),
-                indent=2,
-            )
-        except Exception as exc:
-            return json.dumps({"error": str(exc)})
+    if _detect_provider() == "ollama":
+        results: list[dict] = [None] * count  # type: ignore[list-item]
+
+        def _run_variation(index: int) -> tuple[int, dict]:
+            variation_description, note = _variation_text(lob, base_description, index)
+            vehicle = all_vehicles[index] if index < len(all_vehicles) else None
+            user_message = f"Generate test data for this {lob.upper()} persona: {variation_description}"
+            if lob == "auto" and vehicle:
+                user_message += _vehicle_constraint_text(vehicle)
+
+            try:
+                raw = _generate_persona_with_ollama(
+                    lob,
+                    _LOB_PROMPTS[lob],
+                    user_message,
+                    variation_description,
+                )
+                persona = json.loads(raw)
+            except json.JSONDecodeError:
+                persona = {"error": "Non-JSON persona variation", "raw": raw}
+            except Exception as exc:
+                persona = {"error": str(exc)}
+
+            if isinstance(persona, dict):
+                persona["_variation_index"] = index
+                persona["_note"] = note
+            return index, persona
+
+        with ThreadPoolExecutor(max_workers=min(count, _VARIATION_CHUNK_SIZE)) as pool:
+            futures = [pool.submit(_run_variation, index) for index in range(count)]
+            for future in as_completed(futures):
+                index, persona = future.result()
+                results[index] = persona
+
+        return json.dumps(results, indent=2)
 
     try:
         chunks = []
@@ -1373,10 +1573,6 @@ def generate_batch_personas(scenarios: list) -> str:
     """
     if not scenarios:
         return json.dumps([], indent=2)
-
-    if _detect_provider() == "ollama" and _fast_local_enabled():
-        results = [_fast_batch_persona(i, scenario) for i, scenario in enumerate(scenarios)]
-        return json.dumps(results, indent=2)
 
     workers = min(_BATCH_MAX_WORKERS, len(scenarios))
     with ThreadPoolExecutor(max_workers=workers) as pool:

@@ -27,7 +27,9 @@ from pydantic import BaseModel
 
 import job_store
 from tool_registry import REGISTRY, ToolValidationError, validate_params
+from tool_registry import registry_summary_for_prompt
 from intent_parser import parse_intent
+from graph_rag import retrieve_framework_context
 from llm_provider import complete_text, provider_status
 
 # MCP tool imports — same imports main.py uses; chatbot only reaches them
@@ -47,14 +49,21 @@ _MAX_ASK_CHARS = 4000
 _ASK_SYSTEM_PROMPT = """\
 You are a read-only guidance assistant for an insurance automation dashboard.
 
-You may explain concepts, help users understand this repository's dashboard,
-describe how MCP-restricted execution works, suggest test-data improvements,
-and provide troubleshooting guidance.
+You answer with awareness of the local project context provided below. Treat it
+as the source of truth for framework structure, dashboard capabilities, and MCP
+tool boundaries.
 
 You must not claim to execute tests, start jobs, call MCP tools, change files,
 read secrets, inspect the filesystem, or access credentials. If the user asks
 you to run something, tell them to switch to Tools mode. Keep answers concise
-and practical.
+and practical. If the retrieved context is insufficient, say which local file or
+area should be inspected next.
+
+Approved tool catalog for Tools mode:
+{tools}
+
+Retrieved local project context:
+{context}
 """
 
 
@@ -414,7 +423,12 @@ def chat_ask(req: ChatAskReq):
         )
 
     try:
-        reply = complete_text(system=_ASK_SYSTEM_PROMPT, user=message, max_tokens=1200)
+        graph_context = retrieve_framework_context(message)
+        system = _ASK_SYSTEM_PROMPT.format(
+            tools=registry_summary_for_prompt(),
+            context=graph_context,
+        )
+        reply = complete_text(system=system, user=message, max_tokens=1200)
     except Exception as exc:
         return ChatAskResp(reply=f"Could not generate guidance: {exc}", status="error")
 

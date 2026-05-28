@@ -28,6 +28,7 @@ from pydantic import BaseModel
 import job_store
 from tool_registry import REGISTRY, ToolValidationError, validate_params
 from intent_parser import parse_intent
+from llm_provider import complete_text, provider_status
 
 # MCP tool imports — same imports main.py uses; chatbot only reaches them
 # through the dispatch table below, never directly.
@@ -41,6 +42,20 @@ from mcp_tools.uw_rules_validator.validator import validate_case
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 _MAX_MESSAGE_CHARS = 1000
+_MAX_ASK_CHARS = 4000
+
+_ASK_SYSTEM_PROMPT = """\
+You are a read-only guidance assistant for an insurance automation dashboard.
+
+You may explain concepts, help users understand this repository's dashboard,
+describe how MCP-restricted execution works, suggest test-data improvements,
+and provide troubleshooting guidance.
+
+You must not claim to execute tests, start jobs, call MCP tools, change files,
+read secrets, inspect the filesystem, or access credentials. If the user asks
+you to run something, tell them to switch to Tools mode. Keep answers concise
+and practical.
+"""
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
@@ -57,6 +72,15 @@ class ChatMessageResp(BaseModel):
     tool_call: dict | None = None   # populated when status == "confirm"
     job_id: str | None = None       # populated when status == "job"
     job_label: str | None = None
+
+
+class ChatAskReq(BaseModel):
+    message: str = ""
+
+
+class ChatAskResp(BaseModel):
+    reply: str
+    status: str
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -365,7 +389,36 @@ def chat_greeting():
             "approved automation tools. How can I help?"
         ),
         "capabilities": list(REGISTRY.keys()),
+        "llm": provider_status(probe=False),
     }
+
+
+@router.get("/provider")
+def chat_provider_status():
+    return provider_status(probe=True)
+
+
+@router.post("/ask", response_model=ChatAskResp)
+def chat_ask(req: ChatAskReq):
+    """
+    Read-only guidance endpoint. This route never calls REGISTRY, _DISPATCH,
+    job_store.new_job(), or MCP tools.
+    """
+    message = (req.message or "").strip()
+    if not message:
+        return ChatAskResp(reply="Please enter a message.", status="error")
+    if len(message) > _MAX_ASK_CHARS:
+        return ChatAskResp(
+            reply=f"Message too long (max {_MAX_ASK_CHARS} characters).",
+            status="error",
+        )
+
+    try:
+        reply = complete_text(system=_ASK_SYSTEM_PROMPT, user=message, max_tokens=1200)
+    except Exception as exc:
+        return ChatAskResp(reply=f"Could not generate guidance: {exc}", status="error")
+
+    return ChatAskResp(reply=reply, status="ok")
 
 
 @router.post("/message", response_model=ChatMessageResp)

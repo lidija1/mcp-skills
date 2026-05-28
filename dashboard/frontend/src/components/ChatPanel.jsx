@@ -11,6 +11,13 @@ const SUGGESTIONS = [
   'Audit cyber underwriting rules',
 ]
 
+const GUIDANCE_SUGGESTIONS = [
+  'Explain how Tools mode is restricted',
+  'How do I add a new policy workflow?',
+  'Help me improve auto test data',
+  'Why would a UW audit fail?',
+]
+
 function BotBubble({ text }) {
   return (
     <div className="chat-bubble-row bot">
@@ -75,6 +82,7 @@ export default function ChatPanel({ onJobDispatched }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState(null)
+  const [mode, setMode] = useState('tools')
   const threadRef = useRef(null)
 
   useEffect(() => {
@@ -113,7 +121,9 @@ export default function ChatPanel({ onJobDispatched }) {
     setLoading(true)
 
     try {
-      const resp = await api.chat(confirmedTool ? '' : trimmed, confirmedTool, confirmedParams)
+      const resp = mode === 'guidance' && !confirmedTool
+        ? await api.chatAsk(trimmed)
+        : await api.chat(confirmedTool ? '' : trimmed, confirmedTool, confirmedParams)
 
       if (resp.status === 'job') {
         appendBot(resp.reply, { jobId: resp.job_id, jobLabel: resp.job_label })
@@ -131,7 +141,7 @@ export default function ChatPanel({ onJobDispatched }) {
     } finally {
       setLoading(false)
     }
-  }, [loading, appendBot, onJobDispatched])
+  }, [loading, mode, appendBot, onJobDispatched])
 
   const handleConfirm = useCallback(() => {
     if (!pendingConfirm) return
@@ -149,6 +159,8 @@ export default function ChatPanel({ onJobDispatched }) {
       send(input)
     }
   }, [input, send])
+
+  const suggestions = mode === 'guidance' ? GUIDANCE_SUGGESTIONS : SUGGESTIONS
 
   return (
     <div className="chat-panel-page">
@@ -178,7 +190,7 @@ export default function ChatPanel({ onJobDispatched }) {
 
       {messages.length <= 1 && !loading && (
         <div className="chat-suggestions">
-          {SUGGESTIONS.map(s => (
+          {suggestions.map(s => (
             <button key={s} className="chat-suggestion-chip" type="button" onClick={() => send(s)}>
               {s}
             </button>
@@ -186,13 +198,40 @@ export default function ChatPanel({ onJobDispatched }) {
         </div>
       )}
 
+      <div className="chat-mode-row" role="group" aria-label="Chat mode">
+        <button
+          className={`chat-mode-btn ${mode === 'tools' ? 'active' : ''}`}
+          type="button"
+          onClick={() => {
+            setMode('tools')
+            setPendingConfirm(null)
+          }}
+          disabled={loading}
+        >
+          Tools
+        </button>
+        <button
+          className={`chat-mode-btn ${mode === 'guidance' ? 'active' : ''}`}
+          type="button"
+          onClick={() => {
+            setMode('guidance')
+            setPendingConfirm(null)
+          }}
+          disabled={loading}
+        >
+          Guidance
+        </button>
+      </div>
+
       <div className="chat-input-row">
         <textarea
           className="chat-input"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask me to run a policy test, generate a profile, audit UW rules…"
+          placeholder={mode === 'guidance'
+            ? 'Ask for explanations, troubleshooting, or implementation guidance...'
+            : 'Ask me to run a policy test, generate a profile, audit UW rules...'}
           rows={1}
           disabled={loading}
         />

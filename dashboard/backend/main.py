@@ -51,8 +51,9 @@ import subprocess
 import shutil
 import tempfile
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -166,6 +167,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from auth import router as _auth_router, user_from_request
+import dashboard_db
+
+
+_PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/login",
+    "/api/register",
+    "/api/auth/login",
+    "/api/auth/me",
+    "/api/auth/logout",
+}
+
+
+@app.middleware("http")
+async def dashboard_auth_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    path = request.url.path
+    token = None
+    protected_dashboard_path = (
+        (path.startswith("/api") and path not in _PUBLIC_API_PATHS)
+        or path.startswith("/screenshots")
+        or path.startswith("/allure")
+    )
+    if protected_dashboard_path:
+        user = user_from_request(request)
+        if not user:
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+        token = dashboard_db.set_current_user(user)
+
+    try:
+        return await call_next(request)
+    finally:
+        if token is not None:
+            dashboard_db.reset_current_user(token)
+
+
+app.include_router(_auth_router)
 
 # Serve allure-report/ as a static site at /allure/
 # The directory is created (empty) if it doesn't exist so the mount never errors.

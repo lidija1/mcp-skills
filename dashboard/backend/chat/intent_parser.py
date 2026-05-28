@@ -1,17 +1,17 @@
 """
 CHATBOT INTENT PARSER — natural language → structured tool call.
 
-Uses a cheap/fast AI model (claude-haiku or gpt-4o-mini) to translate the
-user's message into { tool, params, reply }.
+Uses the configured chat LLM provider to translate the user's message into
+{ tool, params, reply }.
 
 ARCHITECTURE BOUNDARY: This module only produces a structured intent object.
 Validation against the whitelist and all dispatch happen in chat_router.py.
 The parser never accesses the browser, DB, filesystem, or credentials.
 """
-import os
 import re
 import json
 
+from llm_provider import complete_json
 from tool_registry import registry_summary_for_prompt
 
 _SYSTEM_TEMPLATE = """\
@@ -113,40 +113,24 @@ def parse_intent(message: str) -> dict:
     Validation and dispatch happen in chat_router.py.
     """
     system = _SYSTEM_TEMPLATE.format(tools=registry_summary_for_prompt())
-    provider = os.environ.get("AI_PROVIDER", "")
-    if not provider:
-        provider = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "openai"
-
-    raw = ""
-    if provider == "anthropic":
-        import anthropic as _anthropic
-        client = _anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=600,
-            system=system,
-            messages=[{"role": "user", "content": message}],
-        )
-        raw = resp.content[0].text.strip()
-    else:
-        import openai as _openai
-        client = _openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        resp = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": message},
-            ],
-            temperature=0,
-            max_tokens=600,
-        )
-        raw = resp.choices[0].message.content.strip()
+    raw = complete_json(system=system, user=message, max_tokens=600)
 
     # Strip markdown fences if the model wraps output anyway
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
     parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("Intent parser response must be a JSON object.")
+    if "tool" not in parsed or "params" not in parsed or "reply" not in parsed:
+        raise ValueError("Intent parser response must include tool, params, and reply.")
+    if parsed.get("tool") is not None and not isinstance(parsed.get("tool"), str):
+        raise ValueError("Intent parser field 'tool' must be a string or null.")
+    if not isinstance(parsed.get("params"), dict):
+        raise ValueError("Intent parser field 'params' must be an object.")
+    if not isinstance(parsed.get("reply"), str):
+        raise ValueError("Intent parser field 'reply' must be a string.")
+
     return {
         "tool": parsed.get("tool"),
         "params": parsed.get("params") or {},

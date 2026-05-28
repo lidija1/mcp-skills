@@ -76,6 +76,7 @@ export const api = {
       confirmed_tool: confirmedTool,
       confirmed_params: confirmedParams,
     }),
+  chatAsk: message => post('/api/chat/ask', { message }),
 
   // ── Auth ──────────────────────────────────────────────────────────────
 login: (username, password) =>

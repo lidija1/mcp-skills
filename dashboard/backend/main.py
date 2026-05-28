@@ -1,5 +1,5 @@
-﻿"""
-Insurance Testing Dashboard â€” FastAPI Backend
+"""
+Insurance Testing Dashboard - FastAPI Backend
 Run: python dashboard/backend/main.py   (from project root)
 """
 import sys
@@ -9,7 +9,7 @@ import time
 import concurrent.futures
 from pathlib import Path
 
-# â”€â”€ Project root on sys.path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Project root on sys.path
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
@@ -37,14 +37,16 @@ if _env_path.exists():
 if "ANTHROPIC_API_KEY" not in _env_keys:
     os.environ.pop("ANTHROPIC_API_KEY", None)
 
-if "OPENAI_API_KEY" in _env_keys:
+_explicit_provider = os.environ.get("AI_PROVIDER", "").strip()
+if _explicit_provider:
+    print(f"[INFO] AI provider: {_explicit_provider}")
+elif "OPENAI_API_KEY" in _env_keys:
     os.environ["AI_PROVIDER"] = "openai"
     print("[INFO] AI provider: openai")
 elif "ANTHROPIC_API_KEY" in _env_keys:
-    os.environ.pop("AI_PROVIDER", None)
     print("[INFO] AI provider: anthropic")
 else:
-    print("[WARN] No AI API key found in .env â€” AI calls will fail")
+    print("[WARN] No AI API key found in .env - AI calls will fail")
 
 import re
 import subprocess
@@ -56,7 +58,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# â”€â”€ MCP Tool imports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# MCP tool imports
 from mcp_tools.policy_flow_generator.flow_runner import run_flow
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona, list_archetypes
 from mcp_tools.policy_flow_generator.result_formatter import format_batch_summary, format_result
@@ -64,7 +66,7 @@ from mcp_tools.uw_rules_validator.report_formatter import format_audit_report, f
 from mcp_tools.uw_rules_validator.rule_registry import CASES_BY_LOB, CASES_BY_RULE, RULE_METADATA
 from mcp_tools.uw_rules_validator.validator import validate_case
 
-# â”€â”€ Job Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Job store
 import job_store as _job_store
 _new_job = _job_store.new_job
 _log = _job_store.log_job
@@ -156,7 +158,7 @@ def _parse_policy_persona_input(lob: str, persona_input: str) -> dict:
     return parsed
 
 
-# â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# App
 app = FastAPI(title="Insurance Testing Dashboard", version="1.0.2")
 
 app.add_middleware(
@@ -182,13 +184,13 @@ from chat_router import router as _chat_router
 app.include_router(_chat_router)
 
 
-# â”€â”€ Health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Health
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
 
 
-# â”€â”€ Allure report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Allure report
 _ALLURE_RESULTS_DIR = _PROJECT_ROOT / "allure-results"
 _ALLURE_URL = "http://localhost:8000/allure/"
 
@@ -256,7 +258,7 @@ def allure_generate():
         return {"ok": False, "error": "allure generate timed out"}
 
 
-# â”€â”€ Job endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Job endpoints
 @app.get("/api/jobs")
 def list_jobs():
     return _job_store.list_jobs()
@@ -267,7 +269,7 @@ def get_job(job_id: str):
     return _job_store.get_job(job_id) or {"error": "not found"}
 
 
-# â”€â”€ Policy: Archetypes (fast, no browser) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Policy: archetypes
 @app.get("/api/policy/archetypes")
 def get_archetypes(lob: str = ""):
     if lob:
@@ -275,7 +277,7 @@ def get_archetypes(lob: str = ""):
     return {"result": list_archetypes(lob or None)}
 
 
-# â”€â”€ Pydantic models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Pydantic models
 class PersonaReq(BaseModel):
     lob: str
     description: str
@@ -545,9 +547,9 @@ def _parse_explorer_intent(prompt: str) -> dict:
         '- "uw_audit": run underwriting rules audit. Requires "lob".\n'
         '- "unknown": cannot determine the action.\n\n'
         "Examples:\n"
-        '"test a young driver with DUI" â†’ {"type":"policy_flow","lob":"auto",'
+        '"test a young driver with DUI" -> {"type":"policy_flow","lob":"auto",'
         '"description":"young driver with DUI history"}\n'
-        '"audit homeowner UW rules" â†’ {"type":"uw_audit","lob":"homeowner"}'
+        '"audit homeowner UW rules" -> {"type":"uw_audit","lob":"homeowner"}'
     )
     enriched = _EXPLORER_SKILL_PREFIX + prompt
     provider = os.environ.get("AI_PROVIDER", "")
@@ -622,7 +624,7 @@ def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ Policy: Build Profile (AI call only, ~5s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Policy: build profile
 @app.post("/api/policy/create-persona")
 def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
@@ -643,7 +645,7 @@ def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ Policy: Run Journey (browser, ~90s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Policy: run journey
 @app.post("/api/policy/run-flow")
 def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
@@ -663,7 +665,7 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ Policy: Quick Run (AI + browser, ~100s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Policy: quick run
 @app.post("/api/policy/quick-run")
 def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
@@ -687,12 +689,12 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ Policy: Batch Run (AI + browser Ã— N) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Policy: batch run
 @app.post("/api/policy/batch-run")
 def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
     for scenario in req.scenarios:
         _validate_policy_lob(str(scenario.get("lob", "auto")))
-    jid = _new_job(f"Batch Test â€” {len(req.scenarios)} scenarios")
+    jid = _new_job(f"Batch Test - {len(req.scenarios)} scenarios")
 
     def _run():
         try:
@@ -752,12 +754,12 @@ def _format_persona_report(lob: str, description: str, persona_json: str) -> str
     return "\n".join(lines)
 
 
-# â”€â”€ UW: List Rules (fast) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# UW: list rules
 @app.get("/api/uw/rules")
 def list_rules(lob: str = ""):
     target = lob.lower().strip() if lob else None
     lob_display = {"auto": "Personal Auto", "cyber": "Cyber", "homeowner": "Homeowner"}
-    sev_icon = {"critical": "ðŸ”´", "high": "ðŸŸ ", "warning": "ðŸŸ¡"}
+    sev_icon = {"critical": "[critical]", "high": "[high]", "warning": "[warning]"}
     lob_groups: dict[str, list] = {}
 
     for rule in RULE_METADATA.values():
@@ -786,10 +788,10 @@ def list_rules(lob: str = ""):
     return {"result": "\n".join(lines)}
 
 
-# â”€â”€ UW: Department Audit (browser Ã— all LOB cases) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# UW: department audit
 @app.post("/api/uw/audit")
 def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
-    jid = _new_job(f"Department Audit â€” {req.lob.upper()}")
+    jid = _new_job(f"Department Audit - {req.lob.upper()}")
 
     def _run():
         try:
@@ -806,10 +808,10 @@ def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ UW: Single Rule Cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# UW: single rule cases
 @app.post("/api/uw/rule-cases")
 def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
-    jid = _new_job(f"Rule Test â€” {req.rule_id}")
+    jid = _new_job(f"Rule Test - {req.rule_id}")
 
     def _run():
         try:
@@ -826,10 +828,10 @@ def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ UW: Custom Boundary Test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# UW: custom boundary test
 @app.post("/api/uw/custom-boundary")
 def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
-    jid = _new_job(f"Edge Case â€” {req.lob.upper()}")
+    jid = _new_job(f"Edge Case - {req.lob.upper()}")
 
     def _run():
         try:
@@ -871,10 +873,10 @@ def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ UW: Full System Audit (all LOBs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# UW: full system audit
 @app.post("/api/uw/full-audit")
 def full_audit_ep(bg: BackgroundTasks):
-    jid = _new_job("Full System Audit â€” ALL LOBs")
+    jid = _new_job("Full System Audit - ALL LOBs")
 
     def _run():
         try:
@@ -891,7 +893,7 @@ def full_audit_ep(bg: BackgroundTasks):
     return {"job_id": jid}
 
 
-# â”€â”€ Entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Entry point
 if __name__ == "__main__":
     import uvicorn
     print("Starting Insurance Testing Dashboard backend on http://localhost:8000")

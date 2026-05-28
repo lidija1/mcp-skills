@@ -440,6 +440,7 @@ Return ONLY a valid JSON object. No explanation, markdown, or extra text.
 
 _LOB_PROMPTS = {
     "auto": _AUTO_SYSTEM_PROMPT,
+    "cyber": _CYBER_SYSTEM_PROMPT,
     "homeowner": _HOMEOWNER_SYSTEM_PROMPT,
 }
 _VALID_LOBS = ", ".join(_LOB_PROMPTS)
@@ -514,6 +515,425 @@ def _clean_model_json(raw: str) -> str:
 def _parse_model_json(raw: str):
     return json.loads(_clean_model_json(raw))
 
+
+# ---------------------------------------------------------------------------
+# Fast local persona generation
+# ---------------------------------------------------------------------------
+
+_FIRST_NAMES = [
+    "Alex",
+    "Jordan",
+    "Morgan",
+    "Taylor",
+    "Casey",
+    "Jamie",
+    "Riley",
+    "Avery",
+]
+_LAST_NAMES = [
+    "Parker",
+    "Miller",
+    "Johnson",
+    "Rivera",
+    "Nguyen",
+    "Carter",
+    "Brooks",
+    "Reed",
+]
+_STREET_NAMES = [
+    "Maple Street",
+    "Oak Avenue",
+    "Pine Terrace",
+    "Union Street",
+    "Main Street",
+    "Birch Lane",
+]
+
+
+def _fast_local_enabled() -> bool:
+    raw = os.getenv("PERSONA_FAST_LOCAL", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _contains_any(text: str, *terms: str) -> bool:
+    return any(term in text for term in terms)
+
+
+def _make_tc_id() -> str:
+    return f"AI_{random.randint(100000, 999999)}"
+
+
+def _pick_name() -> tuple[str, str]:
+    return random.choice(_FIRST_NAMES), random.choice(_LAST_NAMES)
+
+
+def _dob_for_age(age: int) -> str:
+    age = max(16, min(age, 85))
+    return date(_TODAY.year - age, random.randint(1, 12), random.randint(1, 28)).strftime("%m/%d/%Y")
+
+
+def _extract_age(description: str, default: int) -> int:
+    text = description.lower()
+    match = re.search(r"\b(?:age|aged)\s*(\d{2})\b", text)
+    if not match:
+        match = re.search(r"\b(\d{2})\s*[- ]?\s*(?:year|yr)[ -]?old\b", text)
+    if not match:
+        match = re.search(r"\bover\s+(\d{2})\b", text)
+    if match:
+        return max(16, min(int(match.group(1)), 85))
+    return default
+
+
+def _phone() -> str:
+    return f"413-555-{random.randint(1000, 9999)}"
+
+
+def _address(prefix: str = "") -> str:
+    label = f"{prefix} " if prefix else ""
+    return f"{random.randint(100, 999)} {label}{random.choice(_STREET_NAMES)}"
+
+
+def _format_money(value: int) -> str:
+    return f"{value:,}"
+
+
+def _base_customer(lob: str, description: str, default_age: int) -> dict:
+    first_name, last_name = _pick_name()
+    return {
+        "TC_ID": _make_tc_id(),
+        "CustomerType": "Individual",
+        "FirstName": first_name,
+        "LastName": last_name,
+        "DOB": _dob_for_age(_extract_age(description, default_age)),
+        "PhoneNum": _phone(),
+        "Email": f"{_email_local_part(first_name)}_{{timestamp}}@{_email_domain_for_lob(lob)}",
+        "Address": _address(),
+        "ZIP": "01101",
+        "State": "Massachusetts",
+        "City": "Springfield",
+        "Producer": "Janis Irey",
+        "EffectiveDate": _EFF_DATE.strftime("%m/%d/%Y"),
+        "BillingMethod": "Direct Billed",
+        "PaymentPlan": "Pay In Full",
+    }
+
+
+def _coverage_from_text(text: str, default: str = "Gold") -> str:
+    if _contains_any(text, "platinum", "full coverage", "full-coverage"):
+        return "Platinum"
+    if _contains_any(text, "gold"):
+        return "Gold"
+    if _contains_any(text, "silver"):
+        return "Silver"
+    if _contains_any(text, "bronze", "minimum", "basic"):
+        return "Bronze"
+    return default
+
+
+def _fast_auto_persona(description: str, vehicle: dict | None) -> dict:
+    text = description.lower()
+    age = _extract_age(description, 42)
+    if _contains_any(text, "young", "under 25"):
+        age = min(age, 22)
+    elif _contains_any(text, "teen", "first-time driver"):
+        age = 18
+    elif _contains_any(text, "senior", "retired"):
+        age = max(age, 70)
+
+    persona = _base_customer("auto", description, age)
+    sr22 = _contains_any(text, "sr-22", "sr22")
+    license_status = "Active License"
+    if "revoked" in text:
+        license_status = "Revoked"
+    elif "suspended" in text:
+        license_status = "Suspended"
+
+    ownership = "Owned"
+    if "leased" in text:
+        ownership = "Leased"
+    elif "financed" in text or "loan" in text:
+        ownership = "Financed"
+
+    vehicle_use = "Business" if "business" in text else "Commute" if "commute" in text else "Pleasure"
+    employment = "Retired" if "retired" in text else "Student" if "student" in text or age < 23 else "Employed"
+    damage = _contains_any(text, "damage", "accident", "claim", "loss")
+    if vehicle is None:
+        sampled = _sample_vehicles(1)
+        vehicle = sampled[0] if sampled else {
+            "Year": "2020",
+            "Make": "Toyota",
+            "Model": "Camry",
+            "Spec": "LE 4dr Sedan",
+        }
+
+    persona.update({
+        "DOB": _dob_for_age(age),
+        "Program": "Personal Auto",
+        "FalseInfo": "No",
+        "DamageInfo": "Yes" if damage else "No",
+        "Gender": "Female" if persona["FirstName"] in {"Taylor", "Riley", "Avery"} else "Male",
+        "MaritalStatus": "Married" if age >= 30 else "Single",
+        "DriverStatus": "Active (rated)",
+        "EmploymentCategory": employment,
+        "SR22": "Yes" if sr22 else "No",
+        "Occupation": "Day Care",
+        "LicenseStatus": license_status,
+        "VehicleType": "Private Passenger Auto",
+        "Year": str(vehicle["Year"]),
+        "Make": str(vehicle["Make"]),
+        "Model": str(vehicle["Model"]),
+        "Spec": str(vehicle["Spec"]),
+        "VehicleUse": vehicle_use,
+        "Ownership": ownership,
+        "PolicyCoverage": _coverage_from_text(text),
+    })
+
+    if damage:
+        persona["DescribeDamage"] = "Prior accident damage noted on the vehicle"
+    if sr22:
+        persona["SR22FilingState"] = "Massachusetts"
+    if ownership != "Owned":
+        persona["LossPayeeType"] = ownership
+        persona["LossPayeeName"] = (
+            "BMW Financial Services"
+            if "bmw" in text
+            else "Leasing Company" if ownership == "Leased"
+            else "Auto Finance Company"
+        )
+
+    if sr22 and license_status != "Active License" and age < 25:
+        persona["_persona_type"] = "triple_risk"
+    elif sr22 or license_status != "Active License":
+        persona["_persona_type"] = "high_risk_driver"
+    elif age < 25:
+        persona["_persona_type"] = "young_driver"
+    elif "business" in text:
+        persona["_persona_type"] = "business_driver"
+    else:
+        persona["_persona_type"] = "clean_standard"
+    return persona
+
+
+def _fast_homeowner_persona(description: str) -> dict:
+    text = description.lower()
+    persona = _base_customer("homeowner", description, 45)
+    high_value = _contains_any(text, "luxury", "high value", "high-value", "expensive")
+    coastal = _contains_any(text, "coastal", "wind", "shore", "beach")
+    old_home = _contains_any(text, "old", "historic", "older")
+    new_home = _contains_any(text, "new construction", "newly built", "new home")
+    rented = _contains_any(text, "rented", "rental", "investment")
+    losses = _contains_any(text, "loss", "losses", "claim", "claims")
+    refused = _contains_any(text, "refused", "cancelled", "canceled")
+    declined = _contains_any(text, "declined", "non-renew", "nonrenew")
+    renovation = _contains_any(text, "renovation", "renovating", "under construction")
+
+    replacement = 950000 if high_value else 650000 if coastal else 320000
+    if old_home and not high_value:
+        replacement = 280000
+    contents = int(replacement * 0.6)
+    loss_of_use = int(replacement * 0.2)
+    other_structures = int(replacement * 0.1)
+
+    persona.update({
+        "Program": "Homeowner",
+        "ProgramType": "Basic",
+        "DayCare": "No",
+        "UndergroundOil": "Yes" if old_home else "No",
+        "ResidenceRented": "Yes" if rented else "No",
+        "ResidenceVacant": "No",
+        "Animals": "Yes" if rented or "dog" in text or "animal" in text else "No",
+        "PolicyCoverageOption": _coverage_from_text(text, "Platinum" if high_value else "Gold"),
+        "ResidenceType": "Homeowner",
+        "ReplacementCost": _format_money(replacement),
+        "Contents": _format_money(contents),
+        "LossOfUse": _format_money(loss_of_use),
+        "OtherStructures": _format_money(other_structures),
+        "AllPerilsDeductable": "5,000" if coastal or high_value else "1,000",
+        "WindstormDeductable": "5%" if coastal else "2%",
+        "Liability": "500,000" if high_value else "300,000",
+        "MedPayments": "5,000" if high_value else "1,000",
+        "Renovation": "Yes" if renovation else "No",
+        "LivedHere": "Yes" if new_home else "No",
+        "YearBuilt": "1938" if old_home else "2021" if new_home else "1998",
+        "ConstructionType": "Masonry" if coastal else "Superior" if high_value else "Frame",
+        "RoofType": "Concrete Tile" if coastal else "Metal" if new_home else "Asphalt Shingle",
+        "Loses": "Yes" if losses else "No",
+        "ExistingClient": "No",
+        "Refused": "Yes" if refused else "No",
+        "Declined": "Yes" if declined else "No",
+    })
+
+    if refused and declined and losses:
+        persona["_persona_type"] = "risk_flagged"
+    elif high_value:
+        persona["_persona_type"] = "high_value_home"
+    elif coastal:
+        persona["_persona_type"] = "coastal_exposure"
+    elif rented:
+        persona["_persona_type"] = "investment_property"
+    elif new_home:
+        persona["_persona_type"] = "new_construction"
+    elif losses or refused or declined or renovation or old_home:
+        persona["_persona_type"] = "risky_property"
+    else:
+        persona["_persona_type"] = "standard_homeowner"
+    return persona
+
+
+def _fast_cyber_persona(description: str) -> dict:
+    text = description.lower()
+    persona = _base_customer("cyber", description, 38)
+    healthcare = _contains_any(text, "healthcare", "clinic", "medical", "hospital")
+    technology = _contains_any(text, "technology", "software", "startup", "saas")
+    financial = _contains_any(text, "financial", "bank", "fintech")
+    retail = _contains_any(text, "retail", "ecommerce", "e-commerce", "online sales")
+    education = _contains_any(text, "school", "education", "university")
+    manufacturing = "manufacturing" in text
+    prior_incident = "ransomware" in text or "phishing" in text or "breach" in text
+    no_training = _contains_any(text, "no training", "poor controls", "poor control")
+    no_regs = _contains_any(text, "no regulation", "no regulations", "non-compliant", "non compliant")
+
+    if healthcare:
+        nature = "Healthcare"
+    elif technology:
+        nature = "Technology"
+    elif financial:
+        nature = "Financial Services"
+    elif retail:
+        nature = "Retail"
+    elif education:
+        nature = "Education"
+    elif manufacturing:
+        nature = "Manufacturing"
+    else:
+        nature = "Office"
+
+    incident = "None"
+    if "ransomware" in text:
+        incident = "Ransomware Attack"
+    elif "phishing" in text:
+        incident = "Phishing Attack"
+    elif "breach" in text or prior_incident:
+        incident = "Data Breach"
+
+    high_risk = prior_incident or no_training or no_regs
+    high_limit = technology or financial or high_risk
+    persona.update({
+        "Program": "Cyber",
+        "BusinessStartDate": "2018" if technology else "2012",
+        "TotalEmployees": "55" if high_limit else "12",
+        "NatureOfBusiness": nature,
+        "PctOnlineSales": "85" if retail or technology else "20",
+        "AggregateLimit": "2,000,000" if high_limit else "1,000,000",
+        "PerClaimLimit": "1,000,000" if high_limit else "500,000",
+        "PerClaimDeductible": "2,500" if high_limit else "1,000",
+        "CyberTraining": "No" if no_training else "Yes",
+        "SituationsLast3Years": incident,
+        "CyberRegulations": "No" if no_regs else "Yes",
+        "_persona_type": "high_risk_startup" if high_risk else "healthcare_provider" if healthcare else "small_office",
+    })
+    return persona
+
+
+def _build_fast_persona(lob: str, description: str, vehicle: dict | None = None) -> dict:
+    if lob == "auto":
+        persona = _fast_auto_persona(description, vehicle)
+    elif lob == "homeowner":
+        persona = _fast_homeowner_persona(description)
+    elif lob == "cyber":
+        persona = _fast_cyber_persona(description)
+    else:
+        raise ValueError(f"Unknown LOB '{lob}'. Valid options: {_VALID_LOBS}")
+    persona["_lob"] = lob
+    persona["_provider"] = "local-fast"
+    _ensure_unique_email(persona, lob)
+    return persona
+
+
+_FAST_VARIATION_THEMES = {
+    "auto": [
+        ("young SR-22 driver with revoked license and Platinum coverage", "Young high-risk driver with SR-22 and revoked license"),
+        ("suspended license, financed vehicle, commute use, Silver coverage", "Suspended-license driver on a financed commute vehicle"),
+        ("leased luxury BMW, full coverage, business use", "Leased luxury vehicle with business use"),
+        ("senior retired driver, clean record, owned vehicle, Gold coverage", "Senior clean-record owned-vehicle profile"),
+        ("student first-time driver under 25, Bronze coverage", "Student first-time driver with minimum coverage"),
+        ("prior accident damage, active license, owned vehicle", "Driver with prior vehicle damage"),
+        ("SR-22 filing, active license, owned vehicle, Silver coverage", "SR-22 filing with otherwise active license"),
+        ("clean adult driver, commute use, owned vehicle, Gold coverage", "Clean standard adult driver"),
+    ],
+    "homeowner": [
+        ("coastal wind exposure, masonry construction, tile roof, Platinum coverage", "Coastal wind-exposed property"),
+        ("prior losses, renovation in progress, older home", "Older property with losses and renovation"),
+        ("new construction, modern roof, no losses, Gold coverage", "New construction with clean history"),
+        ("rented investment property with animals", "Rented investment property"),
+        ("refused and declined by prior carrier with losses", "Prior carrier refusal and loss history"),
+        ("luxury high-value home with high liability limits", "High-value luxury home"),
+        ("standard frame construction, clean history, Basic coverage", "Standard homeowner profile"),
+        ("historic older property with underground oil tank", "Historic property with older-home risk"),
+    ],
+    "cyber": [
+        ("healthcare business with ransomware incident and no training", "Healthcare business with ransomware exposure"),
+        ("technology startup, high online sales, weak controls", "Technology startup with weak controls"),
+        ("financial services firm with compliance exposure", "Financial services compliance exposure"),
+        ("retail ecommerce business with phishing incident", "Retail ecommerce phishing exposure"),
+        ("education organization with clean controls and training", "Education organization with clean controls"),
+        ("manufacturing business with data breach history", "Manufacturing business with breach history"),
+        ("small office with training, no prior incidents", "Small office clean cyber risk"),
+        ("SaaS company with no cyber regulations and high limits", "SaaS company with high-limit exposure"),
+    ],
+}
+
+
+def _variation_text(lob: str, base_description: str, index: int) -> tuple[str, str]:
+    themes = _FAST_VARIATION_THEMES.get(lob, [])
+    if not themes:
+        return base_description, f"Variation {index + 1}"
+    extra, note = themes[index % len(themes)]
+    cycle = index // len(themes)
+    cycle_text = f"; variant cycle {cycle + 1}" if cycle else ""
+    return f"{base_description}; {extra}{cycle_text}", note
+
+
+def _build_fast_persona_variations(
+    lob: str,
+    base_description: str,
+    count: int,
+    vehicles: list | None = None,
+) -> list[dict]:
+    personas = []
+    for index in range(count):
+        description, note = _variation_text(lob, base_description, index)
+        vehicle = vehicles[index] if vehicles and index < len(vehicles) else None
+        persona = _build_fast_persona(lob, description, vehicle)
+        persona["_variation_index"] = index
+        persona["_note"] = note
+        personas.append(persona)
+    return personas
+
+
+def _fast_batch_persona(i: int, scenario: dict) -> dict:
+    lob = str(scenario.get("lob", "")).lower().strip()
+    description = str(scenario.get("description", "")).strip()
+
+    if not lob or not description:
+        return {"error": f"Scenario {i}: missing 'lob' or 'description'", "_scenario_index": i}
+    if lob not in _LOB_PROMPTS:
+        return {"error": f"Scenario {i}: unknown LOB '{lob}'", "_scenario_index": i}
+
+    vehicle = None
+    if lob == "auto":
+        vehicle = _find_vehicle_from_description(description)
+        if vehicle is None:
+            sampled = _sample_vehicles(1)
+            vehicle = sampled[0] if sampled else None
+
+    try:
+        persona = _build_fast_persona(lob, description, vehicle)
+    except Exception as exc:
+        persona = {"error": str(exc)}
+    persona["_scenario_index"] = i
+    return persona
+
 # ---------------------------------------------------------------------------
 # Archetype reference (returned by list_archetypes)
 # ---------------------------------------------------------------------------
@@ -538,6 +958,13 @@ PERSONA_ARCHETYPES = {
         "risk_flagged — refused + declined + losses, multiple UW triggers",
         "coastal_exposure — windstorm focus, masonry construction, tile roof",
         "investment_property — rented residence, animals, standard coverage",
+    ],
+    "cyber": [
+        "small_office - low-risk office with training, controls, and no incidents",
+        "healthcare_provider - healthcare business with compliance-sensitive exposure",
+        "high_risk_startup - poor controls, no training, or prior cyber incident",
+        "e_commerce - high online sales and elevated transaction exposure",
+        "financial_services - regulated financial profile with higher limits",
     ],
 }
 
@@ -602,21 +1029,30 @@ def generate_persona(lob: str, description: str) -> str:
     provider = _detect_provider()
     system_prompt = _LOB_PROMPTS[lob]
 
+    vehicle = None
     vehicle_constraint = ""
     if lob == "auto":
         vehicles = _sample_vehicles(1)
         if vehicles:
-            v = vehicles[0]
+            vehicle = vehicles[0]
             vehicle_constraint = (
                 f"\n\nPre-assigned vehicle — copy these EXACT values into Year/Make/Model/Spec "
                 f"(do NOT alter them):\n"
-                f"  Year={v['Year']}  Make={v['Make']}  Model={v['Model']}  Spec={v['Spec']}"
+                f"  Year={vehicle['Year']}  Make={vehicle['Make']}  "
+                f"Model={vehicle['Model']}  Spec={vehicle['Spec']}"
             )
 
     if lob == "auto":
         requested_vehicle = _find_vehicle_from_description(description)
         if requested_vehicle:
+            vehicle = requested_vehicle
             vehicle_constraint = _vehicle_constraint_text(requested_vehicle)
+
+    if provider == "ollama" and _fast_local_enabled():
+        try:
+            return json.dumps(_build_fast_persona(lob, description, vehicle))
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
 
     user_message = f"Generate test data for this {lob.upper()} persona: {description}{vehicle_constraint}"
     raw = ""
@@ -842,6 +1278,15 @@ def generate_persona_variations(lob: str, base_description: str, count: int) -> 
         else:
             all_vehicles = _sample_vehicles(count)
 
+    if _detect_provider() == "ollama" and _fast_local_enabled():
+        try:
+            return json.dumps(
+                _build_fast_persona_variations(lob, base_description, count, all_vehicles),
+                indent=2,
+            )
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
     try:
         chunks = []
         for start in range(0, count, _VARIATION_CHUNK_SIZE):
@@ -928,6 +1373,10 @@ def generate_batch_personas(scenarios: list) -> str:
     """
     if not scenarios:
         return json.dumps([], indent=2)
+
+    if _detect_provider() == "ollama" and _fast_local_enabled():
+        results = [_fast_batch_persona(i, scenario) for i, scenario in enumerate(scenarios)]
+        return json.dumps(results, indent=2)
 
     workers = min(_BATCH_MAX_WORKERS, len(scenarios))
     with ThreadPoolExecutor(max_workers=workers) as pool:

@@ -72,6 +72,14 @@ generated/
 data/processed/
 data/pom_generator/sessions/
 
+# Local diagnostics and destructive maintenance tests
+tools/debug_rating_columns.py
+tools/debug_rating_factors.py
+tools/debug_rating_grid_meta.py
+tools/debug_summary_tab.py
+tools/probe_uw_override.py
+ui/tests/test_delete_quotes.py
+
 # Dashboard frontend generated artifacts
 dashboard/frontend/node_modules/
 dashboard/frontend/dist/

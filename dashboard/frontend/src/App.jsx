@@ -220,6 +220,7 @@ export default function App() {
         }
         localStorage.removeItem('dashboardUser')
         localStorage.removeItem('access_token')
+        localStorage.removeItem('selectedLob')
         setDashboardUser(null)
         setJobs([])
         navigate('/login')
@@ -293,7 +294,10 @@ export default function App() {
                             icon={Workflow}
                             label="Policy Flow"
                             active={currentPath.startsWith('/policy-flow')}
-                            onClick={() => navigate('/policy-flow/personal-auto')}
+                            onClick={() => {
+                                const savedLob = localStorage.getItem('selectedLob') || 'personal-auto'
+                                navigate(`/policy-flow/${savedLob}`)
+                            }}
                         />
                         <NavItem icon={Settings} label="Settings"/>
                     </nav>
@@ -346,7 +350,12 @@ export default function App() {
 
                         <Route
                             path="/policy-flow"
-                            element={<Navigate to="/policy-flow/personal-auto" replace/>}
+                            element={
+                                <Navigate
+                                    to={`/policy-flow/${localStorage.getItem('selectedLob') || 'personal-auto'}`}
+                                    replace
+                                />
+                            }
                         />
                         <Route path="/" element={<Navigate to="/dashboard" replace/>}/>
                     </Routes>

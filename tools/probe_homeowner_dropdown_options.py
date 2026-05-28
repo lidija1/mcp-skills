@@ -68,7 +68,7 @@ def collect_options(page, name, locator):
 
 
 def main():
-    load_dotenv(ROOT / ".env", override=True)
+    load_dotenv(ROOT / "..env", override=True)
     data = load_case()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 

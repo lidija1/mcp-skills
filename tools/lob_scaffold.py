@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/.env python3
 """
 tools/lob_scaffold.py
 =====================
@@ -38,9 +38,9 @@ import anthropic
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PWTimeout
 
-# -- load .env from project root ----------------------------------------------
+# -- load ..env from project root ----------------------------------------------
 _ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(_ROOT / ".env")
+load_dotenv(_ROOT / "..env")
 
 # -- app constants -------------------------------------------------------------
 _SPLASH_URL = "https://inforcedev.oneshield.com/splash.html"
@@ -801,7 +801,7 @@ def main() -> None:
     print("\nPhase 2 — Generating framework files via Claude API ...\n")
 
     if not os.getenv("ANTHROPIC_API_KEY"):
-        print("[ERROR] ANTHROPIC_API_KEY not set in .env")
+        print("[ERROR] ANTHROPIC_API_KEY not set in ..env")
         sys.exit(1)
 
     gen = LOBCodeGenerator(

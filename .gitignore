@@ -19,7 +19,7 @@ __pycache__/
 .Python
 .venv/
 venv/
-ENV/
+.env/
 # Pytest
 .pytest_cache/
 .coverage
@@ -71,6 +71,10 @@ api_tests/artifacts/
 generated/
 data/processed/
 data/pom_generator/sessions/
+data/*.db
+data/*.db-*
+dashboard/backend/data/*.db
+dashboard/backend/data/*.db-*
 
 # Local diagnostics and destructive maintenance tests
 tools/debug_rating_columns.py

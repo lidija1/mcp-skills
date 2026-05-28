@@ -17,7 +17,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from dotenv import load_dotenv  # noqa: E402
 
-load_dotenv(_PROJECT_ROOT / ".env")
+load_dotenv(_PROJECT_ROOT / "..env")
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 

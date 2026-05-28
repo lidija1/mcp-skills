@@ -34,7 +34,7 @@ def load_case(tc_id):
 
 
 def run_case(tc_id):
-    load_dotenv(ROOT / ".env", override=True)
+    load_dotenv(ROOT / "..env", override=True)
     data = load_case(tc_id)
 
     with sync_playwright() as p:

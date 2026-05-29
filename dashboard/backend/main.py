@@ -8,6 +8,7 @@ import json
 import time
 import concurrent.futures
 from pathlib import Path
+from job_store import cancel_job, mark_canceled
 
 # â”€â”€ Project root on sys.path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,7 @@ if str(_CHAT_DIR) not in sys.path:
 
 # Load .env before importing any MCP tool that calls the AI API
 from dotenv import load_dotenv
+
 load_dotenv(_PROJECT_ROOT / ".env", override=True)
 
 # Detect which keys are defined in .env (key names only, not values)
@@ -67,6 +69,7 @@ from mcp_tools.uw_rules_validator.validator import validate_case
 
 # â”€â”€ Job Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import job_store as _job_store
+
 _new_job = _job_store.new_job
 _log = _job_store.log_job
 _status = _job_store.update_job_status
@@ -86,10 +89,11 @@ POLICY_DATA_FILES = {
 }
 
 
-def _run_flow_threaded(lob: str, persona: dict, progress_callback=None) -> dict:
+def _run_flow_threaded(lob: str, persona: dict, progress_callback=None, job_id=None) -> dict:
     """Run Playwright flow in a dedicated thread to avoid asyncio conflicts."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(run_flow, lob, persona, progress_callback).result()
+        return pool.submit(run_flow, lob, persona, progress_callback, job_id).result()
+
 
 
 def _make_policy_progress_callback(jid: str, lob: str):
@@ -260,7 +264,6 @@ app.add_middleware(
 from auth import router as _auth_router, user_from_request
 import dashboard_db
 
-
 _PUBLIC_API_PATHS = {
     "/api/health",
     "/api/login",
@@ -279,9 +282,9 @@ async def dashboard_auth_middleware(request: Request, call_next):
     path = request.url.path
     token = None
     protected_dashboard_path = (
-        (path.startswith("/api") and path not in _PUBLIC_API_PATHS)
-        or path.startswith("/screenshots")
-        or path.startswith("/allure")
+            (path.startswith("/api") and path not in _PUBLIC_API_PATHS)
+            or path.startswith("/screenshots")
+            or path.startswith("/allure")
     )
     if protected_dashboard_path:
         user = user_from_request(request)
@@ -310,6 +313,7 @@ app.mount("/screenshots", StaticFiles(directory=str(_SCREENSHOTS_DIR)), name="sc
 
 # Chat router — imports after sys.path is set
 from chat.chat_router import router as _chat_router
+
 app.include_router(_chat_router)
 
 
@@ -396,6 +400,96 @@ def list_jobs():
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str):
     return _job_store.get_job(job_id) or {"error": "not found"}
+
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job_ep(job_id: str):
+    job = _job_store.get_job(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404)
+
+    if job["status"] in ["done", "error", "canceled"]:
+        return {"ok": False}
+
+    _job_store.cancel_job(job_id)
+    _job_store.mark_canceled(job_id)
+
+    return {"ok": True}
+
+@app.post("/api/jobs/{job_id}/rerun")
+def rerun_job(job_id: str, bg: BackgroundTasks):
+    job = _job_store.get_job(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    metadata = job.get("metadata") or {}
+    payload = metadata.get("rerun_payload")
+
+    if not payload:
+        raise HTTPException(
+            status_code=400,
+            detail="This job cannot be rerun",
+        )
+
+    execution_type = job.get("execution_type")
+
+    if execution_type != "policy_flow":
+        raise HTTPException(
+            status_code=400,
+            detail="Rerun currently supported only for policy flows",
+        )
+
+    policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
+
+    display = LOB_DISPLAY.get(
+        policy_lob,
+        payload["lob"].strip().upper()
+    )
+
+    new_jid = _new_job(
+        f"Policy Journey - {display}",
+        execution_type="policy_flow",
+        metadata=_job_lob_metadata(
+            policy_lob,
+            requested_lob=payload["lob"],
+            rerun_of=job_id,
+            rerun_payload=payload,
+        ),
+    )
+
+    def _run():
+        try:
+            _status(new_jid, "Preparing profile", display)
+
+            persona = _parse_run_flow_persona(
+                policy_lob,
+                payload["persona_json"],
+            )
+
+            result = _run_flow_threaded(
+                engine_lob,
+                persona,
+                _make_policy_progress_callback(new_jid, policy_lob), new_jid
+            )
+
+            persona_section = (
+                    _format_persona_report(
+                        display,
+                        "",
+                        json.dumps(persona),
+                    )
+                    + "\n\n---\n\n"
+            )
+
+            _done(new_jid, persona_section + format_result(result))
+
+        except Exception as e:
+            _fail(new_jid, str(e))
+
+    bg.add_task(_run)
+
+    return {"job_id": new_jid}
 
 
 # â”€â”€ Policy: Archetypes (fast, no browser) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -593,9 +687,9 @@ def _run_codex_explorer(prompt: str, job_id: str | None = None) -> tuple[str, li
     temp_root.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(
-        prefix="run-",
-        dir=str(temp_root),
-        ignore_cleanup_errors=True,
+            prefix="run-",
+            dir=str(temp_root),
+            ignore_cleanup_errors=True,
     ) as tmpdir:
         last_message_path = Path(tmpdir) / "last-message.md"
         command = [
@@ -669,11 +763,11 @@ def _summarize_codex_event(line: str) -> str:
 
     event_type = str(event.get("type") or event.get("event") or "event")
     message = (
-        event.get("message")
-        or event.get("text")
-        or event.get("delta")
-        or event.get("output")
-        or event.get("status")
+            event.get("message")
+            or event.get("text")
+            or event.get("delta")
+            or event.get("output")
+            or event.get("status")
     )
     if isinstance(message, dict):
         message = json.dumps(message, ensure_ascii=False)
@@ -805,7 +899,14 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     jid = _new_job(
         f"Policy Journey - {display}",
         execution_type="policy_flow",
-        metadata=_job_lob_metadata(policy_lob, requested_lob=req.lob),
+        metadata=_job_lob_metadata(
+            policy_lob,
+            requested_lob=req.lob,
+            rerun_payload={
+                "lob": req.lob,
+                "persona_json": req.persona_json,
+            },
+        ),
     )
 
     def _run():
@@ -813,7 +914,7 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
             _status(jid, "Preparing profile", display)
             persona = _parse_run_flow_persona(policy_lob, req.persona_json)
             result = _run_flow_threaded(
-                engine_lob, persona, _make_policy_progress_callback(jid, policy_lob)
+                engine_lob, persona, _make_policy_progress_callback(jid, policy_lob), jid
             )
             persona_section = _format_persona_report(display, "", json.dumps(persona)) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
@@ -845,7 +946,7 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
                 _fail(jid, data["error"])
                 return
             result = _run_flow_threaded(
-                engine_lob, data, _make_policy_progress_callback(jid, policy_lob)
+                engine_lob, data, _make_policy_progress_callback(jid, policy_lob), jid
             )
             persona_section = _format_persona_report(req.lob, req.description, persona_json) + "\n\n---\n\n"
             _done(jid, persona_section + format_result(result))
@@ -887,7 +988,7 @@ def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
                     if "error" in p:
                         r = _empty_result(engine_lob, p.get("error", "persona error"))
                     else:
-                        r = _run_flow_threaded(engine_lob, p)
+                        r = _run_flow_threaded(engine_lob, p, None, jid)
                 except Exception as ex:
                     r = _empty_result(engine_lob, str(ex))
                 results.append(r)
@@ -989,7 +1090,7 @@ def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
             cases = CASES_BY_LOB.get(req.lob.lower(), [])
             findings = []
             for case in cases:
-                result = _run_flow_threaded(req.lob.lower(), case["persona"])
+                result = _run_flow_threaded(req.lob.lower(), case["persona"], None, jid)
                 findings.extend(validate_case(case, result))
             _done(jid, format_audit_report(req.lob, findings))
         except Exception as e:
@@ -1014,7 +1115,7 @@ def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
             cases = CASES_BY_RULE.get(req.rule_id, [])
             findings = []
             for case in cases:
-                result = _run_flow_threaded(req.lob.lower(), case["persona"])
+                result = _run_flow_threaded(req.lob.lower(), case["persona"], None, jid)
                 findings.extend(validate_case(case, result))
             _done(jid, format_audit_report(req.lob, findings, rule_filter=req.rule_id))
         except Exception as e:
@@ -1042,7 +1143,7 @@ def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
             if "error" in persona:
                 _fail(jid, persona["error"])
                 return
-            result = _run_flow_threaded(req.lob, persona)
+            result = _run_flow_threaded(req.lob, persona, None, jid)
             findings = validate_case(
                 {
                     "case_id": "custom_boundary",
@@ -1089,7 +1190,7 @@ def full_audit_ep(bg: BackgroundTasks):
             findings = []
             for lob_key, cases in CASES_BY_LOB.items():
                 for case in cases:
-                    result = _run_flow_threaded(lob_key, case["persona"])
+                    result = _run_flow_threaded(lob_key, case["persona"], None, jid)
                     findings.extend(validate_case(case, result))
             _done(jid, format_audit_report("all", findings))
         except Exception as e:
@@ -1102,5 +1203,6 @@ def full_audit_ep(bg: BackgroundTasks):
 # â”€â”€ Entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if __name__ == "__main__":
     import uvicorn
+
     print("Starting Insurance Testing Dashboard backend on http://localhost:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

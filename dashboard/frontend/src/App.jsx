@@ -67,6 +67,37 @@ export default function App() {
             .catch(() => setBackendOk(false))
     }, [])
 
+    const loadJobs = useCallback(async () => {
+    try {
+        const persistedJobs = await api.listJobs()
+
+        if (Array.isArray(persistedJobs)) {
+            setJobs(persistedJobs)
+        }
+    } catch (err) {
+        console.error(err)
+    }
+}, [])
+
+    const updateJob = useCallback((jobId, patch) => {
+        setJobs(prev => prev.map(job => (job.id === jobId ? {...job, ...patch} : job)))
+    }, [])
+
+    const cancelJob = useCallback(async job => {
+        try {
+            await api.cancelJob(job.id)
+            updateJob(job.id, {
+                status: 'canceled',
+                error: 'Canceled by user',
+                finished: Date.now() / 1000,
+                current_status: null,
+            })
+            await loadJobs()
+        } catch (err) {
+            console.error(err)
+        }
+    }, [loadJobs, updateJob])
+
     useEffect(() => {
         let cancelled = false
 
@@ -188,6 +219,15 @@ export default function App() {
         })
     }, [])
 
+    const rerunJobFromReport = useCallback(async job => {
+        const data = await api.rerunJob(job.id)
+        if (data?.job_id) {
+            trackJob(data.job_id, job.label, {metadata: job.metadata || {}})
+        }
+        await loadJobs()
+        setSelectedJob(null)
+    }, [loadJobs, trackJob])
+
     const dismissJobPopup = useCallback(jobId => {
         setJobPopups(prev => prev.filter(item => item.id !== jobId))
     }, [])
@@ -218,9 +258,9 @@ export default function App() {
         } catch {
             // Logout should still clear the local view if the backend is temporarily unavailable.
         }
+        localStorage.removeItem('selectedLob')
         localStorage.removeItem('dashboardUser')
         localStorage.removeItem('access_token')
-        localStorage.removeItem('selectedLob')
         setDashboardUser(null)
         setJobs([])
         navigate('/login')
@@ -313,11 +353,6 @@ export default function App() {
                             Backend not reachable. Start it with <code>python dashboard/backend/main.py</code>
                         </div>
                     )}
-                    {/*{tab === 'overview' &&*/}
-                    {/*    <OverviewPanel backendOk={backendOk} jobs={jobs} onOpenReport={setSelectedJob}/>}*/}
-                    {/*{tab === 'jobs' &&*/}
-                    {/*    <JobsPanel jobs={jobs} onSelect={setSelectedJob} onClearHistory={() => setJobs([])}/>}*/}
-                    {/*{tab === 'policy' && <PolicyPanel submitJob={submitJob}/>}*/}
                     <Routes>
                         <Route
                             path="/dashboard"
@@ -326,6 +361,7 @@ export default function App() {
                                     backendOk={backendOk}
                                     jobs={jobs}
                                     onOpenReport={setSelectedJob}
+                                    onCancelJob={cancelJob}
                                 />
                             )}
                         />
@@ -337,6 +373,8 @@ export default function App() {
                                     jobs={jobs}
                                     onSelect={setSelectedJob}
                                     onClearHistory={() => setJobs([])}
+                                    onRefreshJobs={loadJobs}
+                                    onUpdateJob={updateJob}
                                 />
                             )}
                         />
@@ -375,7 +413,13 @@ export default function App() {
                     onDismiss={dismissJobPopup}
                 />
 
-                {selectedJob && <ReportModal job={selectedJob} onClose={() => setSelectedJob(null)}/>}
+                {selectedJob && (
+                    <ReportModal
+                        job={selectedJob}
+                        onClose={() => setSelectedJob(null)}
+                        onRerun={rerunJobFromReport}
+                    />
+                )}
                 {showHelp && <HelpModal onClose={() => setShowHelp(false)}/>}
             </div>
         </div>

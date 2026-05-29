@@ -10,6 +10,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
+import job_store
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -34,6 +35,14 @@ _VALID_LOBS = ", ".join(_LOB_RUNNERS)
 ProgressCallback = Callable[[str, str | None], None]
 
 
+class JobCanceled(Exception):
+    """Raised when a running flow is canceled by the user."""
+
+
+def _check_cancel(job_id: str | None):
+    if job_id and job_store.is_canceled(job_id):
+        raise JobCanceled("Job canceled by user")
+
 def _emit_progress(progress_callback: ProgressCallback | None, phase: str, detail: str | None = None) -> None:
     if not progress_callback:
         return
@@ -43,7 +52,7 @@ def _emit_progress(progress_callback: ProgressCallback | None, phase: str, detai
         pass
 
 
-def run_flow(lob: str, persona: dict, progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
+def run_flow(lob: str, persona: dict, progress_callback: ProgressCallback | None = None, job_id: str | None = None) -> dict[str, Any]:
     """
     Launch a browser, execute the LOB-specific policy flow, and return a result dict.
 
@@ -90,6 +99,7 @@ def run_flow(lob: str, persona: dict, progress_callback: ProgressCallback | None
     steps = result["steps"]
     wall_start = time.perf_counter()
     _emit_progress(progress_callback, "Starting browser", lob.upper())
+    _check_cancel(job_id)
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True, slow_mo=80)
@@ -99,6 +109,7 @@ def run_flow(lob: str, persona: dict, progress_callback: ProgressCallback | None
         page.set_default_timeout(90_000)              # 90 s per action (click/fill/wait)
 
         try:
+            _check_cancel(job_id)
             runner_result = runner(page, persona, steps, progress_callback=progress_callback)
 
             result["outcome"] = runner_result.get("outcome", "error")
@@ -115,6 +126,8 @@ def run_flow(lob: str, persona: dict, progress_callback: ProgressCallback | None
             else:
                 result["overall_status"] = "failed"
 
+        except JobCanceled:
+            raise
         except Exception as exc:
             _emit_progress(progress_callback, "Error", "Flow failed")
             result["error"] = traceback.format_exc()

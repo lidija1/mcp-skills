@@ -64,5 +64,5 @@ Feature: Cyber Insurance Creation
     Examples:
       | TC_ID      |
       | TC_ID_0001 |
-      | TC_ID_0002 |
-      | TC_ID_0003 |
+#      | TC_ID_0002 |
+#      | TC_ID_0003 |

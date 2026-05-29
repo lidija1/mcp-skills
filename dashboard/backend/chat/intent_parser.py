@@ -41,11 +41,16 @@ Step 1 — Does the user want to generate persona data only (no browser run)?
       Extract count from words like "20 different", "15 variations", "give me 5", etc.
       Default count = 5 if not specified.
 
-Step 2 — Does the user want to RUN policy flows (browser automation)?
+Step 2 — Does the user want API-level assertions with expected vs actual values?
+  • Plain-English API assertion / expected premium / actual premium / assert value
+      → run_api_assertion  (params: prompt)
+      Keep the user's full message as prompt.
+
+Step 3 — Does the user want to RUN policy flows (browser automation)?
   • Single policy run → run_quick_policy  (params: lob, description)
   • Multiple distinct scenarios → run_batch_policies  (params: scenarios list, max 10)
 
-Step 3 — UW rules / audit?
+Step 4 — UW rules / audit?
   • List / show / query rules   → list_uw_rules  (params: lob optional)
   • Audit one LOB               → run_uw_audit  (params: lob)
   • Test specific rule by ID    → run_rule_cases  (params: lob, rule_id)
@@ -87,6 +92,9 @@ EXAMPLES
 "give me 10 cyber profiles for a healthcare company"
 → {{"tool":"create_persona_variations","params":{{"lob":"cyber","base_description":"healthcare company cyber profile","count":10}},"reply":"Generating 10 healthcare cyber persona variations."}}
 
+"assert that for young driver premium for gold coverage is 1000 usd"
+→ {{"tool":"run_api_assertion","params":{{"prompt":"assert that for young driver premium for gold coverage is 1000 usd"}},"reply":"Running an Auto API assertion and I will report expected versus actual values."}}
+
 "create a homeowner persona for a luxury coastal home"
 → {{"tool":"create_persona","params":{{"lob":"homeowner","description":"luxury coastal home homeowner"}},"reply":"Creating a homeowner persona for a luxury coastal home."}}
 
@@ -112,6 +120,10 @@ def parse_intent(message: str) -> dict:
     ARCHITECTURE BOUNDARY: output is a data structure only.
     Validation and dispatch happen in chat_router.py.
     """
+    api_assertion = _api_assertion_intent(message)
+    if api_assertion:
+        return api_assertion
+
     system = _SYSTEM_TEMPLATE.format(tools=registry_summary_for_prompt())
     raw = complete_json(system=system, user=message, max_tokens=600)
 
@@ -136,3 +148,20 @@ def parse_intent(message: str) -> dict:
         "params": parsed.get("params") or {},
         "reply": parsed.get("reply", ""),
     }
+
+
+def _api_assertion_intent(message: str) -> dict | None:
+    text = " ".join((message or "").split())
+    lower = text.lower()
+    has_assertion_word = any(word in lower for word in ("assert", "expected", "actual", "should be"))
+    has_api_subject = any(
+        word in lower
+        for word in ("api", "premium", "price", "rate", "coverage", "uw referral", "underwriting referral")
+    )
+    if has_assertion_word and has_api_subject:
+        return {
+            "tool": "run_api_assertion",
+            "params": {"prompt": text},
+            "reply": "Running an Auto API assertion and I will report expected versus actual values.",
+        }
+    return None

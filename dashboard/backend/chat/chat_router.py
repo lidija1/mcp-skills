@@ -37,6 +37,8 @@ from llm_provider import complete_text, provider_status
 from mcp_tools.policy_flow_generator.flow_runner import run_flow
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona, generate_persona_variations
 from mcp_tools.policy_flow_generator.result_formatter import format_batch_summary, format_result
+from dashboard.backend.api_assertions.formatter import format_api_assertion_report
+from dashboard.backend.api_assertions.runner import run_plain_english_api_assertion
 from mcp_tools.uw_rules_validator.report_formatter import format_audit_report, format_boundary_report
 from mcp_tools.uw_rules_validator.rule_registry import CASES_BY_LOB, CASES_BY_RULE, RULE_METADATA
 from mcp_tools.uw_rules_validator.validator import validate_case
@@ -327,6 +329,17 @@ def _dispatch_run_full_audit(jid: str, params: dict):
     return _run
 
 
+def _dispatch_run_api_assertion(jid: str, params: dict):
+    def _run():
+        try:
+            job_store.update_job_status(jid, "Running API assertion", "Personal Auto")
+            result = run_plain_english_api_assertion(params["prompt"])
+            job_store.complete_job(jid, format_api_assertion_report(result))
+        except Exception as exc:
+            job_store.fail_job(jid, str(exc))
+    return _run
+
+
 _DISPATCH = {
     "run_quick_policy":          _dispatch_run_quick_policy,
     "create_persona":            _dispatch_create_persona,
@@ -336,6 +349,7 @@ _DISPATCH = {
     "run_custom_boundary":       _dispatch_run_custom_boundary,
     "run_full_audit":            _dispatch_run_full_audit,
     "create_persona_variations": _dispatch_create_persona_variations,
+    "run_api_assertion":         _dispatch_run_api_assertion,
     # list_uw_rules has creates_job=False — handled inline, not in this table
 }
 
@@ -350,6 +364,7 @@ def _job_label(tool_name: str, params: dict) -> str:
         "run_custom_boundary":       lambda p: f"Chat - Edge Case - {p.get('lob', '').upper()}",
         "run_full_audit":            lambda _: "Chat - Full System Audit",
         "create_persona_variations": lambda p: f"Chat - {p.get('count', 5)} {p.get('lob', '').upper()} Variations",
+        "run_api_assertion":         lambda p: f"Chat - API Assertion - {p.get('prompt', '')[:40]}",
     }
     fn = labels.get(tool_name)
     return fn(params) if fn else f"Chat - {tool_name}"

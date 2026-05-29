@@ -119,6 +119,18 @@ REGISTRY: dict[str, dict] = {
         "requires_confirmation": False,
         "creates_job": True,
     },
+    "run_api_assertion": {
+        "description": (
+            "Run a plain-English Auto API assertion. Generates an Auto persona, "
+            "runs browserless OneShield API replay, and returns compact PASS/FAIL "
+            "with expected and actual values."
+        ),
+        "params": {
+            "prompt": {"type": "str", "required": True, "max_len": 1000},
+        },
+        "requires_confirmation": False,
+        "creates_job": True,
+    },
 }
 
 

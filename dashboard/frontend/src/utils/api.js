@@ -43,6 +43,30 @@ const get = async url => {
   return data
 }
 
+const del = async url => {
+  const response = await fetch(url, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.error || 'Request failed')
+  }
+
+  return data
+}
+
+const policyLobForApi = lob => {
+  const value = String(lob || '').toLowerCase().trim()
+  if (value === 'personal-auto' || value === 'personal_auto' || value === 'personal auto') {
+    return 'auto'
+  }
+  return value
+}
+
 export const api = {
   // ── Health ────────────────────────────────────────────────────────────
   health: () => get('/api/health'),
@@ -54,11 +78,20 @@ export const api = {
   explorerRun: prompt => post('/api/explorer/run', { prompt }),
 
   // ── Policy ────────────────────────────────────────────────────────────
-  getArchetypes: (lob = '') => get(`/api/policy/archetypes?lob=${lob}`),
-  createPersona: (lob, description) => post('/api/policy/create-persona', { lob, description }),
-  runFlow: (lob, persona_json) => post('/api/policy/run-flow', { lob, persona_json }),
-  quickRun: (lob, description) => post('/api/policy/quick-run', { lob, description }),
+  getArchetypes: (lob = '') => get(`/api/policy/archetypes?lob=${policyLobForApi(lob)}`),
+  createPersona: (lob, description) => post('/api/policy/create-persona', { lob: policyLobForApi(lob), description }),
+  runFlow: (lob, persona_json) => post('/api/policy/run-flow', { lob: policyLobForApi(lob), persona_json }),
+  quickRun: (lob, description) => post('/api/policy/quick-run', { lob: policyLobForApi(lob), description }),
   batchRun: scenarios => post('/api/policy/batch-run', { scenarios }),
+  runApiPlainAssertion: prompt => post('/api/api-tests/plain-assert', { prompt }),
+  runApiSuite: (prompts, suite_name, shared_persona_prompt = null) => post('/api/api-tests/suite', { prompts, suite_name, shared_persona_prompt }),
+  smartVariations: (builder, count) => post('/api/api-tests/smart-variations', { builder, count }),
+
+  // ── Saved Suites ──────────────────────────────────────────────────────────
+  getSuites: () => get('/api/suites'),
+  saveSuite: (name, prompts, builder, sharedPersona) =>
+    post('/api/suites', { name, prompts, builder, shared_persona: sharedPersona }),
+  deleteSuite: id => del(`/api/suites/${id}`),
 
   // ── UW ────────────────────────────────────────────────────────────────
   listRules: (lob = '') => get(`/api/uw/rules?lob=${lob}`),

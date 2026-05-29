@@ -5,12 +5,16 @@ API-layer UW test runner and app state validator. Uses OneShieldApiReplay
 (requests-based, no browser) to drive Auto policy flows and assert
 conditions / field values at any stage.
 
-Exposes four tools:
+Exposes six tools:
 
   run_uw_api_test      Run a single UW API test case, assert expected conditions
   run_uw_api_batch     Run all / specified UW cases in one call
   validate_stage_data  Run to a stage and assert specific field values
   inspect_app_state    Run to a stage and return a readable page state dump
+  run_plain_english_api_assertion
+                       Generate an Auto persona, run API replay, assert requested values
+  run_assertion_suite_nl
+                       Run a list of plain-English assertions in parallel; combined report
 
 ──────────────────────────────────────────────────────────────────────────────
 REGISTER IN .mcp.json
@@ -63,7 +67,10 @@ from mcp_tools.oneshield_qa.report_formatter import (  # noqa: E402
     format_uw_batch_report,
     format_assertion_report,
     format_state_dump,
+    format_assertion_suite_report,
 )
+from dashboard.backend.api_assertions.formatter import format_api_assertion_report  # noqa: E402
+from dashboard.backend.api_assertions.runner import run_plain_english_api_assertion as _run_plain_english_api_assertion  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Known expected UW conditions per TC_ID  (mirrors test_oneshield_api_uw_rules.py)
@@ -113,7 +120,11 @@ mcp = FastMCP(
         "Use run_uw_api_test for a single UW_TC_XXX case (checks expected UW conditions). "
         "Use run_uw_api_batch to sweep all 14 Auto UW cases in one call. "
         "Use validate_stage_data to assert field values / page state at any flow stage. "
-        "Use inspect_app_state to dump all visible fields, grids, and actions at a stage."
+        "Use inspect_app_state to dump all visible fields, grids, and actions at a stage. "
+        "Use run_plain_english_api_assertion when the user gives a business-language "
+        "Auto API assertion such as premium expected vs actual. "
+        "Use run_assertion_suite_nl to run multiple plain-English assertions in parallel "
+        "and get a single combined PASS/FAIL report."
     ),
 )
 
@@ -381,6 +392,85 @@ def inspect_app_state(tc_id: str, stage: str = "rate", data_file: str = "") -> s
     result = _run_api_flow(test_data, stop_after=stage)
     ui_data = _stage_ui(result, stage)
     return format_state_dump(tc_id, stage, ui_data, result)
+
+
+@mcp.tool()
+def run_plain_english_api_assertion(prompt: str) -> str:
+    """
+    Run a business-language Auto API assertion.
+
+    This is the manager-friendly API testing path:
+      1. Parse the prompt into a deterministic assertion spec.
+      2. Generate a valid Auto persona from the plain-English scenario.
+      3. Run OneShield API replay without a browser.
+      4. Return a compact PASS/FAIL report with expected and actual values.
+
+    Args:
+        prompt: Plain-English request, for example:
+            "Generate a young driver with Gold coverage and assert premium is around 1000 USD"
+            "Generate a 22 year old driver with SR-22 and assert underwriting referral contains All drivers under 25 years of age"
+
+    Returns:
+        Compact Markdown report with status, full prompt, expected value, actual value, and assertion details.
+    """
+    err = _check_credentials()
+    if err:
+        return err
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return "**ERROR** - Prompt is required."
+    try:
+        result = _run_plain_english_api_assertion(prompt)
+        return format_api_assertion_report(result)
+    except Exception as exc:
+        return f"**ERROR** - {exc}"
+
+
+@mcp.tool()
+def run_assertion_suite_nl(prompts: list, suite_name: str = "Suite") -> str:
+    """
+    Run multiple plain-English Auto API assertions in parallel and return a combined report.
+
+    Each prompt follows the same syntax as run_plain_english_api_assertion.
+    All prompts execute concurrently (up to 6 workers), so a 5-prompt suite
+    typically finishes in the same wall-clock time as a single assertion.
+
+    Args:
+        prompts: List of plain-English assertion prompts, for example:
+            [
+              "Generate a 22-year-old driver with SR-22 and assert UW condition contains sr-22",
+              "Generate a clean 35-year-old driver with Gold coverage and assert flow is not blocked",
+              "Generate a driver under 25 and assert premium is less than 2000",
+            ]
+        suite_name: Optional label for the report header (default "Suite").
+
+    Returns:
+        Markdown summary table (PASS/FAIL per prompt) + failure detail section.
+        Each row shows: index, status, truncated prompt, primary assertion type,
+        expected value, actual value.
+    """
+    err = _check_credentials()
+    if err:
+        return err
+
+    if not prompts:
+        return "**ERROR** — prompts list is empty."
+
+    def _run_one(prompt: str) -> dict:
+        try:
+            run_result = _run_plain_english_api_assertion(prompt.strip())
+            return {"prompt": prompt, "result": run_result, "error": None}
+        except Exception as exc:
+            return {"prompt": prompt, "result": None, "error": str(exc)[:200]}
+
+    ordered_results: list[dict] = [{}] * len(prompts)
+    with ThreadPoolExecutor(max_workers=min(len(prompts), 6)) as pool:
+        futures = {pool.submit(_run_one, p): i for i, p in enumerate(prompts)}
+        for future in as_completed(futures):
+            idx = futures[future]
+            ordered_results[idx] = future.result()
+
+    return format_assertion_suite_report(suite_name, ordered_results)
 
 
 # ---------------------------------------------------------------------------

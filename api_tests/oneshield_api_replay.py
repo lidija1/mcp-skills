@@ -1333,7 +1333,7 @@ class OneShieldApiReplay:
                     fields.append(
                         {
                             "block": block_label,
-                            "label": str(value["label"]).strip(),
+                            "label": re.sub(r"<[^>]+>", "", str(value["label"])).strip(),
                             "value": raw_value,
                             "display_value": lookup_display if lookup_display else raw_value,
                             "read_only": bool(value.get("readOnly", False)),

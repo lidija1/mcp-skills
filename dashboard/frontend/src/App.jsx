@@ -2,6 +2,8 @@ import {useState, useEffect, useCallback, useRef} from 'react'
 import Header from './components/Header'
 import OverviewPanel from './components/OverviewPanel'
 import PolicyPanel from './components/PolicyPanel'
+import ApiAssertionsPanel from './components/ApiAssertionsPanel'
+import SettingsPanel from './components/SettingsPanel'
 import JobsPanel from './components/JobsPanel'
 import ChatPanel from './components/ChatPanel'
 import ReportModal from './components/ReportModal'
@@ -22,6 +24,7 @@ import {
     CircleHelp,
     CalendarDays,
     CheckCircle2,
+    ClipboardCheck,
     Home,
     Menu,
     MessageCircle,
@@ -59,7 +62,13 @@ export default function App() {
     const [showRegister, setShowRegister] = useState(false)
     const [selectedJob, setSelectedJob] = useState(null)
     const [showHelp, setShowHelp] = useState(false)
+    const [theme, setTheme] = useState(() => localStorage.getItem('dashboardTheme') || 'light')
     const previousJobStatusRef = useRef(null)
+
+    useEffect(() => {
+        document.documentElement.dataset.theme = theme
+        localStorage.setItem('dashboardTheme', theme)
+    }, [theme])
 
     useEffect(() => {
         api.health()
@@ -299,7 +308,18 @@ export default function App() {
                                 navigate(`/policy-flow/${savedLob}`)
                             }}
                         />
-                        <NavItem icon={Settings} label="Settings"/>
+                        <NavItem
+                            icon={ClipboardCheck}
+                            label="API Tests"
+                            active={currentPath.startsWith('/api-tests')}
+                            onClick={() => navigate('/api-tests')}
+                        />
+                        <NavItem
+                            icon={Settings}
+                            label="Settings"
+                            active={currentPath === '/settings'}
+                            onClick={() => navigate('/settings')}
+                        />
                     </nav>
                     <nav className="side-nav-footer">
                         <NavItem icon={CircleHelp} label="Help" onClick={() => setShowHelp(true)}/>
@@ -356,6 +376,18 @@ export default function App() {
                                     replace
                                 />
                             }
+                        />
+                        <Route
+                            path="/api-tests"
+                            element={requireAuth(
+                                <ApiAssertionsPanel submitJob={submitJob}/>
+                            )}
+                        />
+                        <Route
+                            path="/settings"
+                            element={requireAuth(
+                                <SettingsPanel theme={theme} onThemeChange={setTheme}/>
+                            )}
                         />
                         <Route path="/" element={<Navigate to="/dashboard" replace/>}/>
                     </Routes>

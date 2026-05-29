@@ -2,7 +2,37 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
+
+
+# Keys that carry UW-decision weight — rendered first in the persona table.
+_UW_SIGNAL_KEYS = {
+    "license_status", "sr22", "sr_22", "prior_liability_limit", "prior_carrier",
+    "continuous_insurance", "years_licensed", "violations", "accidents",
+    "gender", "marital_status", "occupation", "age", "dob",
+    "vehicle_year", "vehicle_make", "vehicle_model", "annual_mileage",
+    "liability_limit", "um_uim_limit", "comprehensive_deductible",
+    "collision_deductible", "coverage_package", "coverage_tier",
+}
+
+
+def _persona_table_lines(persona: dict) -> list[str]:
+    """Key/value table: UW-signal keys first, then the rest."""
+    if not persona:
+        return []
+    uw = [(k, v) for k, v in persona.items() if k.lower() in _UW_SIGNAL_KEYS]
+    other = [(k, v) for k, v in persona.items() if k.lower() not in _UW_SIGNAL_KEYS]
+    lines = ["| Field | Value |", "|-------|-------|"]
+    for k, v in uw + other:
+        if isinstance(v, list):
+            val = ", ".join(str(x) for x in v) if v else "_(none)_"
+        elif isinstance(v, dict):
+            val = json.dumps(v)[:100]
+        else:
+            val = str(v) if v is not None else "_(none)_"
+        lines.append(f"| `{k}` | {val[:100]} |")
+    return lines
 
 
 def _grid_row_texts(ui_data: dict[str, Any]) -> list[str]:
@@ -159,6 +189,91 @@ def format_assertion_report(
 
     if not findings:
         lines.append("| — | — | — | No assertions provided |")
+
+    return "\n".join(lines)
+
+
+def format_assertion_suite_report(
+    suite_name: str,
+    results: list[dict[str, Any]],
+    shared_persona: dict | None = None,
+) -> str:
+    """Format a combined PASS/FAIL report for a list of plain-English assertion results.
+
+    Each entry in `results` must have:
+      prompt (str)
+      result (ApiAssertionRunResult | None)
+      error  (str | None)
+    """
+    pass_count = sum(1 for r in results if r.get("result") and r["result"].passed)
+    total = len(results)
+    verdict = "ALL PASS" if pass_count == total else f"{total - pass_count} FAIL"
+    header_icon = "✅" if pass_count == total else "❌"
+
+    lines = [
+        f"# NL Assertion Suite — {suite_name} — {header_icon} {pass_count}/{total} PASS — {verdict}",
+        "",
+    ]
+
+    # Shared persona block — rendered once, before the summary table.
+    if shared_persona:
+        lines += ["## Shared Persona", ""]
+        lines += _persona_table_lines(shared_persona)
+        lines += ["", "---", ""]
+
+    lines += [
+        "| # | Status | Prompt | Primary Check | Expected | Actual |",
+        "|---|--------|--------|---------------|----------|--------|",
+    ]
+
+    for i, r in enumerate(results, 1):
+        prompt_short = (r["prompt"][:70] + "…") if len(r["prompt"]) > 70 else r["prompt"]
+        if r.get("error"):
+            lines.append(
+                f"| {i} | ❌ ERROR | {prompt_short} | — | — | {str(r['error'])[:80]} |"
+            )
+            continue
+        run = r["result"]
+        icon = "✅" if run.passed else "❌"
+        status = "PASS" if run.passed else "FAIL"
+        primary = run.findings[0] if run.findings else None
+        check_type = primary.type if primary else "—"
+        expected = str(primary.expected)[:50] if primary else "—"
+        actual = str(primary.actual)[:60] if primary else "—"
+        lines.append(
+            f"| {i} | {icon} {status} | {prompt_short} | {check_type} | `{expected}` | `{actual}` |"
+        )
+
+    fail_results = [r for r in results if r.get("result") and not r["result"].passed]
+    if fail_results:
+        lines += ["", f"## Failures ({len(fail_results)})", ""]
+        for r in fail_results:
+            run = r["result"]
+            lines += [f"### {r['prompt'][:80]}", ""]
+            for finding in run.findings:
+                icon_f = "✅" if finding.passed else "❌"
+                lines.append(
+                    f"- {icon_f} **{finding.type}**: expected `{finding.expected}` "
+                    f"/ actual `{str(finding.actual)[:80]}`"
+                )
+                if finding.message:
+                    lines.append(f"  - {finding.message}")
+            blocked = run.flow_result.get("blocked_reason")
+            if blocked:
+                lines.append(f"  - Blocked: {blocked}")
+
+            # Persona diagnosis block.
+            if shared_persona is not None:
+                # Same persona for all assertions — point back to the top section.
+                lines.append("> Persona: shared — see **Shared Persona** section above.")
+            elif run.persona:
+                # Independent persona per assertion — show the full JSON so the
+                # reader can verify the AI generated the intended risk profile.
+                lines += ["", "#### Generated Persona", "", "```json"]
+                lines.append(json.dumps(run.persona, indent=2))
+                lines += ["```"]
+
+            lines.append("")
 
     return "\n".join(lines)
 

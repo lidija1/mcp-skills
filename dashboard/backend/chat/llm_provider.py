@@ -17,6 +17,8 @@ DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_OLLAMA_MODEL = "llama3.1:8b"
 DEFAULT_OPENAI_MODEL = "gpt-4o"
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 
 class LLMProviderError(RuntimeError):
@@ -31,6 +33,8 @@ def _provider_name() -> str:
         return "anthropic"
     if os.environ.get("OPENAI_API_KEY"):
         return "openai"
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        return "deepseek"
     return "ollama"
 
 
@@ -59,6 +63,12 @@ def provider_status(probe: bool = False) -> dict[str, Any]:
             "available": bool(os.environ.get("OPENAI_API_KEY")),
             "model": os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
         })
+    elif provider == "deepseek":
+        status.update({
+            "available": bool(os.environ.get("DEEPSEEK_API_KEY")),
+            "model": os.environ.get("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL),
+            "base_url": DEEPSEEK_BASE_URL,
+        })
     else:
         status["available"] = False
 
@@ -81,8 +91,10 @@ def _complete(system: str, user: str, max_tokens: int, json_mode: bool) -> str:
         return _complete_anthropic(system, user, max_tokens)
     if provider == "openai":
         return _complete_openai(system, user, max_tokens, json_mode)
+    if provider == "deepseek":
+        return _complete_deepseek(system, user, max_tokens, json_mode)
     raise LLMProviderError(
-        "Unsupported CHAT_LLM_PROVIDER. Use 'ollama', 'openai', or 'anthropic'."
+        "Unsupported CHAT_LLM_PROVIDER. Use 'ollama', 'openai', 'anthropic', or 'deepseek'."
     )
 
 
@@ -167,6 +179,30 @@ def _complete_openai(system: str, user: str, max_tokens: int, json_mode: bool) -
     client = _openai.OpenAI(api_key=api_key)
     kwargs: dict[str, Any] = {
         "model": os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+
+    resp = client.chat.completions.create(**kwargs)
+    return resp.choices[0].message.content.strip()
+
+
+def _complete_deepseek(system: str, user: str, max_tokens: int, json_mode: bool) -> str:
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise LLMProviderError("DEEPSEEK_API_KEY is not configured.")
+
+    import openai as _openai
+
+    client = _openai.OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
+    kwargs: dict[str, Any] = {
+        "model": os.environ.get("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL),
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},

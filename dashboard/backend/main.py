@@ -37,7 +37,9 @@ if _env_path.exists():
 if "ANTHROPIC_API_KEY" not in _env_keys:
     os.environ.pop("ANTHROPIC_API_KEY", None)
 
-if "OPENAI_API_KEY" in _env_keys:
+if os.environ.get("AI_PROVIDER"):
+    print(f"[INFO] AI provider: {os.environ['AI_PROVIDER']}")
+elif "OPENAI_API_KEY" in _env_keys:
     os.environ["AI_PROVIDER"] = "openai"
     print("[INFO] AI provider: openai")
 elif "ANTHROPIC_API_KEY" in _env_keys:
@@ -61,6 +63,9 @@ from pydantic import BaseModel
 from mcp_tools.policy_flow_generator.flow_runner import run_flow
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona, list_archetypes
 from mcp_tools.policy_flow_generator.result_formatter import format_batch_summary, format_result
+from dashboard.backend.api_assertions.formatter import format_api_assertion_report
+from dashboard.backend.api_assertions.runner import run_plain_english_api_assertion
+from mcp_tools.oneshield_qa.report_formatter import format_assertion_suite_report
 from mcp_tools.uw_rules_validator.report_formatter import format_audit_report, format_boundary_report
 from mcp_tools.uw_rules_validator.rule_registry import CASES_BY_LOB, CASES_BY_RULE, RULE_METADATA
 from mcp_tools.uw_rules_validator.validator import validate_case
@@ -74,6 +79,11 @@ _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
 POLICY_LOBS = {"auto", "cyber", "homeowner"}
+POLICY_LOB_ALIASES = {
+    "personal-auto": "auto",
+    "personal_auto": "auto",
+    "personal auto": "auto",
+}
 LOB_DISPLAY = {
     "auto": "Personal Auto",
     "cyber": "Cyber",
@@ -102,9 +112,9 @@ def _make_policy_progress_callback(jid: str, lob: str):
 
 
 def _validate_policy_lob(lob: str) -> str:
-    normalized = lob.lower().strip()
+    normalized = POLICY_LOB_ALIASES.get(lob.lower().strip(), lob.lower().strip())
     if normalized not in POLICY_LOBS:
-        valid = ", ".join(sorted(POLICY_LOBS))
+        valid = ", ".join(sorted([*POLICY_LOBS, *POLICY_LOB_ALIASES]))
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported policy-flow LOB '{lob}'. Valid options: {valid}.",
@@ -300,13 +310,13 @@ def allure_generate():
 
 # â”€â”€ Job endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.get("/api/jobs")
-def list_jobs():
-    return _job_store.list_jobs()
+def list_jobs(request: Request):
+    return _job_store.list_jobs(user_from_request(request))
 
 
 @app.get("/api/jobs/{job_id}")
-def get_job(job_id: str):
-    return _job_store.get_job(job_id) or {"error": "not found"}
+def get_job(job_id: str, request: Request):
+    return _job_store.get_job(job_id, user_from_request(request)) or {"error": "not found"}
 
 
 # â”€â”€ Policy: Archetypes (fast, no browser) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -346,6 +356,28 @@ class BoundaryReq(BaseModel):
     description: str
     expected_outcome: str
     expected_conditions: list[str] = []
+
+
+class ApiAssertionReq(BaseModel):
+    prompt: str
+
+
+class ApiAssertionSuiteReq(BaseModel):
+    prompts: list[str]
+    suite_name: str = "Suite"
+    shared_persona_prompt: str | None = None
+
+
+class SmartVariationsReq(BaseModel):
+    builder: dict
+    count: int = 3
+
+
+class SaveSuiteReq(BaseModel):
+    name: str
+    prompts: list[str]
+    builder: dict = {}
+    shared_persona: bool = True
 
 
 class ExplorerReq(BaseModel):
@@ -741,8 +773,8 @@ def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
             results = []
             for s in req.scenarios[:25]:
                 lob = _validate_policy_lob(str(s.get("lob", "auto")))
-                pjson = generate_persona(lob, s.get("description", ""))
                 try:
+                    pjson = generate_persona(lob, s.get("description", ""))
                     p = json.loads(pjson)
                     if "error" in p:
                         r = _empty_result(lob, p.get("error", "persona error"))
@@ -757,6 +789,206 @@ def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
 
     bg.add_task(_run)
     return {"job_id": jid}
+
+
+@app.post("/api/api-tests/plain-assert")
+def api_plain_assert_ep(req: ApiAssertionReq, bg: BackgroundTasks, request: Request):
+    prompt = req.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt is required.")
+
+    user = user_from_request(request)
+    jid = _new_job(
+        f"API Assertion - {prompt[:60]}",
+        execution_type="api_assertion",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": "auto", "lob_display": "Personal Auto", "prompt": prompt},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Generating persona", "Personal Auto API assertion")
+            result = run_plain_english_api_assertion(prompt)
+            _status(jid, "Evaluating assertions", "Deterministic API evidence")
+            _done(jid, format_api_assertion_report(result))
+        except Exception as e:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(e))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+@app.post("/api/api-tests/suite")
+def api_suite_ep(req: ApiAssertionSuiteReq, bg: BackgroundTasks, request: Request):
+    prompts = [p.strip() for p in req.prompts if p.strip()]
+    if not prompts:
+        raise HTTPException(status_code=400, detail="prompts list must not be empty.")
+
+    suite_name = req.suite_name.strip() or f"Suite ({len(prompts)} assertions)"
+    user = user_from_request(request)
+    jid = _new_job(
+        f"API Suite - {suite_name}",
+        execution_type="api_suite",
+        created_by=(user or {}).get("id"),
+        metadata={
+            "lob": "auto",
+            "lob_display": "Personal Auto",
+            "suite_name": suite_name,
+            "prompt_count": len(prompts),
+        },
+    )
+
+    def _run():
+        shared_persona: dict | None = None
+        if req.shared_persona_prompt:
+            try:
+                _status(jid, "Generating shared persona", req.shared_persona_prompt[:80])
+                raw = generate_persona("auto", req.shared_persona_prompt)
+                parsed = json.loads(raw)
+                if "error" not in parsed:
+                    shared_persona = parsed
+            except Exception as exc:
+                _fail(jid, f"Shared persona generation failed: {exc}")
+                return
+
+        def _run_one(prompt: str) -> dict:
+            try:
+                result = run_plain_english_api_assertion(prompt, pre_generated_persona=shared_persona)
+                return {"prompt": prompt, "result": result, "error": None}
+            except Exception as exc:
+                return {"prompt": prompt, "result": None, "error": str(exc)[:200]}
+
+        try:
+            batch_note = f"{len(prompts)} assertions · 6 parallel"
+            _status(jid, "Running assertions", batch_note)
+            ordered: list[dict] = [{}] * len(prompts)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+                futures = {pool.submit(_run_one, p): i for i, p in enumerate(prompts)}
+                for future in concurrent.futures.as_completed(futures):
+                    ordered[futures[future]] = future.result()
+            _done(jid, format_assertion_suite_report(suite_name, ordered, shared_persona=shared_persona))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+
+@app.post("/api/api-tests/smart-variations")
+def smart_variations_ep(req: SmartVariationsReq):
+    """Ask AI to suggest UW boundary variations. Uses AI_PROVIDER env (anthropic/openai/ollama)."""
+    count = max(1, min(20, req.count or 3))
+
+    system = (
+        "You are a QA engineer writing insurance API test variations.\n"
+        "Given a base driver profile, generate distinct test cases targeting different UW rules.\n"
+        "Return JSON only: {\"variations\": [{\"title\": str, \"prompt\": str}, ...]}\n"
+        "Each prompt must be a complete plain-English assertion:\n"
+        "  'Generate Auto persona for <driver details> and assert <assertion>.'\n"
+        "Vary the risk profile meaningfully — SR-22, license status, age, coverage tier.\n"
+        "Return only the JSON object — no markdown fences, no explanation, no <think> tags."
+    )
+    user_msg = (
+        f"Base profile:\n{json.dumps(req.builder, indent=2)}\n\n"
+        f"Generate {count} distinct UW boundary test variations as plain-English assertion prompts."
+    )
+
+    # Provider detection: AI_PROVIDER env wins; then key presence; then local Ollama.
+    forced = os.getenv("AI_PROVIDER", "").lower().strip()
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    if forced == "anthropic" or (not forced and anthropic_key):
+        provider = "anthropic"
+    elif forced == "openai" or (not forced and openai_key):
+        provider = "openai"
+    else:
+        provider = "ollama"
+
+    try:
+        raw = ""
+        if provider == "anthropic":
+            import anthropic as _anthropic
+            client = _anthropic.Anthropic(api_key=anthropic_key)
+            msg = client.messages.create(
+                model="claude-opus-4-6",
+                max_tokens=1024,
+                system=system,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            raw = msg.content[0].text.strip()
+        elif provider == "openai":
+            import openai as _openai
+            client = _openai.OpenAI(api_key=openai_key)
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                max_tokens=1024,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.7,
+            )
+            raw = resp.choices[0].message.content.strip()
+        else:
+            import openai as _openai
+            ollama_model = os.getenv("PARSER_OLLAMA_MODEL", os.getenv("OLLAMA_BASE_MODEL", "qwen3:8b"))
+            ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+            client = _openai.OpenAI(api_key="ollama", base_url=ollama_url)
+            resp = client.chat.completions.create(
+                model=ollama_model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.7,
+            )
+            raw = resp.choices[0].message.content.strip()
+
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+        raw = re.sub(r"^```[^\n]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+        data = json.loads(raw)
+        return {"variations": data.get("variations", [])}
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail=f"Model returned invalid JSON: {exc}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Saved Suites ──────────────────────────────────────────────────────────────
+@app.get("/api/suites")
+def list_suites_ep(request: Request):
+    user = user_from_request(request)
+    uid = (user or {}).get("id")
+    suites = dashboard_db.list_suites(user_id=uid)
+    return {"suites": suites}
+
+
+@app.post("/api/suites")
+def save_suite_ep(req: SaveSuiteReq, request: Request):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Suite name is required.")
+    prompts = [p.strip() for p in req.prompts if p.strip()]
+    if not prompts:
+        raise HTTPException(status_code=400, detail="At least one prompt is required.")
+    user = user_from_request(request)
+    uid = (user or {}).get("id")
+    suite = dashboard_db.save_suite(name, prompts, req.builder, req.shared_persona, user_id=uid)
+    return suite
+
+
+@app.delete("/api/suites/{suite_id}")
+def delete_suite_ep(suite_id: int, request: Request):
+    user = user_from_request(request)
+    uid = (user or {}).get("id")
+    deleted = dashboard_db.delete_suite(suite_id, user_id=uid)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Suite not found or not yours.")
+    return {"deleted": suite_id}
 
 
 def _empty_result(lob: str, error: str) -> dict:

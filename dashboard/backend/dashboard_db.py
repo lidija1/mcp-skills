@@ -98,6 +98,83 @@ def init_db() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_executions_created_by ON executions(created_by)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_executions_created_at ON executions(created_at)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS saved_suites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                prompts_json TEXT NOT NULL DEFAULT '[]',
+                builder_json TEXT NOT NULL DEFAULT '{}',
+                shared_persona INTEGER NOT NULL DEFAULT 1,
+                created_by INTEGER,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_saved_suites_created_by ON saved_suites(created_by)")
+
+
+def save_suite(
+    name: str,
+    prompts: list[str],
+    builder: dict[str, Any],
+    shared_persona: bool = True,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    init_db()
+    now = time.time()
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO saved_suites (name, prompts_json, builder_json, shared_persona, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (name, _json(prompts), _json(builder), int(shared_persona), user_id, now),
+        )
+        row = conn.execute("SELECT * FROM saved_suites WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _row_to_suite(row)
+
+
+def list_suites(user_id: int | None = None) -> list[dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        if user_id is not None:
+            rows = conn.execute(
+                "SELECT * FROM saved_suites WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM saved_suites ORDER BY created_at DESC").fetchall()
+    return [_row_to_suite(r) for r in rows]
+
+
+def delete_suite(suite_id: int, user_id: int | None = None) -> bool:
+    init_db()
+    with connect() as conn:
+        row = conn.execute("SELECT created_by FROM saved_suites WHERE id = ?", (suite_id,)).fetchone()
+        if not row:
+            return False
+        owner = row["created_by"]
+        if user_id is not None and owner is not None and owner != user_id:
+            return False
+        conn.execute("DELETE FROM saved_suites WHERE id = ?", (suite_id,))
+    return True
+
+
+def _row_to_suite(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    data = dict(row)
+    return {
+        "id": data["id"],
+        "name": data["name"],
+        "prompts": _loads(data["prompts_json"], []),
+        "builder": _loads(data["builder_json"], {}),
+        "shared_persona": bool(data["shared_persona"]),
+        "created_by": data.get("created_by"),
+        "created_at": data["created_at"],
+    }
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:

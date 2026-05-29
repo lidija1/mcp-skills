@@ -45,15 +45,31 @@ export default function ReportModal({ job, onClose }) {
   const isError = job.status === 'error'
   const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : 'Running'
 
+  const isAssertionSuite = jobResult.includes('NL Assertion Suite')
+  const isUwBatch = jobResult.trimStart().startsWith('# UW API Batch')
+  const suiteData = useMemo(() => isAssertionSuite ? parseAssertionSuiteContent(jobResult) : null, [isAssertionSuite, jobResult])
+  const uwBatchData = useMemo(() => isUwBatch ? parseUwBatchContent(jobResult) : null, [isUwBatch, jobResult])
+
   const report = useMemo(() => parsePolicyFlowReport(jobResult), [jobResult])
 
   const copyReport = () => {
-    if (report.profileJson) {
+    if (isAssertionSuite || isUwBatch) {
+      navigator.clipboard.writeText(jobResult || '')
+    } else if (report.profileJson) {
       navigator.clipboard.writeText(report.prettyProfileJson || report.profileJson)
     } else {
       const text = job.status === 'done' ? jobResult : jobError
       navigator.clipboard.writeText(text || '')
     }
+  }
+
+  const openAssertionJson = () => {
+    const data = suiteData || uwBatchData
+    if (!data) return
+    const editor = window.open('', '_blank', 'width=980,height=760,resizable=yes,scrollbars=yes')
+    if (!editor) return
+    editor.document.write(buildJsonEditorDocument(`${jobLabel} — Structured Data`, JSON.stringify(data, null, 2)))
+    editor.document.close()
   }
 
   const hasStructuredReport = Boolean(
@@ -154,6 +170,12 @@ export default function ReportModal({ job, onClose }) {
                 </button>
               </>
             )}
+            {(isAssertionSuite || isUwBatch) && (
+              <button onClick={withActionFeedback('view-json', openAssertionJson)} className={reportActionClass('view-json')} type="button" title="View structured results as JSON">
+                <FileJson size={16} />
+                View JSON
+              </button>
+            )}
             <button onClick={withActionFeedback('copy', copyReport)} className={reportActionClass('copy')} type="button">
               <Copy size={16} />
               Copy
@@ -165,7 +187,11 @@ export default function ReportModal({ job, onClose }) {
         </header>
 
         <div className="report-body">
-          {isError ? (
+          {isAssertionSuite ? (
+            <AssertionSuiteReport data={suiteData} rawContent={jobResult} />
+          ) : isUwBatch ? (
+            <UwBatchReport data={uwBatchData} rawContent={jobResult} />
+          ) : isError ? (
             <div className="report-state error">
               <div className="report-state-heading">
                 <ShieldAlert size={21} />
@@ -594,11 +620,25 @@ function parsePolicyFlowReport(content) {
   const hasProfileChunk = !isVariations && /```json/i.test(chunks[0] || '')
   const c = (i) => chunks[i] || ''
 
-  const profileJson = isVariations
+  let profileJson = isVariations
     ? JSON.stringify(variationPersonas, null, 2)
     : hasProfileChunk
       ? extractProfileJson(c(0))
       : ''
+
+  // Fallback: extract any embedded ```json blocks (e.g. persona JSON in API assertion suite failure sections)
+  if (!profileJson && !isVariations && !hasProfileChunk) {
+    const embeddedBlocks = extractAllProfileJson(normalized)
+    if (embeddedBlocks.length === 1) {
+      profileJson = embeddedBlocks[0]
+    } else if (embeddedBlocks.length > 1) {
+      const parsed = embeddedBlocks.map(parseJsonObject).filter(Boolean)
+      if (parsed.length > 0) {
+        profileJson = JSON.stringify(parsed.length === 1 ? parsed[0] : parsed, null, 2)
+      }
+    }
+  }
+
   const summaryChunk = hasProfileChunk ? c(1) : c(0)
   const stepsChunk = hasProfileChunk ? c(2) : c(1)
   const uwChunk = hasProfileChunk ? c(3) : c(2)
@@ -1204,6 +1244,235 @@ function ViolationSummary({ content }) {
         })}
       </ul>
     </div>
+  )
+}
+
+/* ─── Assertion Suite Report ──────────────────────────────────── */
+
+function AssertionSuiteReport({ data, rawContent }) {
+  if (!data) {
+    return (
+      <div className="markdown-report report-markdown">
+        <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>{rawContent}</Markdown>
+      </div>
+    )
+  }
+  const { suiteName, passCount, total, allPass, verdict, rows } = data
+  const failRows = rows.filter(r => !r.passed && !r.isError)
+  const errorRows = rows.filter(r => r.isError)
+
+  return (
+    <div className="asr-report">
+      <div className="asr-title-line">
+        <h1 className="asr-title">{suiteName}</h1>
+        <span className={`asr-verdict-badge ${allPass ? 'pass' : 'fail'}`}>
+          {allPass ? '✅' : '❌'} {passCount}/{total} PASS &mdash; {verdict}
+        </span>
+      </div>
+      <div className="asr-rule" />
+
+      <div className="asr-table-wrap">
+        <table className="asr-table">
+          <thead>
+            <tr>
+              <th className="asr-col-num">#</th>
+              <th className="asr-col-status">Status</th>
+              <th className="asr-col-prompt">Prompt</th>
+              <th className="asr-col-check">Primary Check</th>
+              <th className="asr-col-val">Expected</th>
+              <th className="asr-col-val">Actual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.num} className={row.isError ? 'asr-row-error' : row.passed ? 'asr-row-pass' : 'asr-row-fail'}>
+                <td className="asr-num">{row.num}</td>
+                <td>
+                  <span className={`asr-status-pill ${row.isError ? 'error' : row.passed ? 'pass' : 'fail'}`}>
+                    {row.isError ? '⚠' : row.passed ? '✅' : '❌'} {row.status}
+                  </span>
+                </td>
+                <td className="asr-prompt-cell">{row.prompt}</td>
+                <td className="asr-check-cell">{row.primaryCheck}</td>
+                <td><code className="asr-val-code">{row.expected}</code></td>
+                <td><code className={`asr-val-code ${row.passed ? '' : 'fail'}`}>{row.actual}</code></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {(failRows.length > 0 || errorRows.length > 0) && (
+        <div className="asr-failures">
+          <div className="asr-failures-title">Failures ({failRows.length + errorRows.length})</div>
+          {[...failRows, ...errorRows].map(row => (
+            <div key={row.num} className="asr-failure-row">
+              <div className="asr-failure-header">
+                <span className="asr-status-pill fail">❌ #{row.num}</span>
+                <span className="asr-failure-prompt">{row.prompt}</span>
+              </div>
+              <div className="asr-failure-detail">
+                <span className="asr-kv"><em>Check:</em> {row.primaryCheck}</span>
+                <span className="asr-kv"><em>Expected:</em> <code className="asr-val-code">{row.expected}</code></span>
+                <span className="asr-kv"><em>Actual:</em> <code className="asr-val-code fail">{row.actual}</code></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UwBatchReport({ data, rawContent }) {
+  if (!data) {
+    return (
+      <div className="markdown-report report-markdown">
+        <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>{rawContent}</Markdown>
+      </div>
+    )
+  }
+  const { passCount, total, allPass, rows } = data
+  const failRows = rows.filter(r => !r.passed && !r.isError)
+
+  return (
+    <div className="asr-report">
+      <div className="asr-title-line">
+        <h1 className="asr-title">UW API Batch Test</h1>
+        <span className={`asr-verdict-badge ${allPass ? 'pass' : 'fail'}`}>
+          {allPass ? '✅' : '❌'} {passCount}/{total} PASS {allPass ? '— ALL PASS' : `— ${total - passCount} FAIL`}
+        </span>
+      </div>
+      <div className="asr-rule" />
+
+      <div className="asr-table-wrap">
+        <table className="asr-table">
+          <thead>
+            <tr>
+              <th className="asr-col-num">#</th>
+              <th className="asr-col-status">Status</th>
+              <th className="asr-col-check">TC ID</th>
+              <th className="asr-col-prompt">Expected Conditions</th>
+              <th className="asr-col-val">Page</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} className={row.isError ? 'asr-row-error' : row.passed ? 'asr-row-pass' : 'asr-row-fail'}>
+                <td className="asr-num">{i + 1}</td>
+                <td>
+                  <span className={`asr-status-pill ${row.isError ? 'error' : row.passed ? 'pass' : 'fail'}`}>
+                    {row.isError ? '⚠' : row.passed ? '✅' : '❌'} {row.status}
+                  </span>
+                </td>
+                <td><code className="asr-val-code">{row.tcId}</code></td>
+                <td className="asr-prompt-cell">{row.expectedConditions}</td>
+                <td className="asr-check-cell">{row.page}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {failRows.length > 0 && (
+        <div className="asr-failures">
+          <div className="asr-failures-title">Failures ({failRows.length})</div>
+          {failRows.map((row, i) => (
+            <div key={i} className="asr-failure-row">
+              <div className="asr-failure-header">
+                <span className="asr-status-pill fail">❌</span>
+                <code className="asr-val-code">{row.tcId}</code>
+                <span className="asr-failure-prompt">{row.expectedConditions}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Parsers ─────────────────────────────────────────────────── */
+
+function parseAssertionSuiteContent(content) {
+  if (!content) return null
+  const headerMatch = content.match(
+    /^#\s+NL Assertion Suite\s*[—\-–]\s*(.+?)\s*[—\-–]\s*[✅❌]\s*(\d+)\/(\d+)\s+PASS\s*[—\-–]\s*(.+)/m,
+  )
+  if (!headerMatch) return null
+
+  const suiteName = headerMatch[1].trim()
+  const passCount = parseInt(headerMatch[2], 10)
+  const total = parseInt(headerMatch[3], 10)
+  const verdict = headerMatch[4].trim()
+
+  const rows = []
+  const lines = content.split('\n')
+  let inTable = false
+  let pastSep = false
+
+  for (const line of lines) {
+    if (!inTable && /^\|\s*#\s*\|\s*Status/i.test(line)) { inTable = true; continue }
+    if (inTable && !pastSep && /^\|\s*-/.test(line)) { pastSep = true; continue }
+    if (inTable && pastSep) {
+      if (!line.trimStart().startsWith('|')) break
+      const cells = _mdCells(line)
+      if (cells.length < 6) continue
+      const sc = cells[1]
+      rows.push({
+        num: cells[0],
+        passed: (sc.includes('PASS') || sc.includes('✅')) && !sc.includes('ERROR'),
+        isError: sc.includes('ERROR'),
+        status: sc.replace(/[✅❌⚠]/gu, '').trim(),
+        prompt: cells[2],
+        primaryCheck: cells[3],
+        expected: cells[4].replace(/`/g, '').trim(),
+        actual: cells[5].replace(/`/g, '').trim(),
+      })
+    }
+  }
+
+  return { suiteName, passCount, total, allPass: passCount === total, verdict, rows }
+}
+
+function parseUwBatchContent(content) {
+  if (!content) return null
+  const headerMatch = content.match(/^#\s+UW API Batch\s*[—\-–]\s*(\d+)\/(\d+)\s+PASS/m)
+  if (!headerMatch) return null
+
+  const passCount = parseInt(headerMatch[1], 10)
+  const total = parseInt(headerMatch[2], 10)
+
+  const rows = []
+  const lines = content.split('\n')
+  let inTable = false
+  let pastSep = false
+
+  for (const line of lines) {
+    if (!inTable && /^\|\s*TC_ID\s*\|\s*Status/i.test(line)) { inTable = true; continue }
+    if (inTable && !pastSep && /^\|\s*-/.test(line)) { pastSep = true; continue }
+    if (inTable && pastSep) {
+      if (!line.trimStart().startsWith('|')) break
+      const cells = _mdCells(line)
+      if (cells.length < 4) continue
+      const sc = cells[1]
+      rows.push({
+        tcId: cells[0].replace(/`/g, '').trim(),
+        passed: (sc.includes('PASS') || sc.includes('✅')) && !sc.includes('ERROR'),
+        isError: sc.includes('ERROR'),
+        status: sc.replace(/[✅❌⚠]/gu, '').trim(),
+        expectedConditions: cells[2].replace(/`/g, '').trim(),
+        page: cells[3].trim(),
+      })
+    }
+  }
+
+  return { passCount, total, allPass: passCount === total, rows }
+}
+
+function _mdCells(line) {
+  return line.split('|').map(c => c.trim()).filter((c, i, a) =>
+    !(i === 0 && c === '') && !(i === a.length - 1 && c === ''),
   )
 }
 

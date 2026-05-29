@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { cleanDisplayText } from '../utils/text'
+import {canRerunJob} from '../utils/jobRerun'
 
 export default function ReportModal({ job, onClose, onRerun }) {
   const ref = useRef(null)
@@ -223,12 +224,6 @@ export default function ReportModal({ job, onClose, onRerun }) {
       </section>
     </div>
   )
-}
-
-function canRerunJob(job) {
-  if (!job) return false
-  const metadata = job.metadata || {}
-  return job.execution_type === 'policy_flow' && Boolean(metadata.rerun_payload)
 }
 
 function DocKV({ label, value }) {

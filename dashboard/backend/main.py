@@ -416,36 +416,109 @@ def cancel_job_ep(job_id: str):
 
     return {"ok": True}
 
-@app.post("/api/jobs/{job_id}/rerun")
-def rerun_job(job_id: str, bg: BackgroundTasks):
-    job = _job_store.get_job(job_id)
 
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    metadata = job.get("metadata") or {}
-    payload = metadata.get("rerun_payload")
-
-    if not payload:
-        raise HTTPException(
-            status_code=400,
-            detail="This job cannot be rerun",
-        )
-
-    execution_type = job.get("execution_type")
-
-    if execution_type != "policy_flow":
-        raise HTTPException(
-            status_code=400,
-            detail="Rerun currently supported only for policy flows",
-        )
-
-    policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
-
-    display = LOB_DISPLAY.get(
-        policy_lob,
-        payload["lob"].strip().upper()
+def _extract_source_description_from_result(result: str | None) -> str | None:
+    if not result:
+        return None
+    match = re.search(
+        r"\*\*Source Description:\*\*\s*(.+?)(?:\n\n|\n```|$)",
+        result,
+        flags=re.IGNORECASE | re.DOTALL,
     )
+    return match.group(1).strip() if match else None
+
+
+def _looks_like_quick_policy_job(job: dict) -> bool:
+    label = (job.get("label") or "").lower()
+    if "quick policy" in label:
+        return True
+    metadata = job.get("metadata") or {}
+    return metadata.get("tool") == "run_quick_policy"
+
+
+def _quick_run_rerun_payload(job: dict) -> dict | None:
+    """Build rerun payload for Quick Policy Test jobs (incl. legacy rows without rerun_payload)."""
+    metadata = job.get("metadata") or {}
+    stored = metadata.get("rerun_payload") or {}
+    params = metadata.get("params") or {}
+    description = (
+        stored.get("description")
+        or metadata.get("description")
+        or params.get("description")
+        or _extract_source_description_from_result(job.get("result"))
+    )
+    if not description:
+        return None
+    raw_lob = (
+        stored.get("lob")
+        or metadata.get("lob")
+        or params.get("lob")
+        or metadata.get("requested_lob")
+        or "personal-auto"
+    )
+    return {
+        "mode": "quick_run",
+        "lob": raw_lob,
+        "description": description,
+    }
+
+
+def _persona_rerun_payload(job: dict) -> dict | None:
+    metadata = job.get("metadata") or {}
+    params = metadata.get("params") or {}
+    description = (
+        metadata.get("description")
+        or params.get("description")
+        or _extract_source_description_from_result(job.get("result"))
+    )
+    if not description:
+        return None
+    raw_lob = (
+        metadata.get("lob")
+        or params.get("lob")
+        or metadata.get("requested_lob")
+        or "personal-auto"
+    )
+    return {
+        "lob": raw_lob,
+        "description": description,
+    }
+
+
+def _schedule_persona_rerun(source_job_id: str, payload: dict, bg: BackgroundTasks) -> str:
+    policy_lob = _validate_policy_lob(payload["lob"])
+    engine_lob = _to_flow_engine_lob(policy_lob)
+    display = LOB_DISPLAY[policy_lob]
+    description = payload["description"]
+
+    new_jid = _new_job(
+        f"Build Profile - {display}",
+        execution_type="create_persona",
+        metadata=_job_lob_metadata(
+            policy_lob,
+            description=description,
+            rerun_of=source_job_id,
+        ),
+    )
+
+    def _run():
+        try:
+            persona_json = generate_persona(engine_lob, description)
+            data = json.loads(persona_json)
+            if "error" in data:
+                _fail(new_jid, data["error"])
+                return
+            _done(new_jid, _format_persona_report(payload["lob"], description, persona_json))
+        except Exception as e:
+            _fail(new_jid, str(e))
+
+    bg.add_task(_run)
+    return new_jid
+
+
+def _schedule_policy_flow_rerun(source_job_id: str, payload: dict, bg: BackgroundTasks) -> str:
+    policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
+    display = LOB_DISPLAY.get(policy_lob, payload["lob"].strip().upper())
 
     new_jid = _new_job(
         f"Policy Journey - {display}",
@@ -453,7 +526,7 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
         metadata=_job_lob_metadata(
             policy_lob,
             requested_lob=payload["lob"],
-            rerun_of=job_id,
+            rerun_of=source_job_id,
             rerun_payload=payload,
         ),
     )
@@ -461,34 +534,106 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
     def _run():
         try:
             _status(new_jid, "Preparing profile", display)
-
-            persona = _parse_run_flow_persona(
-                policy_lob,
-                payload["persona_json"],
-            )
-
+            persona = _parse_run_flow_persona(policy_lob, payload["persona_json"])
             result = _run_flow_threaded(
                 engine_lob,
                 persona,
-                _make_policy_progress_callback(new_jid, policy_lob), new_jid
+                _make_policy_progress_callback(new_jid, policy_lob),
+                new_jid,
             )
-
             persona_section = (
-                    _format_persona_report(
-                        display,
-                        "",
-                        json.dumps(persona),
-                    )
-                    + "\n\n---\n\n"
+                _format_persona_report(display, "", json.dumps(persona)) + "\n\n---\n\n"
             )
-
             _done(new_jid, persona_section + format_result(result))
-
         except Exception as e:
             _fail(new_jid, str(e))
 
     bg.add_task(_run)
+    return new_jid
 
+
+def _schedule_quick_run_rerun(source_job_id: str, payload: dict, bg: BackgroundTasks) -> str:
+    policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
+    display = LOB_DISPLAY[policy_lob]
+    description = payload["description"]
+    rerun_payload = {
+        "mode": "quick_run",
+        "lob": payload["lob"],
+        "description": description,
+    }
+
+    new_jid = _new_job(
+        f"Quick Policy Test - {display}",
+        execution_type="quick_run",
+        metadata=_job_lob_metadata(
+            policy_lob,
+            description=description,
+            rerun_of=source_job_id,
+            rerun_payload=rerun_payload,
+        ),
+    )
+
+    def _run():
+        try:
+            _status(new_jid, "Generating profile", display)
+            persona_json = generate_persona(engine_lob, description)
+            data = json.loads(persona_json)
+            if "error" in data:
+                _fail(new_jid, data["error"])
+                return
+            result = _run_flow_threaded(
+                engine_lob,
+                data,
+                _make_policy_progress_callback(new_jid, policy_lob),
+                new_jid,
+            )
+            persona_section = (
+                _format_persona_report(payload["lob"], description, persona_json) + "\n\n---\n\n"
+            )
+            _done(new_jid, persona_section + format_result(result))
+        except Exception as e:
+            _fail(new_jid, str(e))
+
+    bg.add_task(_run)
+    return new_jid
+
+
+@app.post("/api/jobs/{job_id}/rerun")
+def rerun_job(job_id: str, bg: BackgroundTasks):
+    job = _job_store.get_job(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    execution_type = job.get("execution_type") or ""
+    metadata = job.get("metadata") or {}
+    tool = metadata.get("tool")
+
+    if execution_type == "quick_run" or tool == "run_quick_policy" or _looks_like_quick_policy_job(job):
+        payload = _quick_run_rerun_payload(job)
+        if not payload:
+            raise HTTPException(status_code=400, detail="This job cannot be rerun")
+        new_jid = _schedule_quick_run_rerun(job_id, payload, bg)
+        return {"job_id": new_jid}
+
+    if execution_type == "create_persona" or tool == "create_persona":
+        payload = _persona_rerun_payload(job)
+        if not payload:
+            raise HTTPException(status_code=400, detail="This job cannot be rerun")
+        new_jid = _schedule_persona_rerun(job_id, payload, bg)
+        return {"job_id": new_jid}
+
+    if execution_type != "policy_flow":
+        raise HTTPException(
+            status_code=400,
+            detail="Rerun is supported for policy journeys, quick policy tests, and profile builds only",
+        )
+
+    payload = (job.get("metadata") or {}).get("rerun_payload")
+    if not payload:
+        raise HTTPException(status_code=400, detail="This job cannot be rerun")
+
+    new_jid = _schedule_policy_flow_rerun(job_id, payload, bg)
     return {"job_id": new_jid}
 
 
@@ -934,7 +1079,15 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     jid = _new_job(
         f"Quick Policy Test - {display}",
         execution_type="quick_run",
-        metadata=_job_lob_metadata(policy_lob, description=req.description),
+        metadata=_job_lob_metadata(
+            policy_lob,
+            description=req.description,
+            rerun_payload={
+                "mode": "quick_run",
+                "lob": req.lob,
+                "description": req.description,
+            },
+        ),
     )
 
     def _run():

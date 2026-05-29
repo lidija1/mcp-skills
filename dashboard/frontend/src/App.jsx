@@ -2,7 +2,7 @@ import {useState, useEffect, useCallback, useRef} from 'react'
 import Header from './components/Header'
 import OverviewPanel from './components/OverviewPanel'
 import PolicyPanel from './components/PolicyPanel'
-import JobsPanel from './components/JobsPanel'
+import JobsPanel, {rerunJob} from './components/JobsPanel'
 import ChatPanel from './components/ChatPanel'
 import ReportModal from './components/ReportModal'
 import LoginPage from './components/LoginPage'
@@ -191,6 +191,7 @@ export default function App() {
         const placeholder = {
             id: data.job_id,
             label,
+            execution_type: options.executionType || options.execution_type || null,
             status: 'running',
             started: Date.now() / 1000,
             result: null,
@@ -206,6 +207,7 @@ export default function App() {
         const placeholder = {
             id: jobId,
             label,
+            execution_type: options.executionType || options.execution_type || null,
             status: 'running',
             started: Date.now() / 1000,
             result: null,
@@ -226,6 +228,18 @@ export default function App() {
         }
         await loadJobs()
         setSelectedJob(null)
+    }, [loadJobs, trackJob])
+
+    const rerunCanceledJob = useCallback(async job => {
+        try {
+            const data = await rerunJob(job.id)
+            if (data?.job_id) {
+                trackJob(data.job_id, job.label, {metadata: job.metadata || {}})
+            }
+            await loadJobs()
+        } catch (err) {
+            console.error(err)
+        }
     }, [loadJobs, trackJob])
 
     const dismissJobPopup = useCallback(jobId => {
@@ -362,6 +376,7 @@ export default function App() {
                                     jobs={jobs}
                                     onOpenReport={setSelectedJob}
                                     onCancelJob={cancelJob}
+                                    onRerunJob={rerunCanceledJob}
                                 />
                             )}
                         />

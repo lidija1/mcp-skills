@@ -254,6 +254,7 @@ function SummaryMetric({label, value}) {
 function HistoryRow({job, onSelect, onRerun, onCancel}) {
     const displayStatus = getDisplayStatus(job)
     const cfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.running
+    const jobLabel = cleanDisplayText(job.label)
     const canOpen =
     displayStatus === 'done' ||
     displayStatus === 'error' ||
@@ -269,7 +270,7 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
     return (<article
         className={`jobs-table-row ${displayStatus === 'error' ? 'has-error' : ''} ${displayStatus === 'canceled' ? 'is-canceled' : ''}`}>
         <div className="jobs-job-title">
-            <strong>{cleanDisplayText(job.label)}</strong>
+            <strong title={jobLabel}>{jobLabel}</strong>
             {ownerName && <small className="jobs-owner">Created by {ownerName}</small>}
         </div>
         <div>

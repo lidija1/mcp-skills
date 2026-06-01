@@ -22,6 +22,7 @@ venv/
 .env/
 # Pytest
 .pytest_cache/
+.cache/
 .coverage
 htmlcov/
 screenshots/
@@ -75,6 +76,16 @@ data/*.db
 data/*.db-*
 dashboard/backend/data/*.db
 dashboard/backend/data/*.db-*
+*.db-shm
+*.db-wal
+
+# Local diagnostics and destructive maintenance tests
+tools/debug_rating_columns.py
+tools/debug_rating_factors.py
+tools/debug_rating_grid_meta.py
+tools/debug_summary_tab.py
+tools/probe_uw_override.py
+ui/tests/test_delete_quotes.py
 
 # Dashboard frontend generated artifacts
 dashboard/frontend/node_modules/

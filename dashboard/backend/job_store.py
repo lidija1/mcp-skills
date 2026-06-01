@@ -113,8 +113,8 @@ def fail_job(jid: str, error: str):
             _jobs[jid]["current_status"] = None
 
 
-def get_job(jid: str) -> dict | None:
-    persisted = dashboard_db.get_execution(jid)
+def get_job(jid: str, user: dict | None = None) -> dict | None:
+    persisted = dashboard_db.get_execution(jid, user=user)
     if persisted:
         with _lock:
             _jobs[jid] = persisted
@@ -123,8 +123,8 @@ def get_job(jid: str) -> dict | None:
         return _jobs.get(jid)
 
 
-def list_jobs() -> list:
-    persisted = dashboard_db.list_executions()
+def list_jobs(user: dict | None = None) -> list:
+    persisted = dashboard_db.list_executions(user=user)
     if persisted:
         with _lock:
             for job in persisted:

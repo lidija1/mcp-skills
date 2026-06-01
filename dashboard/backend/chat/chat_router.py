@@ -23,17 +23,23 @@ import json
 import concurrent.futures
 
 from fastapi import APIRouter, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import job_store
 from tool_registry import REGISTRY, ToolValidationError, validate_params
+from tool_registry import registry_summary_for_prompt
 from intent_parser import parse_intent
+from graph_rag import retrieve_framework_context
+from llm_provider import complete_text, complete_text_stream, provider_status
 
 # MCP tool imports — same imports main.py uses; chatbot only reaches them
 # through the dispatch table below, never directly.
 from mcp_tools.policy_flow_generator.flow_runner import run_flow
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona, generate_persona_variations
 from mcp_tools.policy_flow_generator.result_formatter import format_batch_summary, format_result
+from dashboard.backend.api_assertions.formatter import format_api_assertion_report
+from dashboard.backend.api_assertions.runner import run_plain_english_api_assertion
 from mcp_tools.uw_rules_validator.report_formatter import format_audit_report, format_boundary_report
 from mcp_tools.uw_rules_validator.rule_registry import CASES_BY_LOB, CASES_BY_RULE, RULE_METADATA
 from mcp_tools.uw_rules_validator.validator import validate_case
@@ -41,6 +47,44 @@ from mcp_tools.uw_rules_validator.validator import validate_case
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 _MAX_MESSAGE_CHARS = 1000
+_MAX_ASK_CHARS = 4000
+_MAX_HISTORY_TURNS = 10   # last N message objects sent from the client
+_MAX_HISTORY_CONTENT = 800  # chars per history message
+
+
+def _sanitize_history(raw: list[dict]) -> list[dict]:
+    """Trim and validate history before forwarding to LLM."""
+    out = []
+    for h in raw[-_MAX_HISTORY_TURNS:]:
+        role = h.get("role", "")
+        content = str(h.get("content", ""))
+        if role in ("user", "assistant") and content.strip():
+            out.append({"role": role, "content": content[:_MAX_HISTORY_CONTENT]})
+    return out
+
+_ASK_SYSTEM_PROMPT = """\
+You are a read-only guidance assistant for an insurance automation dashboard.
+
+You answer with awareness of the local project context provided below. Treat it
+as the source of truth for framework structure, dashboard capabilities, and MCP
+tool boundaries.
+
+If the user asks who you are, identify as the dashboard Ask assistant powered
+by the current chat provider/model from the retrieved context. Do not identify
+as Codex.
+
+You must not claim to execute tests, start jobs, call MCP tools, change files,
+read secrets, inspect the filesystem, or access credentials. If the user asks
+you to run something, tell them to switch to Tools mode. Keep answers concise
+and practical. If the retrieved context is insufficient, say which local file or
+area should be inspected next.
+
+Approved tool catalog for Tools mode:
+{tools}
+
+Retrieved local project context:
+{context}
+"""
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
@@ -49,6 +93,7 @@ class ChatMessageReq(BaseModel):
     message: str = ""
     confirmed_tool: str | None = None
     confirmed_params: dict | None = None
+    history: list[dict] = []
 
 
 class ChatMessageResp(BaseModel):
@@ -57,6 +102,16 @@ class ChatMessageResp(BaseModel):
     tool_call: dict | None = None   # populated when status == "confirm"
     job_id: str | None = None       # populated when status == "job"
     job_label: str | None = None
+
+
+class ChatAskReq(BaseModel):
+    message: str = ""
+    history: list[dict] = []
+
+
+class ChatAskResp(BaseModel):
+    reply: str
+    status: str
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -294,6 +349,96 @@ def _dispatch_run_full_audit(jid: str, params: dict):
     return _run
 
 
+def _dispatch_run_api_assertion(jid: str, params: dict):
+    def _run():
+        try:
+            job_store.update_job_status(jid, "Running API assertion", "Personal Auto")
+            result = run_plain_english_api_assertion(params["prompt"])
+            job_store.complete_job(jid, format_api_assertion_report(result))
+        except Exception as exc:
+            job_store.fail_job(jid, str(exc))
+    return _run
+
+
+def _dispatch_run_assert_flow(jid: str, params: dict):
+    def _run():
+        try:
+            import json as _json
+            import dashboard.backend.dashboard_db as _db
+            from mcp_tools.smart_assertions.server import STOP_AFTER, _build_snapshot, _assert
+            from api_tests.oneshield_api_replay import OneShieldApiReplay
+
+            persona_description = params["persona_description"]
+            assertion_type = params.get("assertion_type") or "premium"
+            expected_value = float(params["expected_value"])
+            operator = params.get("operator") or "approx"
+            tolerance_pct = float(params.get("tolerance_pct") or 5.0)
+            lob = "auto"
+
+            job_store.update_job_status(jid, "Generating persona", persona_description[:60])
+            persona_raw = generate_persona(lob, persona_description)
+            persona = json.loads(persona_raw)
+            if "error" in persona:
+                job_store.fail_job(jid, f"Persona generation failed: {persona['error']}")
+                return
+
+            job_store.update_job_status(jid, "Running UW replay", f"stop_after={STOP_AFTER[assertion_type]}")
+            client = OneShieldApiReplay()
+            try:
+                flow = client.run_captured_auto_flow(
+                    persona, stop_after=STOP_AFTER[assertion_type], fast_mode=False
+                )
+            finally:
+                client.close()
+
+            snap = _build_snapshot(persona_description, persona, flow, assertion_type, lob)
+            actual = snap.total_premium if assertion_type == "premium" else snap.total_cost
+            passed, message = _assert(actual, expected_value, operator, tolerance_pct)
+
+            saved = _db.save_assertion_result(
+                persona_description=persona_description,
+                assertion_type=assertion_type,
+                expected_value=expected_value,
+                actual_value=actual,
+                operator=operator,
+                tolerance_pct=tolerance_pct,
+                passed=passed,
+                message=message,
+                lob=lob,
+                coverage_premiums=snap.coverage_premiums,
+                uw_conditions=snap.uw_conditions,
+                persona=snap.persona,
+                blocked=snap.blocked,
+                blocked_reason=snap.blocked_reason,
+                run_id=snap.run_id,
+                user_id=None,
+            )
+            result_payload = {
+                "_type": "assert_flow",
+                "id": saved["id"],
+                "created_at": saved["created_at"],
+                "passed": passed,
+                "message": message,
+                "assertion_type": assertion_type,
+                "expected_value": expected_value,
+                "actual_value": actual,
+                "operator": operator,
+                "tolerance_pct": tolerance_pct,
+                "persona_description": persona_description,
+                "lob": lob,
+                "coverage_premiums": snap.coverage_premiums,
+                "uw_conditions": snap.uw_conditions,
+                "blocked": snap.blocked,
+                "blocked_reason": snap.blocked_reason,
+                "run_id": snap.run_id,
+                "persona": snap.persona,
+            }
+            job_store.complete_job(jid, _json.dumps(result_payload))
+        except Exception as exc:
+            job_store.fail_job(jid, str(exc))
+    return _run
+
+
 _DISPATCH = {
     "run_quick_policy":          _dispatch_run_quick_policy,
     "create_persona":            _dispatch_create_persona,
@@ -303,6 +448,8 @@ _DISPATCH = {
     "run_custom_boundary":       _dispatch_run_custom_boundary,
     "run_full_audit":            _dispatch_run_full_audit,
     "create_persona_variations": _dispatch_create_persona_variations,
+    "run_api_assertion":         _dispatch_run_api_assertion,
+    "run_assert_flow":           _dispatch_run_assert_flow,
     # list_uw_rules has creates_job=False — handled inline, not in this table
 }
 
@@ -317,6 +464,12 @@ def _job_label(tool_name: str, params: dict) -> str:
         "run_custom_boundary":       lambda p: f"Chat - Edge Case - {p.get('lob', '').upper()}",
         "run_full_audit":            lambda _: "Chat - Full System Audit",
         "create_persona_variations": lambda p: f"Chat - {p.get('count', 5)} {p.get('lob', '').upper()} Variations",
+        "run_api_assertion":         lambda p: f"Chat - UW Assertion - {p.get('prompt', '')[:40]}",
+        "run_assert_flow":           lambda p: (
+            f"Chat - Assert {p.get('assertion_type', 'premium')} "
+            f"{p.get('operator', 'approx')} ${p.get('expected_value', 0):,.0f} — "
+            f"{p.get('persona_description', '')[:30]}"
+        ),
     }
     fn = labels.get(tool_name)
     return fn(params) if fn else f"Chat - {tool_name}"
@@ -365,7 +518,87 @@ def chat_greeting():
             "approved automation tools. How can I help?"
         ),
         "capabilities": list(REGISTRY.keys()),
+        "llm": provider_status(probe=False),
     }
+
+
+@router.get("/provider")
+def chat_provider_status():
+    return provider_status(probe=True)
+
+
+@router.post("/ask", response_model=ChatAskResp)
+def chat_ask(req: ChatAskReq):
+    """
+    Read-only guidance endpoint. This route never calls REGISTRY, _DISPATCH,
+    job_store.new_job(), or MCP tools.
+    """
+    message = (req.message or "").strip()
+    if not message:
+        return ChatAskResp(reply="Please enter a message.", status="error")
+    if len(message) > _MAX_ASK_CHARS:
+        return ChatAskResp(
+            reply=f"Message too long (max {_MAX_ASK_CHARS} characters).",
+            status="error",
+        )
+
+    history = _sanitize_history(req.history)
+    try:
+        graph_context = retrieve_framework_context(message)
+        system = _ASK_SYSTEM_PROMPT.format(
+            tools=registry_summary_for_prompt(),
+            context=graph_context,
+        )
+        reply = complete_text(system=system, user=message, max_tokens=1200, history=history)
+    except Exception as exc:
+        return ChatAskResp(reply=f"Could not generate guidance: {exc}", status="error")
+
+    return ChatAskResp(reply=reply, status="ok")
+
+
+@router.post("/ask/stream")
+def chat_ask_stream(req: ChatAskReq):
+    """
+    Streaming variant of /ask for Ask mode.
+
+    Returns text/event-stream. Each event is a JSON object:
+      {"t": "<token>"}    — one token chunk
+      {"done": true}      — stream complete
+      {"error": "<msg>"}  — error (stream ends)
+    """
+    message = (req.message or "").strip()
+
+    def _error_stream(msg: str):
+        yield f"data: {json.dumps({'error': msg})}\n\n"
+
+    if not message:
+        return StreamingResponse(_error_stream("Please enter a message."), media_type="text/event-stream")
+    if len(message) > _MAX_ASK_CHARS:
+        return StreamingResponse(
+            _error_stream(f"Message too long (max {_MAX_ASK_CHARS} characters)."),
+            media_type="text/event-stream",
+        )
+
+    history = _sanitize_history(req.history)
+
+    def _generate():
+        try:
+            graph_context = retrieve_framework_context(message)
+            system = _ASK_SYSTEM_PROMPT.format(
+                tools=registry_summary_for_prompt(),
+                context=graph_context,
+            )
+            for token in complete_text_stream(system=system, user=message, max_tokens=1200, history=history):
+                yield f"data: {json.dumps({'t': token})}\n\n"
+            yield 'data: {"done": true}\n\n'
+        except Exception as exc:
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/message", response_model=ChatMessageResp)
@@ -429,8 +662,9 @@ def chat_message(req: ChatMessageReq, bg: BackgroundTasks):
             reply=f"Message too long (max {_MAX_MESSAGE_CHARS} characters).", status="error"
         )
 
+    history = _sanitize_history(req.history)
     try:
-        intent = parse_intent(message)
+        intent = parse_intent(message, history=history)
     except Exception as exc:
         return ChatMessageResp(reply=f"Could not parse your request: {exc}", status="error")
 

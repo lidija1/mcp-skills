@@ -1,4 +1,4 @@
-﻿"""
+"""
 Insurance Testing Dashboard â€” FastAPI Backend
 Run: python dashboard/backend/main.py   (from project root)
 """
@@ -39,7 +39,9 @@ if _env_path.exists():
 if "ANTHROPIC_API_KEY" not in _env_keys:
     os.environ.pop("ANTHROPIC_API_KEY", None)
 
-if "OPENAI_API_KEY" in _env_keys:
+if os.environ.get("AI_PROVIDER"):
+    print(f"[INFO] AI provider: {os.environ['AI_PROVIDER']}")
+elif "OPENAI_API_KEY" in _env_keys:
     os.environ["AI_PROVIDER"] = "openai"
     print("[INFO] AI provider: openai")
 elif "ANTHROPIC_API_KEY" in _env_keys:
@@ -63,6 +65,8 @@ from pydantic import BaseModel, field_validator
 from mcp_tools.policy_flow_generator.flow_runner import run_flow
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona, list_archetypes
 from mcp_tools.policy_flow_generator.result_formatter import format_batch_summary, format_result
+from dashboard.backend.api_assertions.formatter import format_api_assertion_report
+from dashboard.backend.api_assertions.runner import run_plain_english_api_assertion
 from mcp_tools.uw_rules_validator.report_formatter import format_audit_report, format_boundary_report
 from mcp_tools.uw_rules_validator.rule_registry import CASES_BY_LOB, CASES_BY_RULE, RULE_METADATA
 from mcp_tools.uw_rules_validator.validator import validate_case
@@ -76,14 +80,19 @@ _status = _job_store.update_job_status
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
-POLICY_LOBS = {"personal-auto", "cyber", "homeowner"}
+POLICY_LOBS = {"auto", "cyber", "homeowner"}
+POLICY_LOB_ALIASES = {
+    "personal-auto": "auto",
+    "personal_auto": "auto",
+    "personal auto": "auto",
+}
 LOB_DISPLAY = {
-    "personal-auto": "Personal Auto",
+    "auto": "Personal Auto",
     "cyber": "Cyber",
     "homeowner": "Homeowner",
 }
 POLICY_DATA_FILES = {
-    "personal-auto": _PROJECT_ROOT / "testdata" / "static" / "auto" / "AutoData.json",
+    "auto": _PROJECT_ROOT / "testdata" / "static" / "auto" / "AutoData.json",
     "cyber": _PROJECT_ROOT / "testdata" / "static" / "cyber" / "CyberData.json",
     "homeowner": _PROJECT_ROOT / "testdata" / "static" / "homeowner" / "HomeData.json",
 }
@@ -393,13 +402,13 @@ def allure_generate():
 
 # â”€â”€ Job endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.get("/api/jobs")
-def list_jobs():
-    return _job_store.list_jobs()
+def list_jobs(request: Request):
+    return _job_store.list_jobs(user_from_request(request))
 
 
 @app.get("/api/jobs/{job_id}")
-def get_job(job_id: str):
-    return _job_store.get_job(job_id) or {"error": "not found"}
+def get_job(job_id: str, request: Request):
+    return _job_store.get_job(job_id, user_from_request(request)) or {"error": "not found"}
 
 @app.post("/api/jobs/{job_id}/cancel")
 def cancel_job_ep(job_id: str):
@@ -416,188 +425,6 @@ def cancel_job_ep(job_id: str):
 
     return {"ok": True}
 
-
-def _extract_source_description_from_result(result: str | None) -> str | None:
-    if not result:
-        return None
-    match = re.search(
-        r"\*\*Source Description:\*\*\s*(.+?)(?:\n\n|\n```|$)",
-        result,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    return match.group(1).strip() if match else None
-
-
-def _looks_like_quick_policy_job(job: dict) -> bool:
-    label = (job.get("label") or "").lower()
-    if "quick policy" in label:
-        return True
-    metadata = job.get("metadata") or {}
-    return metadata.get("tool") == "run_quick_policy"
-
-
-def _quick_run_rerun_payload(job: dict) -> dict | None:
-    """Build rerun payload for Quick Policy Test jobs (incl. legacy rows without rerun_payload)."""
-    metadata = job.get("metadata") or {}
-    stored = metadata.get("rerun_payload") or {}
-    params = metadata.get("params") or {}
-    description = (
-        stored.get("description")
-        or metadata.get("description")
-        or params.get("description")
-        or _extract_source_description_from_result(job.get("result"))
-    )
-    if not description:
-        return None
-    raw_lob = (
-        stored.get("lob")
-        or metadata.get("lob")
-        or params.get("lob")
-        or metadata.get("requested_lob")
-        or "personal-auto"
-    )
-    return {
-        "mode": "quick_run",
-        "lob": raw_lob,
-        "description": description,
-    }
-
-
-def _persona_rerun_payload(job: dict) -> dict | None:
-    metadata = job.get("metadata") or {}
-    params = metadata.get("params") or {}
-    description = (
-        metadata.get("description")
-        or params.get("description")
-        or _extract_source_description_from_result(job.get("result"))
-    )
-    if not description:
-        return None
-    raw_lob = (
-        metadata.get("lob")
-        or params.get("lob")
-        or metadata.get("requested_lob")
-        or "personal-auto"
-    )
-    return {
-        "lob": raw_lob,
-        "description": description,
-    }
-
-
-def _schedule_persona_rerun(source_job_id: str, payload: dict, bg: BackgroundTasks) -> str:
-    policy_lob = _validate_policy_lob(payload["lob"])
-    engine_lob = _to_flow_engine_lob(policy_lob)
-    display = LOB_DISPLAY[policy_lob]
-    description = payload["description"]
-
-    new_jid = _new_job(
-        f"Build Profile - {display}",
-        execution_type="create_persona",
-        metadata=_job_lob_metadata(
-            policy_lob,
-            description=description,
-            rerun_of=source_job_id,
-        ),
-    )
-
-    def _run():
-        try:
-            persona_json = generate_persona(engine_lob, description)
-            data = json.loads(persona_json)
-            if "error" in data:
-                _fail(new_jid, data["error"])
-                return
-            _done(new_jid, _format_persona_report(payload["lob"], description, persona_json))
-        except Exception as e:
-            _fail(new_jid, str(e))
-
-    bg.add_task(_run)
-    return new_jid
-
-
-def _schedule_policy_flow_rerun(source_job_id: str, payload: dict, bg: BackgroundTasks) -> str:
-    policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
-    display = LOB_DISPLAY.get(policy_lob, payload["lob"].strip().upper())
-
-    new_jid = _new_job(
-        f"Policy Journey - {display}",
-        execution_type="policy_flow",
-        metadata=_job_lob_metadata(
-            policy_lob,
-            requested_lob=payload["lob"],
-            rerun_of=source_job_id,
-            rerun_payload=payload,
-        ),
-    )
-
-    def _run():
-        try:
-            _status(new_jid, "Preparing profile", display)
-            persona = _parse_run_flow_persona(policy_lob, payload["persona_json"])
-            result = _run_flow_threaded(
-                engine_lob,
-                persona,
-                _make_policy_progress_callback(new_jid, policy_lob),
-                new_jid,
-            )
-            persona_section = (
-                _format_persona_report(display, "", json.dumps(persona)) + "\n\n---\n\n"
-            )
-            _done(new_jid, persona_section + format_result(result))
-        except Exception as e:
-            _fail(new_jid, str(e))
-
-    bg.add_task(_run)
-    return new_jid
-
-
-def _schedule_quick_run_rerun(source_job_id: str, payload: dict, bg: BackgroundTasks) -> str:
-    policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
-    display = LOB_DISPLAY[policy_lob]
-    description = payload["description"]
-    rerun_payload = {
-        "mode": "quick_run",
-        "lob": payload["lob"],
-        "description": description,
-    }
-
-    new_jid = _new_job(
-        f"Quick Policy Test - {display}",
-        execution_type="quick_run",
-        metadata=_job_lob_metadata(
-            policy_lob,
-            description=description,
-            rerun_of=source_job_id,
-            rerun_payload=rerun_payload,
-        ),
-    )
-
-    def _run():
-        try:
-            _status(new_jid, "Generating profile", display)
-            persona_json = generate_persona(engine_lob, description)
-            data = json.loads(persona_json)
-            if "error" in data:
-                _fail(new_jid, data["error"])
-                return
-            result = _run_flow_threaded(
-                engine_lob,
-                data,
-                _make_policy_progress_callback(new_jid, policy_lob),
-                new_jid,
-            )
-            persona_section = (
-                _format_persona_report(payload["lob"], description, persona_json) + "\n\n---\n\n"
-            )
-            _done(new_jid, persona_section + format_result(result))
-        except Exception as e:
-            _fail(new_jid, str(e))
-
-    bg.add_task(_run)
-    return new_jid
-
-
 @app.post("/api/jobs/{job_id}/rerun")
 def rerun_job(job_id: str, bg: BackgroundTasks):
     job = _job_store.get_job(job_id)
@@ -605,35 +432,72 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    execution_type = job.get("execution_type") or ""
     metadata = job.get("metadata") or {}
-    tool = metadata.get("tool")
+    payload = metadata.get("rerun_payload")
 
-    if execution_type == "quick_run" or tool == "run_quick_policy" or _looks_like_quick_policy_job(job):
-        payload = _quick_run_rerun_payload(job)
-        if not payload:
-            raise HTTPException(status_code=400, detail="This job cannot be rerun")
-        new_jid = _schedule_quick_run_rerun(job_id, payload, bg)
-        return {"job_id": new_jid}
+    if not payload:
+        raise HTTPException(
+            status_code=400,
+            detail="This job cannot be rerun",
+        )
 
-    if execution_type == "create_persona" or tool == "create_persona":
-        payload = _persona_rerun_payload(job)
-        if not payload:
-            raise HTTPException(status_code=400, detail="This job cannot be rerun")
-        new_jid = _schedule_persona_rerun(job_id, payload, bg)
-        return {"job_id": new_jid}
+    execution_type = job.get("execution_type")
 
     if execution_type != "policy_flow":
         raise HTTPException(
             status_code=400,
-            detail="Rerun is supported for policy journeys, quick policy tests, and profile builds only",
+            detail="Rerun currently supported only for policy flows",
         )
 
-    payload = (job.get("metadata") or {}).get("rerun_payload")
-    if not payload:
-        raise HTTPException(status_code=400, detail="This job cannot be rerun")
+    policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
 
-    new_jid = _schedule_policy_flow_rerun(job_id, payload, bg)
+    display = LOB_DISPLAY.get(
+        policy_lob,
+        payload["lob"].strip().upper()
+    )
+
+    new_jid = _new_job(
+        f"Policy Journey - {display}",
+        execution_type="policy_flow",
+        metadata=_job_lob_metadata(
+            policy_lob,
+            requested_lob=payload["lob"],
+            rerun_of=job_id,
+            rerun_payload=payload,
+        ),
+    )
+
+    def _run():
+        try:
+            _status(new_jid, "Preparing profile", display)
+
+            persona = _parse_run_flow_persona(
+                policy_lob,
+                payload["persona_json"],
+            )
+
+            result = _run_flow_threaded(
+                engine_lob,
+                persona,
+                _make_policy_progress_callback(new_jid, policy_lob), new_jid
+            )
+
+            persona_section = (
+                    _format_persona_report(
+                        display,
+                        "",
+                        json.dumps(persona),
+                    )
+                    + "\n\n---\n\n"
+            )
+
+            _done(new_jid, persona_section + format_result(result))
+
+        except Exception as e:
+            _fail(new_jid, str(e))
+
+    bg.add_task(_run)
+
     return {"job_id": new_jid}
 
 
@@ -691,6 +555,14 @@ class BoundaryReq(BaseModel):
     description: str
     expected_outcome: str
     expected_conditions: list[str] = []
+
+
+class ApiAssertionReq(BaseModel):
+    prompt: str
+
+
+
+
 
 
 class ExplorerReq(BaseModel):
@@ -927,12 +799,12 @@ def _parse_explorer_intent(prompt: str) -> dict:
         "You are a routing assistant for an insurance testing dashboard. "
         "Parse the user's request and return a JSON object with no extra text.\n\n"
         "Possible types:\n"
-        '- "policy_flow": run a policy flow. Requires "lob" (personal-auto|homeowner) '
+        '- "policy_flow": run a policy flow. Requires "lob" (auto|homeowner) '
         'and "description".\n'
         '- "uw_audit": run underwriting rules audit. Requires "lob".\n'
         '- "unknown": cannot determine the action.\n\n'
         "Examples:\n"
-        '"test a young driver with DUI" â†’ {"type":"policy_flow","lob":"personal-auto",'
+        '"test a young driver with DUI" â†’ {"type":"policy_flow","lob":"auto",'
         '"description":"young driver with DUI history"}\n'
         '"audit homeowner UW rules" â†’ {"type":"uw_audit","lob":"homeowner"}'
     )
@@ -975,7 +847,7 @@ def explorer_run_ep(req: ExplorerRunReq, bg: BackgroundTasks):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    jid = _new_job(f"Explorer - {req.prompt[:60]}", execution_type="explorer_run", metadata={"prompt": req.prompt})
+    jid = _new_job(f"Explorer - {req.prompt[:60]}")
 
     def _run():
         try:
@@ -1023,7 +895,7 @@ def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
 
     def _run():
         try:
-            persona_json = generate_persona(engine_lob, req.description)
+            persona_json = generate_persona(lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
@@ -1079,21 +951,13 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     jid = _new_job(
         f"Quick Policy Test - {display}",
         execution_type="quick_run",
-        metadata=_job_lob_metadata(
-            policy_lob,
-            description=req.description,
-            rerun_payload={
-                "mode": "quick_run",
-                "lob": req.lob,
-                "description": req.description,
-            },
-        ),
+        metadata=_job_lob_metadata(policy_lob, description=req.description),
     )
 
     def _run():
         try:
-            _status(jid, "Generating profile", LOB_DISPLAY.get(policy_lob, req.lob.upper()))
-            persona_json = generate_persona(engine_lob, req.description)
+            _status(jid, "Generating profile", LOB_DISPLAY.get(lob, req.lob.upper()))
+            persona_json = generate_persona(lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
@@ -1114,20 +978,8 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
 @app.post("/api/policy/batch-run")
 def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
     for scenario in req.scenarios:
-        _validate_policy_lob(str(scenario.get("lob", "personal-auto")))
-    scenario_lobs = {
-        _validate_policy_lob(str(s.get("lob", "personal-auto"))) for s in req.scenarios[:25]
-    }
-    batch_meta = (
-        _job_lob_metadata(next(iter(scenario_lobs)), scenario_count=len(req.scenarios))
-        if len(scenario_lobs) == 1
-        else _job_lob_metadata("multi", scenario_count=len(req.scenarios))
-    )
-    jid = _new_job(
-        f"Batch Test â€” {len(req.scenarios)} scenarios",
-        execution_type="batch_run",
-        metadata=batch_meta,
-    )
+        _validate_policy_lob(str(scenario.get("lob", "auto")))
+    jid = _new_job(f"Batch Test â€” {len(req.scenarios)} scenarios")
 
     def _run():
         try:
@@ -1151,6 +1003,520 @@ def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
 
     bg.add_task(_run)
     return {"job_id": jid}
+
+
+@app.post("/api/api-tests/plain-assert")
+def api_plain_assert_ep(req: ApiAssertionReq, bg: BackgroundTasks, request: Request):
+    prompt = req.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt is required.")
+
+    user = user_from_request(request)
+    jid = _new_job(
+        f"UW Assertion - {prompt[:60]}",
+        execution_type="api_assertion",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": "auto", "lob_display": "Personal Auto", "prompt": prompt},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Generating persona", "Personal Auto UW assertion")
+            result = run_plain_english_api_assertion(prompt)
+            _status(jid, "Evaluating assertions", "Deterministic UW evidence")
+            _done(jid, format_api_assertion_report(result))
+        except Exception as e:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(e))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+
+# ── Smart Assertion endpoints ────────────────────────────────────────────────
+
+class CompareReq(BaseModel):
+    description_a: str
+    description_b: str
+    relations: list[str]
+    lob: str = "auto"
+    label_a: str = ""
+    label_b: str = ""
+
+
+class LadderReq(BaseModel):
+    base_description: str
+    dimension: str = "coverage"
+    lob: str = "auto"
+    assert_monotonic: bool = True
+
+
+class AiAssertReq(BaseModel):
+    persona_description: str
+    lob: str = "auto"
+
+
+
+
+class AssertFlowReq(BaseModel):
+    persona_description: str
+    assertion_type: str = "premium"
+    expected_value: float
+    operator: str = "approx"
+    tolerance_pct: float = 5.0
+    lob: str = "auto"
+
+
+@app.post("/api/api-tests/compare")
+def compare_ep(req: CompareReq, bg: BackgroundTasks, request: Request):
+    """Run two personas in parallel and assert relational properties between them."""
+    from dashboard.backend.api_assertions.comparative import run_comparative, SUPPORTED_RELATIONS
+
+    if not req.description_a.strip() or not req.description_b.strip():
+        raise HTTPException(status_code=400, detail="Both description_a and description_b are required.")
+    unknown = [r for r in req.relations if r not in SUPPORTED_RELATIONS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown relation(s): {unknown}")
+
+    user = user_from_request(request)
+    label_a = req.label_a or req.description_a[:40]
+    label_b = req.label_b or req.description_b[:40]
+    jid = _new_job(
+        f"Compare: {label_a[:30]} vs {label_b[:30]}",
+        execution_type="api_compare",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Running both personas", "UW replay · parallel")
+            result = run_comparative(
+                req.description_a, req.description_b,
+                relations=req.relations, lob=req.lob,
+                label_a=req.label_a, label_b=req.label_b,
+            )
+            status_str = "✅ PASS" if result.passed else "❌ FAIL"
+            lines = [
+                f"## Comparative Assertion — {status_str}",
+                "",
+                f"| | A: {result.label_a[:40]} | B: {result.label_b[:40]} |",
+                "|---|---|---|",
+                f"| Premium | {'${:,.2f}'.format(result.premium_a) if result.premium_a else 'N/A'} | {'${:,.2f}'.format(result.premium_b) if result.premium_b else 'N/A'} |",
+                f"| UW conditions | {len(result.uw_conditions_a)} | {len(result.uw_conditions_b)} |",
+                f"| Blocked | {result.blocked_a} | {result.blocked_b} |",
+                f"| Snapshot | `{result.run_id_a[:8]}…` | `{result.run_id_b[:8]}…` |",
+                "",
+                "### Findings",
+            ]
+            for f in result.findings:
+                icon = "✅" if f.passed else "❌"
+                msg = f" — {f.message}" if f.message else ""
+                lines.append(f"- {icon} `{f.relation}`{msg}")
+            if result.uw_conditions_a:
+                lines += ["", "**A UW conditions:**"]
+                for cond in result.uw_conditions_a[:3]:
+                    lines.append(f"  - {cond[:120]}")
+            if result.uw_conditions_b:
+                lines += ["", "**B UW conditions:**"]
+                for cond in result.uw_conditions_b[:3]:
+                    lines.append(f"  - {cond[:120]}")
+            _done(jid, "\n".join(lines))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+@app.post("/api/api-tests/ladder")
+def ladder_ep(req: LadderReq, bg: BackgroundTasks, request: Request):
+    """Sweep a dimension (coverage/employment/vehicle_use/license/ownership) and check ordering."""
+    from dashboard.backend.api_assertions.ladder import run_ladder as _run_ladder_fn, DIMENSION_VALUES
+
+    if not req.base_description.strip():
+        raise HTTPException(status_code=400, detail="base_description is required.")
+    if req.dimension.lower() not in DIMENSION_VALUES:
+        raise HTTPException(status_code=400, detail=f"Unknown dimension. Valid: {list(DIMENSION_VALUES)}")
+
+    user = user_from_request(request)
+    jid = _new_job(
+        f"Ladder: {req.dimension.title()} sweep",
+        execution_type="api_ladder",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto", "dimension": req.dimension},
+    )
+
+    def _run():
+        try:
+            _status(jid, f"Running {req.dimension} sweep", "UW replay · parallel")
+            result = _run_ladder_fn(
+                base_description=req.base_description,
+                dimension=req.dimension.lower(),
+                lob=req.lob,
+                assert_monotonic=req.assert_monotonic,
+            )
+            status_str = "✅ PASS" if result.passed else "❌ FAIL"
+            lines = [
+                f"## Dimension Ladder: {req.dimension.title()} — {status_str}",
+                f"Base: _{req.base_description}_",
+                "",
+                "| Value | Premium | UW Conditions | Blocked |",
+                "|---|---|---|---|",
+            ]
+            for rung in result.rungs:
+                if rung.error:
+                    lines.append(f"| {rung.value} | ERROR | — | — |")
+                else:
+                    p = f"${rung.premium:,.2f}" if rung.premium else "N/A"
+                    lines.append(f"| {rung.value} | {p} | {len(rung.uw_conditions)} | {rung.blocked} |")
+            if result.findings:
+                lines += ["", "### Ordering Assertions"]
+                for finding in result.findings:
+                    icon = "✅" if finding.passed else "❌"
+                    msg = f" — {finding.message}" if finding.message else ""
+                    lines.append(f"- {icon} {finding.label}{msg}")
+            _done(jid, "\n".join(lines))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+@app.post("/api/api-tests/ai-assert")
+def ai_assert_ep(req: AiAssertReq, bg: BackgroundTasks, request: Request):
+    """Run replay, ask AI to decide assertions, evaluate them."""
+    from dashboard.backend.api_assertions.ai_assert import run_ai_assert
+
+    if not req.persona_description.strip():
+        raise HTTPException(status_code=400, detail="persona_description is required.")
+
+    user = user_from_request(request)
+    jid = _new_job(
+        f"AI Assert - {req.persona_description[:55]}",
+        execution_type="api_ai_assert",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Running UW replay", "Extracting premium & UW data")
+            result = run_ai_assert(
+                persona_description=req.persona_description,
+                lob=req.lob,
+            )
+            _status(jid, "Evaluating AI assertions", f"{len(result['ai_suggestions'])} suggestions")
+            status_str = "✅ PASS" if result["passed"] else "❌ FAIL"
+            lines = [
+                f"## AI-Decided Assertions — {status_str}",
+                f"**Persona**: {req.persona_description}",
+                f"**Premium**: {'${:,.2f}'.format(result['premium']) if result['premium'] else 'N/A'}",
+                f"**UW conditions**: {len(result['uw_conditions'])}",
+                f"**Blocked**: {result['blocked']}",
+                "",
+                "### AI Suggestions & Results",
+            ]
+            for finding in result["findings"]:
+                icon = "✅" if finding["passed"] else "❌"
+                suggestion = finding.get("suggestion", "")
+                actual = finding.get("actual", "")
+                expected = finding.get("expected", "")
+                msg = finding.get("message", "")
+                lines.append(f"- {icon} _{suggestion}_")
+                if actual is not None and actual != "":
+                    lines.append(f"  - actual: `{actual}` · expected: `{expected}`")
+                if msg:
+                    lines.append(f"  - _{msg}_")
+            if not result["findings"]:
+                lines.append("_(no assertions evaluated)_")
+            _done(jid, "\n".join(lines))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+
+@app.post("/api/api-tests/assert-flow")
+def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
+    """Run a structured UW assertion: persona → OneShield replay → PASS/FAIL against expected value."""
+    from mcp_tools.smart_assertions.server import (
+        STOP_AFTER, VALID_OPERATORS, _total_premium, _total_cost,
+        _coverage_premiums, _uw_conditions, _build_snapshot, _assert, _fmt_assert,
+    )
+    from mcp_tools.policy_flow_generator.persona_generator import generate_persona
+    from api_tests.oneshield_api_replay import OneShieldApiReplay
+    import json as _json
+
+    if not req.persona_description.strip():
+        raise HTTPException(status_code=400, detail="persona_description is required.")
+    if req.assertion_type not in STOP_AFTER:
+        raise HTTPException(status_code=400, detail=f"Invalid assertion_type. Valid: {sorted(STOP_AFTER)}")
+    if req.operator not in VALID_OPERATORS:
+        raise HTTPException(status_code=400, detail=f"Invalid operator. Valid: {sorted(VALID_OPERATORS)}")
+
+    op_label = f"≈±{req.tolerance_pct:.0f}%" if req.operator == "approx" else req.operator
+    user = user_from_request(request)
+    jid = _new_job(
+        f"Assert {req.assertion_type} {op_label} ${req.expected_value:,.2f} — {req.persona_description[:40]}",
+        execution_type="api_assert_flow",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Generating persona", req.persona_description[:60])
+            persona_raw = generate_persona(req.lob, req.persona_description)
+            persona = _json.loads(persona_raw)
+            if "error" in persona:
+                _fail(jid, f"Persona generation failed: {persona['error']}")
+                return
+
+            _status(jid, "Running UW replay", f"stop_after={STOP_AFTER[req.assertion_type]}")
+            client = OneShieldApiReplay()
+            try:
+                flow = client.run_captured_auto_flow(
+                    persona, stop_after=STOP_AFTER[req.assertion_type], fast_mode=False
+                )
+            finally:
+                client.close()
+
+            snap = _build_snapshot(req.persona_description, persona, flow, req.assertion_type, req.lob)
+            actual = snap.total_premium if req.assertion_type == "premium" else snap.total_cost
+            passed, message = _assert(actual, req.expected_value, req.operator, req.tolerance_pct)
+            import dashboard.backend.dashboard_db as _db
+            saved = _db.save_assertion_result(
+                persona_description=req.persona_description,
+                assertion_type=req.assertion_type,
+                expected_value=req.expected_value,
+                actual_value=actual,
+                operator=req.operator,
+                tolerance_pct=req.tolerance_pct,
+                passed=passed,
+                message=message,
+                lob=req.lob,
+                coverage_premiums=snap.coverage_premiums,
+                uw_conditions=snap.uw_conditions,
+                persona=snap.persona,
+                blocked=snap.blocked,
+                blocked_reason=snap.blocked_reason,
+                run_id=snap.run_id,
+                user_id=(user or {}).get("id"),
+            )
+            result_payload = {
+                "_type": "assert_flow",
+                "id": saved["id"],
+                "created_at": saved["created_at"],
+                "passed": passed,
+                "message": message,
+                "assertion_type": req.assertion_type,
+                "expected_value": req.expected_value,
+                "actual_value": actual,
+                "operator": req.operator,
+                "tolerance_pct": req.tolerance_pct,
+                "persona_description": req.persona_description,
+                "lob": req.lob,
+                "coverage_premiums": snap.coverage_premiums,
+                "uw_conditions": snap.uw_conditions,
+                "blocked": snap.blocked,
+                "blocked_reason": snap.blocked_reason,
+                "run_id": snap.run_id,
+                "persona": snap.persona,
+            }
+            _done(jid, _json.dumps(result_payload))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+class RegressionSweepReq(BaseModel):
+    baseline_description: str
+    lob: str = "auto"
+    focus: str | None = None
+
+
+@app.post("/api/api-tests/regression-sweep")
+def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: Request):
+    """AI-driven premium regression sweep: generate variants → parallel replay → rule + AI assertions."""
+    from dashboard.backend.api_assertions.regression_sweep import run_sweep
+
+    if not req.baseline_description.strip():
+        raise HTTPException(status_code=400, detail="baseline_description is required.")
+
+    user = user_from_request(request)
+    focus_label = f" [{req.focus}]" if req.focus else ""
+    jid = _new_job(
+        f"Regression Sweep{focus_label} — {req.baseline_description[:50]}",
+        execution_type="regression_sweep",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Generating variant list", "AI phase 1")
+            sweep = run_sweep(req.baseline_description, lob=req.lob, focus=req.focus)
+            _status(jid, "Analyzing results", "AI phase 4")
+            status_str = "✅ ALL PASS" if sweep.passed else f"❌ {sweep.fail_count} FAILED"
+            base_str = f"${sweep.baseline_premium:,.2f}" if sweep.baseline_premium else "N/A"
+            lines = [
+                f"## Regression Sweep — {status_str}",
+                f"**Baseline:** {sweep.baseline_description}",
+                f"**Baseline premium:** {base_str}",
+                f"**Variants:** {len(sweep.results)} | ✅ {sweep.pass_count}  ❌ {sweep.fail_count}",
+                "",
+            ]
+            cats = [("risk_adding", "RISK ADDING"), ("ladder", "LADDER"), ("discount", "DISCOUNTS"), ("hard_stop", "HARD STOPS")]
+            for cat_key, cat_label in cats:
+                cat_results = [r for r in sweep.results if r.variant.category == cat_key]
+                if not cat_results:
+                    continue
+                lines.append(f"### {cat_label}")
+                lines += ["| Variant | Premium | Delta | Result |", "|---|---|---|---|"]
+                for r in cat_results:
+                    if r.error:
+                        lines.append(f"| {r.variant.label} | — | — | ❌ `{r.error[:40]}` |")
+                        continue
+                    actual = f"${r.actual_premium:,.2f}" if r.actual_premium else ("blocked" if r.blocked else "N/A")
+                    delta = f"{r.delta_pct:+.1f}%" if r.delta_pct is not None else "—"
+                    ok = "✅" if r.passed else f"❌ {r.message[:60]}" if r.message else "❌"
+                    lines.append(f"| {r.variant.label} | {actual} | {delta} | {ok} |")
+                lines.append("")
+            if sweep.analysis:
+                a = sweep.analysis
+                lines.append("### AI Analysis")
+                for p in a.patterns:
+                    lines.append(f"- {p}")
+                if a.root_causes:
+                    lines.append("")
+                    lines.append("**Root causes:**")
+                    for c in a.root_causes:
+                        lines.append(f"- {c}")
+                if a.follow_up_variants:
+                    lines.append("")
+                    lines.append("**Suggested follow-ups:**")
+                    for v in a.follow_up_variants:
+                        lines.append(f"- **{v.label}** — expected `{v.expected_direction}`")
+            _done(jid, "\n".join(lines))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+@app.get("/api/api-tests/results")
+def list_assertion_results_ep(request: Request):
+    """Return all saved assertion results for the current user, newest first."""
+    import dashboard.backend.dashboard_db as _db
+    user = user_from_request(request)
+    results = _db.list_assertion_results(user_id=(user or {}).get("id"))
+    return {"results": results}
+
+
+@app.delete("/api/api-tests/results/{result_id}")
+def delete_assertion_result_ep(result_id: int, request: Request):
+    """Delete a saved assertion result by id."""
+    import dashboard.backend.dashboard_db as _db
+    user = user_from_request(request)
+    deleted = _db.delete_assertion_result(result_id, user_id=(user or {}).get("id"))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Result not found or not authorized.")
+    return {"deleted": result_id}
+
+
+class ExplainAssertFlowReq(BaseModel):
+    persona_description: str
+    lob: str = "auto"
+    coverage_premiums: dict = {}
+    uw_conditions: list = []
+    actual_value: float | None = None
+    expected_value: float | None = None
+    assertion_type: str = "total_premium"
+    operator: str = "approx"
+    tolerance_pct: float = 5.0
+    passed: bool | None = None
+
+
+@app.post("/api/api-tests/explain")
+def explain_assert_flow_ep(req: ExplainAssertFlowReq):
+    """Call the AI to explain an assert_flow result in plain business language."""
+    cov_lines = "\n".join(
+        f"  {k}: ${v:,.2f}" for k, v in (req.coverage_premiums or {}).items()
+    ) or "  (none)"
+    uw_lines = "\n".join(f"  - {c}" for c in (req.uw_conditions or [])) or "  (none)"
+    verdict = "PASS" if req.passed else ("FAIL" if req.passed is False else "N/A")
+    actual_str = f"${req.actual_value:,.2f}" if req.actual_value is not None else "N/A"
+    expected_str = f"${req.expected_value:,.2f}" if req.expected_value is not None else "N/A"
+
+    system = (
+        "You are a senior insurance pricing analyst. "
+        "Answer in 4–6 concise business sentences. "
+        "No bullet points, no markdown, no headers — plain flowing prose only. "
+        "Focus on: what drives this premium, what each UW condition means for the risk, "
+        "and what one realistic change to the persona would most move the premium."
+    )
+    user_msg = (
+        f"LOB: {req.lob}\n"
+        f"Persona: {req.persona_description}\n\n"
+        f"Coverage premiums:\n{cov_lines}\n\n"
+        f"Total premium: {actual_str}\n"
+        f"Assertion: {req.assertion_type} expected {expected_str} — {verdict}\n\n"
+        f"UW conditions triggered:\n{uw_lines}\n\n"
+        "Explain this result in plain business language."
+    )
+
+    provider = os.environ.get("AI_PROVIDER", "")
+    if not provider:
+        provider = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "openai"
+
+    try:
+        if provider == "anthropic":
+            import anthropic as _anthropic
+            client = _anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001", max_tokens=400,
+                system=system,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            explanation = resp.content[0].text.strip()
+        else:
+            import openai as _openai
+            client = _openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": user_msg}],
+                temperature=0.3, max_tokens=400,
+            )
+            explanation = resp.choices[0].message.content.strip()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"AI explain failed: {exc}")
+
+    return {"explanation": explanation}
+
+
+@app.get("/api/api-tests/snapshot/{run_id}")
+def get_snapshot_ep(run_id: str):
+    """Retrieve a cached replay snapshot by run_id (valid 1 hour)."""
+    from dashboard.backend.api_assertions.snapshot import snapshot_store
+    entry = snapshot_store.get(run_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Snapshot not found or expired.")
+    return entry.as_dict()
+
+
 
 
 def _empty_result(lob: str, error: str) -> dict:

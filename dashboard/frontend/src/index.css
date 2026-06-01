@@ -1901,12 +1901,30 @@ textarea.field {
     transform: translateY(-1px);
 }
 
+.activity-cancel-button {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    background: #fee2e2;
+    color: #dc2626;
+    box-shadow: 0 10px 20px rgba(220, 38, 38, 0.12);
+}
+
+.activity-cancel-button:hover {
+    transform: translateY(-1px);
+    background: #fecaca;
+}
+
 .activity-card.done {
     box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.08);
 }
 
 .activity-card.error {
     box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.08);
+}
+
+.activity-card.canceled {
+    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.12);
 }
 
 .activity-card-top {
@@ -1935,6 +1953,10 @@ textarea.field {
 
 .activity-dot.error {
     background: #dc2626;
+}
+
+.activity-dot.canceled {
+    background: #d97706;
 }
 
 .activity-status {
@@ -2240,7 +2262,7 @@ textarea.field {
 
 .jobs-summary-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 14px;
 }
 
@@ -2310,7 +2332,7 @@ textarea.field {
 .jobs-table-header,
 .jobs-table-row {
     display: grid;
-    grid-template-columns: minmax(260px, 1.8fr) 130px 120px 120px 130px 130px;
+    grid-template-columns: minmax(220px, 1.8fr) 110px 110px 110px 110px 170px;
     align-items: center;
     gap: 18px;
 }
@@ -2346,7 +2368,7 @@ textarea.field {
 
 .jobs-day-row {
     min-height: 54px;
-    background: #fbfcff;
+    background: rgb(240 240 251 / 0.68);
 }
 
 .jobs-lob-row {
@@ -2421,6 +2443,7 @@ textarea.field {
     font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding-right: 6px;
 }
 
 .jobs-report-cell {
@@ -7449,4 +7472,96 @@ code.asr-val-code.fail {
     border-color: #dc2626;
     color: #dc2626;
     background: #fef2f2;
+}
+
+.jobs-icon-btn {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, gap 0.2s ease, padding 0.2s ease;
+
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+.jobs-icon-btn .icon {
+    flex: 0 0 16px;
+    width: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+}
+
+.jobs-icon-btn .label {
+    opacity: 0;
+    max-width: 0;
+    overflow: hidden;
+
+    transition: opacity 0.2s ease, max-width 0.2s ease;
+
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+
+.jobs-icon-btn.expand-on-hover:hover {
+    background: #f3f4f6;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 14px 0 10px;
+    width: auto;
+}
+
+.jobs-icon-btn.expand-on-hover:hover .label {
+    opacity: 1;
+    max-width: 120px;
+}
+
+.jobs-icon-btn.expand-on-hover[data-label="view-report"]:hover {
+    min-width: 118px;
+}
+
+.jobs-icon-btn.expand-on-hover[data-label="run-again"]:hover {
+    min-width: 108px;
+}
+
+.jobs-icon-btn.always-labeled {
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 14px 0 10px;
+    width: auto;
+}
+
+.jobs-icon-btn.always-labeled .label {
+    opacity: 1;
+    max-width: 120px;
+}
+
+.jobs-icon-btn.always-labeled.danger {
+    background: #fee2e2;
+    color: #dc2626;
+    min-width: 92px;
+}
+
+.jobs-icon-btn.always-labeled.danger:hover {
+    background: #fecaca;
+}
+
+.jobs-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
 }

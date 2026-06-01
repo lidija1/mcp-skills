@@ -1,11 +1,13 @@
 import {cleanDisplayText} from '../utils/text'
 import {resolveJobLobDisplay, sortLobGroupKeys} from '../utils/jobLob'
 import {useEffect, useState} from 'react'
+import {api} from '../utils/api'
 
 const STATUS_CONFIG = {
     running: {color: '#2563eb', label: 'Running'},
     done: {color: '#16a34a', label: 'Done'},
     error: {color: '#dc2626', label: 'Error'},
+    canceled: {color: '#d97706', label: 'Canceled'},
 }
 
 function elapsed(job) {
@@ -51,14 +53,30 @@ function groupJobs(jobs) {
     }, {})
 }
 
-export default function JobsPanel({jobs, onSelect, onClearHistory}) {
+export async function rerunJob(jobId) {
+    return api.rerunJob(jobId)
+}
+
+export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs, onUpdateJob}) {
     const grouped = groupJobs(jobs)
     const total = jobs.length
     const running = jobs.filter(job => job.status === 'running').length
     const completed = jobs.filter(job => job.status === 'done').length
     const failed = jobs.filter(job => job.status === 'error').length
+    const canceled = jobs.filter(job => job.status === 'canceled').length
 
-    // const [collapsedDays, setCollapsedDays] = useState({})
+
+    async function handleRerun(job) {
+        try {
+            await rerunJob(job.id)
+
+            if (onRefreshJobs) {
+                await onRefreshJobs()
+            }
+        } catch (err) {
+            console.error(err)
+        }
+    }
 
     function toggleDay(day) {
         setCollapsedDays(prev => ({
@@ -92,6 +110,28 @@ export default function JobsPanel({jobs, onSelect, onClearHistory}) {
         )
     }, [collapsedDays])
 
+
+    async function handleCancel(job) {
+        try {
+            await api.cancelJob(job.id)
+
+            if (onUpdateJob) {
+                onUpdateJob(job.id, {
+                    status: 'canceled',
+                    error: 'Canceled by user',
+                    finished: Date.now() / 1000,
+                    current_status: null,
+                })
+            }
+
+            if (onRefreshJobs) {
+                await onRefreshJobs()
+            }
+        } catch (err) {
+            console.error(err)
+        }
+    }
+
     return (<div className="panel-stack jobs-panel-page">
         <div className="jobs-toolbar">
             <div className="page-heading">
@@ -108,6 +148,7 @@ export default function JobsPanel({jobs, onSelect, onClearHistory}) {
             <SummaryMetric label="Running" value={running}/>
             <SummaryMetric label="Completed" value={completed}/>
             <SummaryMetric label="Failed" value={failed}/>
+            <SummaryMetric label="Canceled" value={canceled}/>
         </div>
 
         {total === 0 ? (<div className="empty-history">
@@ -156,7 +197,14 @@ export default function JobsPanel({jobs, onSelect, onClearHistory}) {
                                     </div>
 
                                     {lobJobs.map(job => (
-                                        <HistoryRow key={job.id} job={job} onSelect={onSelect}/>))}
+                                        <HistoryRow
+                                            key={job.id}
+                                            job={job}
+                                            onSelect={onSelect}
+                                            onRerun={handleRerun}
+                                            onCancel={handleCancel}
+                                        />
+                                    ))}
                                 </div>)
                             })}
                     </section>)
@@ -173,13 +221,13 @@ function SummaryMetric({label, value}) {
     </div>)
 }
 
-function HistoryRow({job, onSelect}) {
+function HistoryRow({job, onSelect, onRerun, onCancel}) {
     const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.running
     const canOpen = job.status === 'done' || job.status === 'error'
     const owner = job.created_by_user
     const ownerName = owner?.display_name || owner?.username
 
-    return (<article className={`jobs-table-row ${job.status === 'error' ? 'has-error' : ''}`}>
+    return (<article className={`jobs-table-row ${job.status === 'error' ? 'has-error' : ''} ${job.status === 'canceled' ? 'is-canceled' : ''}`}>
         <div className="jobs-job-title">
             {cleanDisplayText(job.label)}
             {ownerName && <small className="jobs-owner">Created by {ownerName}</small>}
@@ -193,10 +241,73 @@ function HistoryRow({job, onSelect}) {
         <div className="jobs-cell-muted">{startedTime(job)}</div>
         <div className="jobs-cell-muted">{elapsed(job)}</div>
         <div className="jobs-cell-id" title={job.id}>{job.id}</div>
-        <div className="jobs-report-cell">
-            {canOpen ? (<button className="jobs-report-link" type="button" onClick={() => onSelect(job)}>
-                View Report
-            </button>) : (<span className="job-running-note">Pending</span>)}
+        {/*<div className="jobs-report-cell">*/}
+        {/*    {canOpen ? (*/}
+        {/*        <>*/}
+        {/*            <button*/}
+        {/*                className="jobs-report-link"*/}
+        {/*                type="button"*/}
+        {/*                onClick={() => onSelect(job)}*/}
+        {/*            >*/}
+        {/*                View Report*/}
+        {/*            </button>*/}
+
+        {/*            <button*/}
+        {/*                className="jobs-report-link"*/}
+        {/*                type="button"*/}
+        {/*                onClick={() => onRerun(job)}*/}
+        {/*            >*/}
+        {/*                Run Again*/}
+        {/*            </button>*/}
+        {/*        </>*/}
+        {/*    ) : (*/}
+        {/*        <span className="job-running-note">Pending</span>*/}
+        {/*    )}*/}
+        {/*</div>*/}
+        <div className="jobs-actions">
+            {canOpen && (
+                <>
+                    <button
+                        className="jobs-icon-btn expand-on-hover"
+                        data-label="view-report"
+                        onClick={() => onSelect(job)}
+                    >
+                        <span className="icon">📄</span>
+                        <span className="label">View report</span>
+                    </button>
+
+                    <button
+                        className="jobs-icon-btn expand-on-hover"
+                        data-label="run-again"
+                        onClick={() => onRerun(job)}
+                    >
+                        <span className="icon">↻</span>
+                        <span className="label">Run again</span>
+                    </button>
+                </>
+            )}
+
+            {job.status === 'running' && (
+                <button
+                    className="jobs-icon-btn danger always-labeled"
+                    onClick={() => onCancel(job)}
+                >
+                    <span className="icon">✕</span>
+                    <span className="label">Cancel</span>
+                </button>
+            )}
+            {job.status === 'canceled' && (
+                <>
+                    <button
+                        className="jobs-icon-btn expand-on-hover"
+                        data-label="run-again"
+                        onClick={() => onRerun(job)}
+                    >
+                        <span className="icon">↻</span>
+                        <span className="label">Run again</span>
+                    </button>
+                </>
+            )}
         </div>
         {job.status === 'error' && job.error && (<div className="job-error">{job.error}</div>)}
     </article>)

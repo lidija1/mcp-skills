@@ -5,7 +5,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 
-export default function OverviewPanel({ backendOk, jobs, onOpenReport }) {
+export default function OverviewPanel({ backendOk, jobs, onOpenReport, onCancelJob }) {
   const completed = jobs.filter(job => job.status === 'done').length
   const running = jobs.filter(job => job.status === 'running').length
   const failed = jobs.filter(job => job.status === 'error').length
@@ -64,7 +64,13 @@ export default function OverviewPanel({ backendOk, jobs, onOpenReport }) {
             </div>
           ) : (
             feedItems.map((item, index) => (
-              <ActivityCard key={`${item.title}-${item.id}`} item={item} index={index} onOpenReport={onOpenReport} />
+              <ActivityCard
+                key={`${item.title}-${item.id}`}
+                item={item}
+                index={index}
+                onOpenReport={onOpenReport}
+                onCancelJob={onCancelJob}
+              />
             ))
           )}
         </div>
@@ -87,21 +93,34 @@ function MetricCard({ icon: Icon, label, value, tone }) {
   )
 }
 
-function ActivityCard({ item, index, onOpenReport }) {
+function ActivityCard({ item, index, onOpenReport, onCancelJob }) {
+  const hasActions = item.canOpenReport || item.canCancel
+
   return (
     <article
       className={`activity-card ${item.status} ${index === 0 ? 'latest' : ''}`}
       style={{ animationDelay: `${index * 90}ms` }}
     >
-      {item.canOpenReport && (
+      {hasActions && (
         <div className="activity-card-actions">
-          <button
-            className="text-button compact activity-report-button"
-            type="button"
-            onClick={() => onOpenReport?.(item.job)}
-          >
-            View report
-          </button>
+          {item.canOpenReport && (
+            <button
+              className="text-button compact activity-report-button"
+              type="button"
+              onClick={() => onOpenReport?.(item.job)}
+            >
+              View report
+            </button>
+          )}
+          {item.canCancel && (
+            <button
+              className="text-button compact activity-cancel-button"
+              type="button"
+              onClick={() => onCancelJob?.(item.job)}
+            >
+              Cancel
+            </button>
+          )}
         </div>
       )}
 
@@ -137,6 +156,13 @@ function LivePolicyStatus({ status }) {
   )
 }
 
+function feedActions(job) {
+  return {
+    canOpenReport: job.status === 'done' || job.status === 'error',
+    canCancel: job.status === 'running',
+  }
+}
+
 function buildActivityFeed(jobs) {
   return jobs
     .slice()
@@ -151,24 +177,29 @@ function buildActivityFeed(jobs) {
       const meta = `Started ${started} · ${job.id}`
       const isSinglePolicyFlow = lower.includes('quick policy') || lower.includes('policy journey')
       const liveStatus = buildLivePolicyStatus(job, isSinglePolicyFlow)
+      const actions = feedActions(job)
 
       if (lower.includes('build profile')) {
         return {
           id: job.id,
           job,
-          title: 'Generated customer profile',
+          title: job.status === 'canceled' ? 'Profile generation canceled' : 'Generated customer profile',
           terminalLine: `> ${simplifyLabel(label)}`,
           status: job.status,
           statusLabel: statusLabel(job.status),
           duration,
           meta,
-          canOpenReport: job.status !== 'running',
+          ...actions,
         }
       }
 
       if (lower.includes('rule test')) {
         const ruleId = extractRuleId(label, job.result)
-        const title = ruleId ? `Executed UW Rule #${ruleId}` : 'Executed UW rule test'
+        const title = job.status === 'canceled'
+          ? 'UW rule test canceled'
+          : ruleId
+            ? `Executed UW Rule #${ruleId}`
+            : 'Executed UW rule test'
         return {
           id: job.id,
           job,
@@ -178,7 +209,7 @@ function buildActivityFeed(jobs) {
           statusLabel: statusLabel(job.status),
           duration,
           meta,
-          canOpenReport: job.status !== 'running',
+          ...actions,
         }
       }
 
@@ -187,13 +218,17 @@ function buildActivityFeed(jobs) {
         return {
           id: job.id,
           job,
-          title: edgeCases ? `${edgeCases} edge cases detected` : 'Batch scenario sweep completed',
+          title: job.status === 'canceled'
+            ? 'Batch scenario sweep canceled'
+            : edgeCases
+              ? `${edgeCases} edge cases detected`
+              : 'Batch scenario sweep completed',
           terminalLine: `> ${simplifyLabel(label)}`,
           status: job.status,
           statusLabel: statusLabel(job.status),
           duration,
           meta,
-          canOpenReport: job.status !== 'running',
+          ...actions,
         }
       }
 
@@ -202,26 +237,32 @@ function buildActivityFeed(jobs) {
         return {
           id: job.id,
           job,
-          title: edgeCases ? `${edgeCases} edge cases detected` : 'Underwriting audit completed',
+          title: job.status === 'canceled'
+            ? 'Underwriting audit canceled'
+            : edgeCases
+              ? `${edgeCases} edge cases detected`
+              : 'Underwriting audit completed',
           terminalLine: `> ${simplifyLabel(label)}`,
           status: job.status,
           statusLabel: statusLabel(job.status),
           duration,
           meta,
-          canOpenReport: job.status !== 'running',
+          ...actions,
         }
       }
 
       if (isSinglePolicyFlow) {
         const isUwReferral = text.includes('uw referral') || text.includes('uw conditions triggered')
         const isPolicyFailed = text.includes('policy creation failed') || text.includes('| **status** | failed') || text.includes('| **outcome** | error')
-        const title = isUwReferral
-          ? 'Referral triggered: review required'
-          : job.status === 'running'
-            ? 'Policy flow in progress'
-            : job.status === 'error' || isPolicyFailed
-              ? 'Policy creation failed'
-              : 'Policy bound successfully'
+        const title = job.status === 'canceled'
+          ? 'Policy flow canceled'
+          : isUwReferral
+            ? 'Referral triggered: review required'
+            : job.status === 'running'
+              ? 'Policy flow in progress'
+              : job.status === 'error' || isPolicyFailed
+                ? 'Policy creation failed'
+                : 'Policy bound successfully'
         return {
           id: job.id,
           job,
@@ -232,20 +273,26 @@ function buildActivityFeed(jobs) {
           duration,
           liveStatus,
           meta,
-          canOpenReport: job.status !== 'running',
+          ...actions,
         }
       }
 
       return {
         id: job.id,
         job,
-        title: job.status === 'running' ? 'Playwright session running' : job.status === 'error' ? 'Automation run failed' : 'Playwright session completed',
+        title: job.status === 'running'
+          ? 'Playwright session running'
+          : job.status === 'canceled'
+            ? 'Automation run canceled'
+            : job.status === 'error'
+              ? 'Automation run failed'
+              : 'Playwright session completed',
         terminalLine: `> ${simplifyLabel(label)}`,
         status: job.status,
         statusLabel: statusLabel(job.status),
         duration,
         meta,
-        canOpenReport: job.status !== 'running',
+        ...actions,
       }
     })
 }
@@ -253,6 +300,7 @@ function buildActivityFeed(jobs) {
 function statusLabel(status) {
   if (status === 'done') return 'done'
   if (status === 'error') return 'error'
+  if (status === 'canceled') return 'canceled'
   return 'running'
 }
 

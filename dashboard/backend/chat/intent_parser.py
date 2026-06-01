@@ -1,17 +1,17 @@
 """
 CHATBOT INTENT PARSER — natural language → structured tool call.
 
-Uses a cheap/fast AI model (claude-haiku or gpt-4o-mini) to translate the
-user's message into { tool, params, reply }.
+Uses the configured chat LLM provider to translate the user's message into
+{ tool, params, reply }.
 
 ARCHITECTURE BOUNDARY: This module only produces a structured intent object.
 Validation against the whitelist and all dispatch happen in chat_router.py.
 The parser never accesses the browser, DB, filesystem, or credentials.
 """
-import os
 import re
 import json
 
+from llm_provider import complete_json
 from tool_registry import registry_summary_for_prompt
 
 _SYSTEM_TEMPLATE = """\
@@ -41,11 +41,34 @@ Step 1 — Does the user want to generate persona data only (no browser run)?
       Extract count from words like "20 different", "15 variations", "give me 5", etc.
       Default count = 5 if not specified.
 
-Step 2 — Does the user want to RUN policy flows (browser automation)?
+Step 2 — Does the user assert against a SPECIFIC DOLLAR AMOUNT ($ sign, "usd", or explicit number)?
+  • "assert premium is around $1,200" / "premium should be exactly $950" / "cost under $800"
+      → run_assert_flow  (params: persona_description, expected_value, operator, assertion_type, tolerance_pct)
+
+  operator mapping (choose the most specific match):
+    "around" / "approximately" / "~" / "within" / "about"  → "approx"
+    "exactly" / "equals" / "is exactly" / "="              → "equals"
+    "more than" / "exceeds" / "above" / "over" / ">"       → "gt"
+    "less than" / "under" / "below" / "<"                  → "lt"
+    default (no qualifier)                                  → "approx"
+
+  assertion_type:
+    "premium" / "rate" / "policy premium" (default)        → "premium"
+    "total cost" / "annual cost" / "full cost"             → "total_cost"
+
+  tolerance_pct: extract from "within N%" → N, default 5.0
+  persona_description: strip out assertion phrases and dollar amounts; keep only persona traits.
+
+Step 2a — Does the user want UW test assertions WITHOUT a specific dollar amount?
+  • Plain-English UW assertion / expected premium / actual premium / assert value
+      → run_api_assertion  (params: prompt)
+      Keep the user's full message as prompt.
+
+Step 3 — Does the user want to RUN policy flows (browser automation)?
   • Single policy run → run_quick_policy  (params: lob, description)
   • Multiple distinct scenarios → run_batch_policies  (params: scenarios list, max 10)
 
-Step 3 — UW rules / audit?
+Step 4 — UW rules / audit?
   • List / show / query rules   → list_uw_rules  (params: lob optional)
   • Audit one LOB               → run_uw_audit  (params: lob)
   • Test specific rule by ID    → run_rule_cases  (params: lob, rule_id)
@@ -87,6 +110,15 @@ EXAMPLES
 "give me 10 cyber profiles for a healthcare company"
 → {{"tool":"create_persona_variations","params":{{"lob":"cyber","base_description":"healthcare company cyber profile","count":10}},"reply":"Generating 10 healthcare cyber persona variations."}}
 
+"assert that a young male driver with Gold coverage premium is around $1,200"
+→ {{"tool":"run_assert_flow","params":{{"persona_description":"young male driver with Gold coverage","expected_value":1200.0,"operator":"approx","assertion_type":"premium","tolerance_pct":5.0}},"reply":"Asserting that premium for a young male Gold driver is ≈ $1,200 (±5%)."}}
+
+"assert premium for a retired driver with clean record is less than $800"
+→ {{"tool":"run_assert_flow","params":{{"persona_description":"retired driver with clean record","expected_value":800.0,"operator":"lt","assertion_type":"premium","tolerance_pct":5.0}},"reply":"Asserting that premium for a retired driver with clean record is < $800."}}
+
+"assert that for young driver premium for gold coverage is 1000 usd"
+→ {{"tool":"run_api_assertion","params":{{"prompt":"assert that for young driver premium for gold coverage is 1000 usd"}},"reply":"Running an Auto UW test assertion and I will report expected versus actual values."}}
+
 "create a homeowner persona for a luxury coastal home"
 → {{"tool":"create_persona","params":{{"lob":"homeowner","description":"luxury coastal home homeowner"}},"reply":"Creating a homeowner persona for a luxury coastal home."}}
 
@@ -104,7 +136,7 @@ EXAMPLES
 """
 
 
-def parse_intent(message: str) -> dict:
+def parse_intent(message: str, history: list[dict] | None = None) -> dict:
     """
     Translate a natural-language message into:
       { "tool": str | None, "params": dict, "reply": str }
@@ -112,43 +144,50 @@ def parse_intent(message: str) -> dict:
     ARCHITECTURE BOUNDARY: output is a data structure only.
     Validation and dispatch happen in chat_router.py.
     """
-    system = _SYSTEM_TEMPLATE.format(tools=registry_summary_for_prompt())
-    provider = os.environ.get("AI_PROVIDER", "")
-    if not provider:
-        provider = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "openai"
+    api_assertion = _api_assertion_intent(message)
+    if api_assertion:
+        return api_assertion
 
-    raw = ""
-    if provider == "anthropic":
-        import anthropic as _anthropic
-        client = _anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=600,
-            system=system,
-            messages=[{"role": "user", "content": message}],
-        )
-        raw = resp.content[0].text.strip()
-    else:
-        import openai as _openai
-        client = _openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        resp = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": message},
-            ],
-            temperature=0,
-            max_tokens=600,
-        )
-        raw = resp.choices[0].message.content.strip()
+    system = _SYSTEM_TEMPLATE.format(tools=registry_summary_for_prompt())
+    raw = complete_json(system=system, user=message, max_tokens=600, history=history)
 
     # Strip markdown fences if the model wraps output anyway
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
     parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("Intent parser response must be a JSON object.")
+    if "tool" not in parsed or "params" not in parsed or "reply" not in parsed:
+        raise ValueError("Intent parser response must include tool, params, and reply.")
+    if parsed.get("tool") is not None and not isinstance(parsed.get("tool"), str):
+        raise ValueError("Intent parser field 'tool' must be a string or null.")
+    if not isinstance(parsed.get("params"), dict):
+        raise ValueError("Intent parser field 'params' must be an object.")
+    if not isinstance(parsed.get("reply"), str):
+        raise ValueError("Intent parser field 'reply' must be a string.")
+
     return {
         "tool": parsed.get("tool"),
         "params": parsed.get("params") or {},
         "reply": parsed.get("reply", ""),
     }
+
+
+def _api_assertion_intent(message: str) -> dict | None:
+    text = " ".join((message or "").split())
+    lower = text.lower()
+    has_assertion_word = any(word in lower for word in ("assert", "expected", "actual", "should be"))
+    has_api_subject = any(
+        word in lower
+        for word in ("api", "premium", "price", "rate", "coverage", "uw referral", "underwriting referral")
+    )
+    # If a specific dollar amount is present, let the LLM route to run_assert_flow instead
+    has_dollar_amount = "$" in text or bool(re.search(r"\b\d[\d,]*(\.\d+)?\s*(usd|dollars?)\b", lower))
+    if has_assertion_word and has_api_subject and not has_dollar_amount:
+        return {
+            "tool": "run_api_assertion",
+            "params": {"prompt": text},
+            "reply": "Running an Auto UW test assertion and I will report expected versus actual values.",
+        }
+    return None

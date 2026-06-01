@@ -2,6 +2,8 @@ import {useState, useEffect, useCallback, useRef} from 'react'
 import Header from './components/Header'
 import OverviewPanel from './components/OverviewPanel'
 import PolicyPanel from './components/PolicyPanel'
+import ApiAssertionsPanel from './components/ApiAssertionsPanel'
+import SettingsPanel from './components/SettingsPanel'
 import JobsPanel from './components/JobsPanel'
 import ChatPanel from './components/ChatPanel'
 import ReportModal from './components/ReportModal'
@@ -22,9 +24,12 @@ import {
     CircleHelp,
     CalendarDays,
     CheckCircle2,
+    ClipboardCheck,
     Home,
+    Maximize2,
     Menu,
     MessageCircle,
+    PanelRight,
     Settings,
     UserCircle,
     Workflow,
@@ -59,7 +64,23 @@ export default function App() {
     const [showRegister, setShowRegister] = useState(false)
     const [selectedJob, setSelectedJob] = useState(null)
     const [showHelp, setShowHelp] = useState(false)
+    const [chatView, setChatView] = useState(() => localStorage.getItem('chatView') || 'sidebar')
+
+    const setChatViewPersist = v => { setChatView(v); localStorage.setItem('chatView', v) }
+
+    useEffect(() => {
+        if (chatView !== 'full') return
+        const handler = e => { if (e.key === 'Escape') setChatViewPersist('sidebar') }
+        document.addEventListener('keydown', handler)
+        return () => document.removeEventListener('keydown', handler)
+    }, [chatView])
+    const [theme, setTheme] = useState(() => localStorage.getItem('dashboardTheme') || 'light')
     const previousJobStatusRef = useRef(null)
+
+    useEffect(() => {
+        document.documentElement.dataset.theme = theme
+        localStorage.setItem('dashboardTheme', theme)
+    }, [theme])
 
     useEffect(() => {
         api.health()
@@ -266,7 +287,7 @@ export default function App() {
         <div className="app-shell">
             <Header backendOk={backendOk} user={dashboardUser} onLogout={logout}/>
 
-            <div className="workspace">
+            <div className={`workspace${chatView === 'hidden' ? ' workspace--chat-hidden' : ''}`}>
                 <aside className="side-nav" aria-label="Primary navigation">
                     <nav className="side-nav-main">
                         <IconButton icon={Menu} label="Menu"/>
@@ -299,7 +320,18 @@ export default function App() {
                                 navigate(`/policy-flow/${savedLob}`)
                             }}
                         />
-                        <NavItem icon={Settings} label="Settings"/>
+                        <NavItem
+                            icon={ClipboardCheck}
+                            label="UW Tests"
+                            active={currentPath.startsWith('/uw-tests') || currentPath.startsWith('/api-tests')}
+                            onClick={() => navigate('/uw-tests')}
+                        />
+                        <NavItem
+                            icon={Settings}
+                            label="Settings"
+                            active={currentPath === '/settings'}
+                            onClick={() => navigate('/settings')}
+                        />
                     </nav>
                     <nav className="side-nav-footer">
                         <NavItem icon={CircleHelp} label="Help" onClick={() => setShowHelp(true)}/>
@@ -357,17 +389,94 @@ export default function App() {
                                 />
                             }
                         />
+                        <Route
+                            path="/uw-tests"
+                            element={requireAuth(
+                                <ApiAssertionsPanel submitJob={submitJob}/>
+                            )}
+                        />
+                        <Route path="/api-tests" element={<Navigate to="/uw-tests" replace/>}/>
+                        <Route
+                            path="/settings"
+                            element={requireAuth(
+                                <SettingsPanel theme={theme} onThemeChange={setTheme}/>
+                            )}
+                        />
                         <Route path="/" element={<Navigate to="/dashboard" replace/>}/>
                     </Routes>
                 </main>
 
-                <aside className="chat-sidebar" aria-label="Chat assistant">
-                    <div className="chat-sidebar-header">
-                        <MessageCircle size={17}/>
-                        Chat Assistant
+                <aside
+                    className={`chat-sidebar${chatView === 'full' ? ' chat-sidebar--expanded' : ''}${chatView === 'hidden' ? ' chat-sidebar--hidden' : ''}`}
+                    aria-label="Chat assistant"
+                >
+                    {chatView === 'full' && (
+                        <div className="chat-sidebar-backdrop" onClick={() => setChatViewPersist('sidebar')} />
+                    )}
+                    <div className="chat-sidebar-inner">
+                        <div className="chat-sidebar-header">
+                            <MessageCircle size={17}/>
+                            <span className="chat-sidebar-title">Chat Assistant</span>
+                            <div className="chat-header-btns">
+                                <button
+                                    className={`chat-expand-btn${chatView === 'sidebar' ? ' chat-expand-btn--active' : ''}`}
+                                    type="button"
+                                    aria-label="Sidebar view"
+                                    onClick={() => setChatViewPersist('sidebar')}
+                                    title="Sidebar"
+                                >
+                                    <PanelRight size={15}/>
+                                </button>
+                                <button
+                                    className={`chat-expand-btn${chatView === 'full' ? ' chat-expand-btn--active' : ''}`}
+                                    type="button"
+                                    aria-label="Full view"
+                                    onClick={() => setChatViewPersist('full')}
+                                    title="Expand"
+                                >
+                                    <Maximize2 size={15}/>
+                                </button>
+                                <button
+                                    className="chat-expand-btn"
+                                    type="button"
+                                    aria-label="Hide chat"
+                                    onClick={() => setChatViewPersist('hidden')}
+                                    title="Hide"
+                                >
+                                    <X size={15}/>
+                                </button>
+                            </div>
+                        </div>
+                        <ChatPanel
+                            onJobDispatched={trackJob}
+                            jobs={jobs}
+                            onOpenReport={setSelectedJob}
+                            expanded={chatView === 'full'}
+                        />
                     </div>
-                    <ChatPanel onJobDispatched={trackJob}/>
                 </aside>
+
+                {chatView === 'hidden' && (
+                    <div className="chat-fab" aria-label="Open chat">
+                        <span className="chat-fab-label"><MessageCircle size={14}/> Chat</span>
+                        <button
+                            className="chat-fab-btn"
+                            type="button"
+                            title="Open as sidebar"
+                            onClick={() => setChatViewPersist('sidebar')}
+                        >
+                            <PanelRight size={16}/>
+                        </button>
+                        <button
+                            className="chat-fab-btn"
+                            type="button"
+                            title="Open full"
+                            onClick={() => setChatViewPersist('full')}
+                        >
+                            <Maximize2 size={16}/>
+                        </button>
+                    </div>
+                )}
 
                 <JobDonePopups
                     popups={jobPopups}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { cleanDisplayText } from '../utils/text'
+import { api } from '../utils/api'
 
 export default function ReportModal({ job, onClose }) {
   const ref = useRef(null)
@@ -45,10 +46,22 @@ export default function ReportModal({ job, onClose }) {
   const isError = job.status === 'error'
   const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : 'Running'
 
+  const isAssertionSuite = jobResult.includes('NL Assertion Suite')
+  const isUwBatch = /^#\s+UW(?:\s+API)?\s+Batch/.test(jobResult.trimStart())
+  const assertFlowData = useMemo(() => {
+    if (!jobResult.trimStart().startsWith('{')) return null
+    try { const p = JSON.parse(jobResult); return p._type === 'assert_flow' ? p : null } catch { return null }
+  }, [jobResult])
+  const isAssertFlow = Boolean(assertFlowData)
+  const suiteData = useMemo(() => isAssertionSuite ? parseAssertionSuiteContent(jobResult) : null, [isAssertionSuite, jobResult])
+  const uwBatchData = useMemo(() => isUwBatch ? parseUwBatchContent(jobResult) : null, [isUwBatch, jobResult])
+
   const report = useMemo(() => parsePolicyFlowReport(jobResult), [jobResult])
 
   const copyReport = () => {
-    if (report.profileJson) {
+    if (isAssertionSuite || isUwBatch) {
+      navigator.clipboard.writeText(jobResult || '')
+    } else if (report.profileJson) {
       navigator.clipboard.writeText(report.prettyProfileJson || report.profileJson)
     } else {
       const text = job.status === 'done' ? jobResult : jobError
@@ -56,10 +69,27 @@ export default function ReportModal({ job, onClose }) {
     }
   }
 
+  const openAssertionJson = () => {
+    const data = suiteData || uwBatchData
+    if (!data) return
+    const editor = window.open('', '_blank', 'width=980,height=760,resizable=yes,scrollbars=yes')
+    if (!editor) return
+    editor.document.write(buildJsonEditorDocument(`${jobLabel} — Structured Data`, JSON.stringify(data, null, 2)))
+    editor.document.close()
+  }
+
   const hasStructuredReport = Boolean(
     report.profileJson || report.steps.length || Object.keys(report.summary).length || report.aiInsights.length
   )
-  const isJson = job.status === 'done' && jobResult.trimStart().startsWith('{') && !hasStructuredReport
+  const isJson = job.status === 'done' && jobResult.trimStart().startsWith('{') && !hasStructuredReport && !isAssertFlow
+
+  const openAssertFlowJson = data => {
+    const jsonText = JSON.stringify(data?.persona || {}, null, 2)
+    const editor = window.open('', '_blank', 'width=980,height=760,resizable=yes,scrollbars=yes')
+    if (!editor) return
+    editor.document.write(buildJsonEditorDocument('Generated Persona JSON', jsonText))
+    editor.document.close()
+  }
   const isPersonaReport = Boolean(
     jobResult.includes('Generated Customer Profile') || jobResult.includes('Persona Variations')
   )
@@ -154,6 +184,18 @@ export default function ReportModal({ job, onClose }) {
                 </button>
               </>
             )}
+            {(isAssertionSuite || isUwBatch) && (
+              <button onClick={withActionFeedback('view-json', openAssertionJson)} className={reportActionClass('view-json')} type="button" title="View structured results as JSON">
+                <FileJson size={16} />
+                View JSON
+              </button>
+            )}
+            {isAssertFlow && assertFlowData?.persona && (
+              <button onClick={withActionFeedback('view-json', () => openAssertFlowJson(assertFlowData))} className={reportActionClass('view-json')} type="button" title="View generated persona JSON">
+                <FileJson size={16} />
+                View JSON
+              </button>
+            )}
             <button onClick={withActionFeedback('copy', copyReport)} className={reportActionClass('copy')} type="button">
               <Copy size={16} />
               Copy
@@ -165,7 +207,13 @@ export default function ReportModal({ job, onClose }) {
         </header>
 
         <div className="report-body">
-          {isError ? (
+          {isAssertionSuite ? (
+            <AssertionSuiteReport data={suiteData} rawContent={jobResult} />
+          ) : isUwBatch ? (
+            <UwBatchReport data={uwBatchData} rawContent={jobResult} />
+          ) : isAssertFlow ? (
+            <AssertFlowReport data={assertFlowData} />
+          ) : isError ? (
             <div className="report-state error">
               <div className="report-state-heading">
                 <ShieldAlert size={21} />
@@ -554,6 +602,168 @@ function UwRulesCarousel({ conditions }) {
   )
 }
 
+/* ─── Assert Flow Report ──────────────────────────────────────── */
+
+function AssertFlowReport({ data }) {
+  const [showDetails, setShowDetails] = useState(false)
+  const [explanation, setExplanation] = useState('')
+  const [explainLoading, setExplainLoading] = useState(false)
+  const [explainError, setExplainError] = useState('')
+
+  const opLabel = {
+    approx:       `approx ±${data.tolerance_pct != null ? Number(data.tolerance_pct).toFixed(0) : 5}%`,
+    equals:       'exact match',
+    eq:           'exact match',
+    gt:           'greater than',
+    greater_than: 'greater than',
+    lt:           'less than',
+    less_than:    'less than',
+  }[data.operator] || data.operator
+
+  const fmt = v =>
+    v !== null && v !== undefined
+      ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : 'N/A'
+
+  const handleExplain = useCallback(async () => {
+    if (explainLoading) return
+    setExplainLoading(true)
+    setExplainError('')
+    try {
+      const res = await api.explainAssertFlow(data)
+      setExplanation(res.explanation || '')
+    } catch (err) {
+      setExplainError(err.message || 'Explanation failed')
+    } finally {
+      setExplainLoading(false)
+    }
+  }, [data, explainLoading])
+
+  return (
+    <div className="af-report">
+      <div className="af-verdict-row">
+        <span className="af-verdict-label">{data.passed ? 'PASS' : 'FAIL'}</span>
+        <span className="af-assertion-kind">
+          {(data.assertion_type || '').replace('_', ' ')} assertion
+        </span>
+      </div>
+
+      <div className="af-prompt-block">
+        <div className="af-prompt-eyebrow">Tested persona</div>
+        <p className="af-prompt-text">{data.persona_description}</p>
+      </div>
+
+      <div className="af-summary-grid">
+        <div className="af-kv">
+          <span className="af-kv-label">Expected</span>
+          <span className="af-kv-value">{fmt(data.expected_value)}</span>
+        </div>
+        <div className="af-kv">
+          <span className="af-kv-label">Actual</span>
+          <span className="af-kv-value">{fmt(data.actual_value)}</span>
+        </div>
+        <div className="af-kv">
+          <span className="af-kv-label">Operator</span>
+          <span className="af-kv-value">{opLabel}</span>
+        </div>
+        {data.message && (
+          <div className="af-kv af-kv-wide">
+            <span className="af-kv-label">Detail</span>
+            <span className="af-kv-value">{data.message}</span>
+          </div>
+        )}
+      </div>
+
+      {data.blocked && (
+        <div className="af-blocked-notice">Blocked: {data.blocked_reason}</div>
+      )}
+
+      <div className="af-pill-row">
+        <button type="button" className="af-full-report-pill" onClick={() => setShowDetails(true)}>
+          Full Report
+        </button>
+        <button
+          type="button"
+          className={`af-explain-pill${explainLoading ? ' af-explain-pill--loading' : ''}`}
+          onClick={handleExplain}
+          disabled={explainLoading}
+        >
+          {explainLoading ? 'Thinking…' : explanation ? 'Re-explain' : 'Explain this'}
+        </button>
+      </div>
+
+      {(explanation || explainError) && (
+        <div className="af-explain-block">
+          <div className="af-explain-eyebrow">AI Analysis</div>
+          {explainError
+            ? <p className="af-explain-error">{explainError}</p>
+            : <p className="af-explain-text">{explanation}</p>
+          }
+        </div>
+      )}
+
+      {showDetails && (
+        <AssertFlowDetailsPanel data={data} onClose={() => setShowDetails(false)} />
+      )}
+    </div>
+  )
+}
+
+function AssertFlowDetailsPanel({ data, onClose }) {
+  const fmt = v =>
+    v !== null && v !== undefined
+      ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : 'N/A'
+
+  const coverageEntries = Object.entries(data.coverage_premiums || {})
+
+  return (
+    <div className="af-panel-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="af-panel">
+        <div className="af-panel-header">
+          <span className="af-panel-title">Full Report</span>
+          <button type="button" className="af-panel-close" onClick={onClose} aria-label="Close details">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="af-panel-body">
+          {coverageEntries.length > 0 && (
+            <section className="af-panel-section">
+              <div className="af-panel-section-title">Coverage Premiums</div>
+              <table className="af-coverage-table">
+                <thead>
+                  <tr><th>Coverage</th><th>Premium</th></tr>
+                </thead>
+                <tbody>
+                  {coverageEntries.map(([cov, prem]) => (
+                    <tr key={cov}><td>{cov}</td><td>{fmt(prem)}</td></tr>
+                  ))}
+                  {data.actual_value !== null && data.actual_value !== undefined && (
+                    <tr className="af-coverage-total"><td>Total</td><td>{fmt(data.actual_value)}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {data.uw_conditions?.length > 0 && (
+            <section className="af-panel-section">
+              <div className="af-panel-section-title">UW Conditions</div>
+              <ul className="af-uw-list">
+                {data.uw_conditions.map((c, i) => <li key={i}>{c}</li>)}
+              </ul>
+            </section>
+          )}
+
+          {!coverageEntries.length && !data.uw_conditions?.length && (
+            <p className="af-panel-empty">No additional details available.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Parsers ─────────────────────────────────────────────────── */
 
 function parsePolicyFlowReport(content) {
@@ -594,11 +804,25 @@ function parsePolicyFlowReport(content) {
   const hasProfileChunk = !isVariations && /```json/i.test(chunks[0] || '')
   const c = (i) => chunks[i] || ''
 
-  const profileJson = isVariations
+  let profileJson = isVariations
     ? JSON.stringify(variationPersonas, null, 2)
     : hasProfileChunk
       ? extractProfileJson(c(0))
       : ''
+
+  // Fallback: extract any embedded ```json blocks (e.g. persona JSON in UW test failure sections)
+  if (!profileJson && !isVariations && !hasProfileChunk) {
+    const embeddedBlocks = extractAllProfileJson(normalized)
+    if (embeddedBlocks.length === 1) {
+      profileJson = embeddedBlocks[0]
+    } else if (embeddedBlocks.length > 1) {
+      const parsed = embeddedBlocks.map(parseJsonObject).filter(Boolean)
+      if (parsed.length > 0) {
+        profileJson = JSON.stringify(parsed.length === 1 ? parsed[0] : parsed, null, 2)
+      }
+    }
+  }
+
   const summaryChunk = hasProfileChunk ? c(1) : c(0)
   const stepsChunk = hasProfileChunk ? c(2) : c(1)
   const uwChunk = hasProfileChunk ? c(3) : c(2)
@@ -1204,6 +1428,235 @@ function ViolationSummary({ content }) {
         })}
       </ul>
     </div>
+  )
+}
+
+/* ─── Assertion Suite Report ──────────────────────────────────── */
+
+function AssertionSuiteReport({ data, rawContent }) {
+  if (!data) {
+    return (
+      <div className="markdown-report report-markdown">
+        <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>{rawContent}</Markdown>
+      </div>
+    )
+  }
+  const { suiteName, passCount, total, allPass, verdict, rows } = data
+  const failRows = rows.filter(r => !r.passed && !r.isError)
+  const errorRows = rows.filter(r => r.isError)
+
+  return (
+    <div className="asr-report">
+      <div className="asr-title-line">
+        <h1 className="asr-title">{suiteName}</h1>
+        <span className={`asr-verdict-badge ${allPass ? 'pass' : 'fail'}`}>
+          {allPass ? '✅' : '❌'} {passCount}/{total} PASS &mdash; {verdict}
+        </span>
+      </div>
+      <div className="asr-rule" />
+
+      <div className="asr-table-wrap">
+        <table className="asr-table">
+          <thead>
+            <tr>
+              <th className="asr-col-num">#</th>
+              <th className="asr-col-status">Status</th>
+              <th className="asr-col-prompt">Prompt</th>
+              <th className="asr-col-check">Primary Check</th>
+              <th className="asr-col-val">Expected</th>
+              <th className="asr-col-val">Actual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.num} className={row.isError ? 'asr-row-error' : row.passed ? 'asr-row-pass' : 'asr-row-fail'}>
+                <td className="asr-num">{row.num}</td>
+                <td>
+                  <span className={`asr-status-pill ${row.isError ? 'error' : row.passed ? 'pass' : 'fail'}`}>
+                    {row.isError ? '⚠' : row.passed ? '✅' : '❌'} {row.status}
+                  </span>
+                </td>
+                <td className="asr-prompt-cell">{row.prompt}</td>
+                <td className="asr-check-cell">{row.primaryCheck}</td>
+                <td><code className="asr-val-code">{row.expected}</code></td>
+                <td><code className={`asr-val-code ${row.passed ? '' : 'fail'}`}>{row.actual}</code></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {(failRows.length > 0 || errorRows.length > 0) && (
+        <div className="asr-failures">
+          <div className="asr-failures-title">Failures ({failRows.length + errorRows.length})</div>
+          {[...failRows, ...errorRows].map(row => (
+            <div key={row.num} className="asr-failure-row">
+              <div className="asr-failure-header">
+                <span className="asr-status-pill fail">❌ #{row.num}</span>
+                <span className="asr-failure-prompt">{row.prompt}</span>
+              </div>
+              <div className="asr-failure-detail">
+                <span className="asr-kv"><em>Check:</em> {row.primaryCheck}</span>
+                <span className="asr-kv"><em>Expected:</em> <code className="asr-val-code">{row.expected}</code></span>
+                <span className="asr-kv"><em>Actual:</em> <code className="asr-val-code fail">{row.actual}</code></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UwBatchReport({ data, rawContent }) {
+  if (!data) {
+    return (
+      <div className="markdown-report report-markdown">
+        <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>{rawContent}</Markdown>
+      </div>
+    )
+  }
+  const { passCount, total, allPass, rows } = data
+  const failRows = rows.filter(r => !r.passed && !r.isError)
+
+  return (
+    <div className="asr-report">
+      <div className="asr-title-line">
+        <h1 className="asr-title">UW Batch Test</h1>
+        <span className={`asr-verdict-badge ${allPass ? 'pass' : 'fail'}`}>
+          {allPass ? '✅' : '❌'} {passCount}/{total} PASS {allPass ? '— ALL PASS' : `— ${total - passCount} FAIL`}
+        </span>
+      </div>
+      <div className="asr-rule" />
+
+      <div className="asr-table-wrap">
+        <table className="asr-table">
+          <thead>
+            <tr>
+              <th className="asr-col-num">#</th>
+              <th className="asr-col-status">Status</th>
+              <th className="asr-col-check">TC ID</th>
+              <th className="asr-col-prompt">Expected Conditions</th>
+              <th className="asr-col-val">Page</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} className={row.isError ? 'asr-row-error' : row.passed ? 'asr-row-pass' : 'asr-row-fail'}>
+                <td className="asr-num">{i + 1}</td>
+                <td>
+                  <span className={`asr-status-pill ${row.isError ? 'error' : row.passed ? 'pass' : 'fail'}`}>
+                    {row.isError ? '⚠' : row.passed ? '✅' : '❌'} {row.status}
+                  </span>
+                </td>
+                <td><code className="asr-val-code">{row.tcId}</code></td>
+                <td className="asr-prompt-cell">{row.expectedConditions}</td>
+                <td className="asr-check-cell">{row.page}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {failRows.length > 0 && (
+        <div className="asr-failures">
+          <div className="asr-failures-title">Failures ({failRows.length})</div>
+          {failRows.map((row, i) => (
+            <div key={i} className="asr-failure-row">
+              <div className="asr-failure-header">
+                <span className="asr-status-pill fail">❌</span>
+                <code className="asr-val-code">{row.tcId}</code>
+                <span className="asr-failure-prompt">{row.expectedConditions}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Parsers ─────────────────────────────────────────────────── */
+
+function parseAssertionSuiteContent(content) {
+  if (!content) return null
+  const headerMatch = content.match(
+    /^#\s+NL Assertion Suite\s*[—\-–]\s*(.+?)\s*[—\-–]\s*[✅❌]\s*(\d+)\/(\d+)\s+PASS\s*[—\-–]\s*(.+)/m,
+  )
+  if (!headerMatch) return null
+
+  const suiteName = headerMatch[1].trim()
+  const passCount = parseInt(headerMatch[2], 10)
+  const total = parseInt(headerMatch[3], 10)
+  const verdict = headerMatch[4].trim()
+
+  const rows = []
+  const lines = content.split('\n')
+  let inTable = false
+  let pastSep = false
+
+  for (const line of lines) {
+    if (!inTable && /^\|\s*#\s*\|\s*Status/i.test(line)) { inTable = true; continue }
+    if (inTable && !pastSep && /^\|\s*-/.test(line)) { pastSep = true; continue }
+    if (inTable && pastSep) {
+      if (!line.trimStart().startsWith('|')) break
+      const cells = _mdCells(line)
+      if (cells.length < 6) continue
+      const sc = cells[1]
+      rows.push({
+        num: cells[0],
+        passed: (sc.includes('PASS') || sc.includes('✅')) && !sc.includes('ERROR'),
+        isError: sc.includes('ERROR'),
+        status: sc.replace(/[✅❌⚠]/gu, '').trim(),
+        prompt: cells[2],
+        primaryCheck: cells[3],
+        expected: cells[4].replace(/`/g, '').trim(),
+        actual: cells[5].replace(/`/g, '').trim(),
+      })
+    }
+  }
+
+  return { suiteName, passCount, total, allPass: passCount === total, verdict, rows }
+}
+
+function parseUwBatchContent(content) {
+  if (!content) return null
+  const headerMatch = content.match(/^#\s+UW(?:\s+API)?\s+Batch\s*[—\-–]\s*(\d+)\/(\d+)\s+PASS/m)
+  if (!headerMatch) return null
+
+  const passCount = parseInt(headerMatch[1], 10)
+  const total = parseInt(headerMatch[2], 10)
+
+  const rows = []
+  const lines = content.split('\n')
+  let inTable = false
+  let pastSep = false
+
+  for (const line of lines) {
+    if (!inTable && /^\|\s*TC_ID\s*\|\s*Status/i.test(line)) { inTable = true; continue }
+    if (inTable && !pastSep && /^\|\s*-/.test(line)) { pastSep = true; continue }
+    if (inTable && pastSep) {
+      if (!line.trimStart().startsWith('|')) break
+      const cells = _mdCells(line)
+      if (cells.length < 4) continue
+      const sc = cells[1]
+      rows.push({
+        tcId: cells[0].replace(/`/g, '').trim(),
+        passed: (sc.includes('PASS') || sc.includes('✅')) && !sc.includes('ERROR'),
+        isError: sc.includes('ERROR'),
+        status: sc.replace(/[✅❌⚠]/gu, '').trim(),
+        expectedConditions: cells[2].replace(/`/g, '').trim(),
+        page: cells[3].trim(),
+      })
+    }
+  }
+
+  return { passCount, total, allPass: passCount === total, rows }
+}
+
+function _mdCells(line) {
+  return line.split('|').map(c => c.trim()).filter((c, i, a) =>
+    !(i === 0 && c === '') && !(i === a.length - 1 && c === ''),
   )
 }
 

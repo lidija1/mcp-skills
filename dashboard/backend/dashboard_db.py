@@ -98,6 +98,208 @@ def init_db() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_executions_created_by ON executions(created_by)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_executions_created_at ON executions(created_at)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS saved_suites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                prompts_json TEXT NOT NULL DEFAULT '[]',
+                builder_json TEXT NOT NULL DEFAULT '{}',
+                shared_persona INTEGER NOT NULL DEFAULT 1,
+                created_by INTEGER,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_saved_suites_created_by ON saved_suites(created_by)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assertion_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                persona_description TEXT NOT NULL,
+                assertion_type TEXT NOT NULL,
+                expected_value REAL NOT NULL,
+                actual_value REAL,
+                operator TEXT NOT NULL,
+                tolerance_pct REAL NOT NULL DEFAULT 5.0,
+                passed INTEGER NOT NULL,
+                message TEXT NOT NULL DEFAULT '',
+                lob TEXT NOT NULL DEFAULT 'auto',
+                coverage_premiums_json TEXT NOT NULL DEFAULT '{}',
+                uw_conditions_json TEXT NOT NULL DEFAULT '[]',
+                persona_json TEXT NOT NULL DEFAULT '{}',
+                blocked INTEGER NOT NULL DEFAULT 0,
+                blocked_reason TEXT NOT NULL DEFAULT '',
+                run_id TEXT,
+                created_by INTEGER,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assertion_results_created_at ON assertion_results(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assertion_results_created_by ON assertion_results(created_by)")
+
+
+def save_suite(
+    name: str,
+    prompts: list[str],
+    builder: dict[str, Any],
+    shared_persona: bool = True,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    init_db()
+    now = time.time()
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO saved_suites (name, prompts_json, builder_json, shared_persona, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (name, _json(prompts), _json(builder), int(shared_persona), user_id, now),
+        )
+        row = conn.execute("SELECT * FROM saved_suites WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _row_to_suite(row)
+
+
+def list_suites(user_id: int | None = None) -> list[dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        if user_id is not None:
+            rows = conn.execute(
+                "SELECT * FROM saved_suites WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM saved_suites ORDER BY created_at DESC").fetchall()
+    return [_row_to_suite(r) for r in rows]
+
+
+def delete_suite(suite_id: int, user_id: int | None = None) -> bool:
+    init_db()
+    with connect() as conn:
+        row = conn.execute("SELECT created_by FROM saved_suites WHERE id = ?", (suite_id,)).fetchone()
+        if not row:
+            return False
+        owner = row["created_by"]
+        if user_id is not None and owner is not None and owner != user_id:
+            return False
+        conn.execute("DELETE FROM saved_suites WHERE id = ?", (suite_id,))
+    return True
+
+
+def _row_to_suite(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    data = dict(row)
+    return {
+        "id": data["id"],
+        "name": data["name"],
+        "prompts": _loads(data["prompts_json"], []),
+        "builder": _loads(data["builder_json"], {}),
+        "shared_persona": bool(data["shared_persona"]),
+        "created_by": data.get("created_by"),
+        "created_at": data["created_at"],
+    }
+
+
+def save_assertion_result(
+    persona_description: str,
+    assertion_type: str,
+    expected_value: float,
+    actual_value: float | None,
+    operator: str,
+    tolerance_pct: float,
+    passed: bool,
+    message: str = "",
+    lob: str = "auto",
+    coverage_premiums: dict[str, Any] | None = None,
+    uw_conditions: list[str] | None = None,
+    persona: dict[str, Any] | None = None,
+    blocked: bool = False,
+    blocked_reason: str = "",
+    run_id: str | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    init_db()
+    now = time.time()
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO assertion_results (
+                persona_description, assertion_type, expected_value, actual_value,
+                operator, tolerance_pct, passed, message, lob,
+                coverage_premiums_json, uw_conditions_json, persona_json,
+                blocked, blocked_reason, run_id, created_by, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                persona_description, assertion_type, expected_value, actual_value,
+                operator, tolerance_pct, int(passed), message, lob,
+                _json(coverage_premiums or {}), _json(uw_conditions or []), _json(persona or {}),
+                int(blocked), blocked_reason or "", run_id,
+                user_id, now,
+            ),
+        )
+        row = conn.execute("SELECT * FROM assertion_results WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _row_to_assertion_result(row)
+
+
+def list_assertion_results(user_id: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        if user_id is not None:
+            rows = conn.execute(
+                "SELECT * FROM assertion_results WHERE created_by = ? OR created_by IS NULL ORDER BY created_at DESC LIMIT ?",
+                (user_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM assertion_results ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    return [_row_to_assertion_result(r) for r in rows]
+
+
+def delete_assertion_result(result_id: int, user_id: int | None = None) -> bool:
+    init_db()
+    with connect() as conn:
+        row = conn.execute("SELECT created_by FROM assertion_results WHERE id = ?", (result_id,)).fetchone()
+        if not row:
+            return False
+        owner = row["created_by"]
+        if user_id is not None and owner is not None and owner != user_id:
+            return False
+        conn.execute("DELETE FROM assertion_results WHERE id = ?", (result_id,))
+    return True
+
+
+def _row_to_assertion_result(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    data = dict(row)
+    return {
+        "_type": "assert_flow",
+        "id": data["id"],
+        "persona_description": data["persona_description"],
+        "assertion_type": data["assertion_type"],
+        "expected_value": data["expected_value"],
+        "actual_value": data["actual_value"],
+        "operator": data["operator"],
+        "tolerance_pct": data["tolerance_pct"],
+        "passed": bool(data["passed"]),
+        "message": data["message"] or "",
+        "lob": data["lob"],
+        "coverage_premiums": _loads(data["coverage_premiums_json"], {}),
+        "uw_conditions": _loads(data["uw_conditions_json"], []),
+        "persona": _loads(data["persona_json"], {}),
+        "blocked": bool(data["blocked"]),
+        "blocked_reason": data["blocked_reason"] or "",
+        "run_id": data.get("run_id"),
+        "created_by": data.get("created_by"),
+        "created_at": data["created_at"],
+    }
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:

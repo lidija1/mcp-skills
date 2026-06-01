@@ -1,4 +1,4 @@
-"""Parse manager-friendly plain English into a deterministic API assertion spec."""
+"""Parse manager-friendly plain English into a deterministic UW test assertion spec."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ def parse_plain_english_api_assertion(prompt: str, lob: str = "auto") -> ApiAsse
     cfg = get_lob_config(lob)
     text = " ".join((prompt or "").split())
     if not text:
-        raise ValueError("Enter a plain-English API assertion request.")
+        raise ValueError("Enter a plain-English UW test request.")
 
     lower = text.lower()
     assertions: list[ApiAssertion] = []

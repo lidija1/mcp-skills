@@ -1,5 +1,5 @@
 """
-Read-only Graph RAG retrieval for dashboard Guidance mode.
+Read-only Graph RAG retrieval for dashboard Ask mode.
 
 This module reads graphify output and selected framework docs, ranks compact
 snippets against the user's question, and returns prompt context. It never
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,12 @@ _DOC_FILES = [
     "ui/steps/common/data_steps.py",
     "dashboard/README.md",
     "dashboard/DASHBOARD_GUIDE.md",
+    "dashboard/backend/chat/chat_router.py",
+    "dashboard/backend/chat/llm_provider.py",
+    "dashboard/backend/chat/tool_registry.py",
+    "dashboard/frontend/src/components/ChatPanel.jsx",
+    "mcp_tools/policy_flow_generator/persona_generator.py",
+    "mcp_tools/testdata_rag.py",
 ]
 
 _STOPWORDS = {
@@ -40,9 +48,12 @@ _STOPWORDS = {
 }
 
 _SYNONYMS = {
-    "chat": {"chat", "assistant", "message", "guidance", "ollama", "llm"},
-    "dashboard": {"dashboard", "fastapi", "react", "jobs", "panel"},
+    "ask": {"ask", "guidance", "read-only", "explain", "assistant"},
+    "chat": {"chat", "assistant", "message", "ask", "guidance", "streaming", "ollama", "llm"},
+    "dashboard": {"dashboard", "fastapi", "react", "jobs", "panel", "expanded"},
     "mcp": {"mcp", "tool", "tools", "registry", "dispatch"},
+    "provider": {"provider", "model", "openai", "deepseek", "ollama", "anthropic", "llm"},
+    "rag": {"rag", "graph", "graphify", "retrieval", "fts", "sqlite"},
     "workflow": {"workflow", "flow", "journey", "scenario", "feature", "steps"},
     "auto": {"auto", "personal", "driver", "vehicle"},
     "homeowner": {"homeowner", "home", "property"},
@@ -51,13 +62,39 @@ _SYNONYMS = {
     "page": {"page", "pages", "pom", "object", "basepage", "selector"},
     "fixture": {"fixture", "fixtures", "conftest", "pytest"},
     "data": {"data", "json", "testdata", "tc_id", "persona"},
+    "persona": {"persona", "profile", "generator", "catalog", "vehicle"},
 }
+
+
+def _graphify_query(question: str, budget: int = 3000) -> str:
+    """Run `graphify query` CLI and return its output as a context section."""
+    graph_json = _GRAPH_DIR / "graph.json"
+    if not graph_json.exists():
+        return ""
+    python = sys.executable
+    try:
+        result = subprocess.run(
+            [python, "-m", "graphify", "query", question, "--budget", str(budget),
+             "--graph", str(graph_json)],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            cwd=str(_PROJECT_ROOT),
+        )
+        output = (result.stdout or "").strip()
+        if output:
+            return "## Graphify Knowledge Graph\n" + output
+    except Exception:
+        pass
+    return ""
 
 
 def retrieve_framework_context(question: str, max_chars: int = 9000) -> str:
     terms = _expand_terms(_extract_terms(question))
     sections: list[str] = [
         _static_framework_facts(),
+        _current_chat_provider_context(),
+        _graphify_query(question),
         _doc_context(terms),
         _graph_json_context(terms),
         _graph_report_context(terms),
@@ -103,8 +140,32 @@ def _static_framework_facts() -> str:
         "- BasePage smart wrappers should be reused for Playwright interactions.",
         "- JSON test data under testdata/static/ is filtered by TC_ID.",
         "- Dashboard chat Tools mode executes only whitelisted registry tools.",
-        "- Dashboard Guidance mode is read-only and should explain, not execute.",
-        "- Main MCP-backed capabilities include policy flows, persona generation, UW audits, form intelligence, accessibility, and LOB recording.",
+        "- Dashboard chat Ask mode is read-only and should explain, not execute. It replaces the old Guidance label in the UI.",
+        "- Ask mode uses Graph RAG context plus the configured chat LLM provider; it can answer framework and general guidance questions but cannot run jobs.",
+        "- Ask mode supports streaming responses through /api/chat/ask/stream.",
+        "- The expanded chat UI hides the initial greeting, quick suggestion buttons, and send button; Enter still sends messages.",
+        "- The chat mode selector labels are Tools and Ask.",
+        "- Main chat tool capabilities include single policy runs, persona generation, persona variations, batch runs, UW audits, rule cases, custom UW boundaries, rule listing, full audits, UW test assertions, and premium/total-cost assertions.",
+        "- Persona generation can use OpenAI, DeepSeek, Anthropic, or Ollama providers and applies the Auto vehicle catalog when Auto data is generated.",
+        "- Fast test-data generation uses mcp_tools/testdata_rag.py: a local SQLite FTS RAG index over JSON test data, UW rules, dropdowns, selected docs, and Graphify output.",
+    ])
+
+
+def _current_chat_provider_context() -> str:
+    try:
+        from llm_provider import provider_status
+
+        status = provider_status(probe=False)
+    except Exception:
+        return ""
+
+    provider = status.get("provider") or "unknown"
+    model = status.get("model") or "unknown"
+    return "\n".join([
+        "## Current Chat Provider",
+        f"- provider: {provider}",
+        f"- model: {model}",
+        "- If asked who you are, identify as the dashboard Ask assistant powered by the current provider/model, not as Codex.",
     ])
 
 

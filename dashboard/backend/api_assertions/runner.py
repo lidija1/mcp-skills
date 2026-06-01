@@ -1,4 +1,4 @@
-"""Plain-English Auto API assertion runner."""
+"""Plain-English Auto UW assertion runner."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def run_plain_english_api_assertion(
                 fast_mode=spec.stage == "rate",
             )
         else:
-            raise NotImplementedError(f"API flow runner not implemented for LOB: {spec.lob!r}")
+            raise NotImplementedError(f"UW replay runner not implemented for LOB: {spec.lob!r}")
     finally:
         client.close()
 

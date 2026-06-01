@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { cleanDisplayText } from '../utils/text'
+import { api } from '../utils/api'
 
 export default function ReportModal({ job, onClose }) {
   const ref = useRef(null)
@@ -46,7 +47,12 @@ export default function ReportModal({ job, onClose }) {
   const duration = job.finished ? `${(job.finished - job.started).toFixed(2)}s` : 'Running'
 
   const isAssertionSuite = jobResult.includes('NL Assertion Suite')
-  const isUwBatch = jobResult.trimStart().startsWith('# UW API Batch')
+  const isUwBatch = /^#\s+UW(?:\s+API)?\s+Batch/.test(jobResult.trimStart())
+  const assertFlowData = useMemo(() => {
+    if (!jobResult.trimStart().startsWith('{')) return null
+    try { const p = JSON.parse(jobResult); return p._type === 'assert_flow' ? p : null } catch { return null }
+  }, [jobResult])
+  const isAssertFlow = Boolean(assertFlowData)
   const suiteData = useMemo(() => isAssertionSuite ? parseAssertionSuiteContent(jobResult) : null, [isAssertionSuite, jobResult])
   const uwBatchData = useMemo(() => isUwBatch ? parseUwBatchContent(jobResult) : null, [isUwBatch, jobResult])
 
@@ -75,7 +81,15 @@ export default function ReportModal({ job, onClose }) {
   const hasStructuredReport = Boolean(
     report.profileJson || report.steps.length || Object.keys(report.summary).length || report.aiInsights.length
   )
-  const isJson = job.status === 'done' && jobResult.trimStart().startsWith('{') && !hasStructuredReport
+  const isJson = job.status === 'done' && jobResult.trimStart().startsWith('{') && !hasStructuredReport && !isAssertFlow
+
+  const openAssertFlowJson = data => {
+    const jsonText = JSON.stringify(data?.persona || {}, null, 2)
+    const editor = window.open('', '_blank', 'width=980,height=760,resizable=yes,scrollbars=yes')
+    if (!editor) return
+    editor.document.write(buildJsonEditorDocument('Generated Persona JSON', jsonText))
+    editor.document.close()
+  }
   const isPersonaReport = Boolean(
     jobResult.includes('Generated Customer Profile') || jobResult.includes('Persona Variations')
   )
@@ -176,6 +190,12 @@ export default function ReportModal({ job, onClose }) {
                 View JSON
               </button>
             )}
+            {isAssertFlow && assertFlowData?.persona && (
+              <button onClick={withActionFeedback('view-json', () => openAssertFlowJson(assertFlowData))} className={reportActionClass('view-json')} type="button" title="View generated persona JSON">
+                <FileJson size={16} />
+                View JSON
+              </button>
+            )}
             <button onClick={withActionFeedback('copy', copyReport)} className={reportActionClass('copy')} type="button">
               <Copy size={16} />
               Copy
@@ -191,6 +211,8 @@ export default function ReportModal({ job, onClose }) {
             <AssertionSuiteReport data={suiteData} rawContent={jobResult} />
           ) : isUwBatch ? (
             <UwBatchReport data={uwBatchData} rawContent={jobResult} />
+          ) : isAssertFlow ? (
+            <AssertFlowReport data={assertFlowData} />
           ) : isError ? (
             <div className="report-state error">
               <div className="report-state-heading">
@@ -580,6 +602,168 @@ function UwRulesCarousel({ conditions }) {
   )
 }
 
+/* ─── Assert Flow Report ──────────────────────────────────────── */
+
+function AssertFlowReport({ data }) {
+  const [showDetails, setShowDetails] = useState(false)
+  const [explanation, setExplanation] = useState('')
+  const [explainLoading, setExplainLoading] = useState(false)
+  const [explainError, setExplainError] = useState('')
+
+  const opLabel = {
+    approx:       `approx ±${data.tolerance_pct != null ? Number(data.tolerance_pct).toFixed(0) : 5}%`,
+    equals:       'exact match',
+    eq:           'exact match',
+    gt:           'greater than',
+    greater_than: 'greater than',
+    lt:           'less than',
+    less_than:    'less than',
+  }[data.operator] || data.operator
+
+  const fmt = v =>
+    v !== null && v !== undefined
+      ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : 'N/A'
+
+  const handleExplain = useCallback(async () => {
+    if (explainLoading) return
+    setExplainLoading(true)
+    setExplainError('')
+    try {
+      const res = await api.explainAssertFlow(data)
+      setExplanation(res.explanation || '')
+    } catch (err) {
+      setExplainError(err.message || 'Explanation failed')
+    } finally {
+      setExplainLoading(false)
+    }
+  }, [data, explainLoading])
+
+  return (
+    <div className="af-report">
+      <div className="af-verdict-row">
+        <span className="af-verdict-label">{data.passed ? 'PASS' : 'FAIL'}</span>
+        <span className="af-assertion-kind">
+          {(data.assertion_type || '').replace('_', ' ')} assertion
+        </span>
+      </div>
+
+      <div className="af-prompt-block">
+        <div className="af-prompt-eyebrow">Tested persona</div>
+        <p className="af-prompt-text">{data.persona_description}</p>
+      </div>
+
+      <div className="af-summary-grid">
+        <div className="af-kv">
+          <span className="af-kv-label">Expected</span>
+          <span className="af-kv-value">{fmt(data.expected_value)}</span>
+        </div>
+        <div className="af-kv">
+          <span className="af-kv-label">Actual</span>
+          <span className="af-kv-value">{fmt(data.actual_value)}</span>
+        </div>
+        <div className="af-kv">
+          <span className="af-kv-label">Operator</span>
+          <span className="af-kv-value">{opLabel}</span>
+        </div>
+        {data.message && (
+          <div className="af-kv af-kv-wide">
+            <span className="af-kv-label">Detail</span>
+            <span className="af-kv-value">{data.message}</span>
+          </div>
+        )}
+      </div>
+
+      {data.blocked && (
+        <div className="af-blocked-notice">Blocked: {data.blocked_reason}</div>
+      )}
+
+      <div className="af-pill-row">
+        <button type="button" className="af-full-report-pill" onClick={() => setShowDetails(true)}>
+          Full Report
+        </button>
+        <button
+          type="button"
+          className={`af-explain-pill${explainLoading ? ' af-explain-pill--loading' : ''}`}
+          onClick={handleExplain}
+          disabled={explainLoading}
+        >
+          {explainLoading ? 'Thinking…' : explanation ? 'Re-explain' : 'Explain this'}
+        </button>
+      </div>
+
+      {(explanation || explainError) && (
+        <div className="af-explain-block">
+          <div className="af-explain-eyebrow">AI Analysis</div>
+          {explainError
+            ? <p className="af-explain-error">{explainError}</p>
+            : <p className="af-explain-text">{explanation}</p>
+          }
+        </div>
+      )}
+
+      {showDetails && (
+        <AssertFlowDetailsPanel data={data} onClose={() => setShowDetails(false)} />
+      )}
+    </div>
+  )
+}
+
+function AssertFlowDetailsPanel({ data, onClose }) {
+  const fmt = v =>
+    v !== null && v !== undefined
+      ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : 'N/A'
+
+  const coverageEntries = Object.entries(data.coverage_premiums || {})
+
+  return (
+    <div className="af-panel-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="af-panel">
+        <div className="af-panel-header">
+          <span className="af-panel-title">Full Report</span>
+          <button type="button" className="af-panel-close" onClick={onClose} aria-label="Close details">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="af-panel-body">
+          {coverageEntries.length > 0 && (
+            <section className="af-panel-section">
+              <div className="af-panel-section-title">Coverage Premiums</div>
+              <table className="af-coverage-table">
+                <thead>
+                  <tr><th>Coverage</th><th>Premium</th></tr>
+                </thead>
+                <tbody>
+                  {coverageEntries.map(([cov, prem]) => (
+                    <tr key={cov}><td>{cov}</td><td>{fmt(prem)}</td></tr>
+                  ))}
+                  {data.actual_value !== null && data.actual_value !== undefined && (
+                    <tr className="af-coverage-total"><td>Total</td><td>{fmt(data.actual_value)}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {data.uw_conditions?.length > 0 && (
+            <section className="af-panel-section">
+              <div className="af-panel-section-title">UW Conditions</div>
+              <ul className="af-uw-list">
+                {data.uw_conditions.map((c, i) => <li key={i}>{c}</li>)}
+              </ul>
+            </section>
+          )}
+
+          {!coverageEntries.length && !data.uw_conditions?.length && (
+            <p className="af-panel-empty">No additional details available.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Parsers ─────────────────────────────────────────────────── */
 
 function parsePolicyFlowReport(content) {
@@ -626,7 +810,7 @@ function parsePolicyFlowReport(content) {
       ? extractProfileJson(c(0))
       : ''
 
-  // Fallback: extract any embedded ```json blocks (e.g. persona JSON in API assertion suite failure sections)
+  // Fallback: extract any embedded ```json blocks (e.g. persona JSON in UW test failure sections)
   if (!profileJson && !isVariations && !hasProfileChunk) {
     const embeddedBlocks = extractAllProfileJson(normalized)
     if (embeddedBlocks.length === 1) {
@@ -1338,7 +1522,7 @@ function UwBatchReport({ data, rawContent }) {
   return (
     <div className="asr-report">
       <div className="asr-title-line">
-        <h1 className="asr-title">UW API Batch Test</h1>
+        <h1 className="asr-title">UW Batch Test</h1>
         <span className={`asr-verdict-badge ${allPass ? 'pass' : 'fail'}`}>
           {allPass ? '✅' : '❌'} {passCount}/{total} PASS {allPass ? '— ALL PASS' : `— ${total - passCount} FAIL`}
         </span>
@@ -1437,7 +1621,7 @@ function parseAssertionSuiteContent(content) {
 
 function parseUwBatchContent(content) {
   if (!content) return null
-  const headerMatch = content.match(/^#\s+UW API Batch\s*[—\-–]\s*(\d+)\/(\d+)\s+PASS/m)
+  const headerMatch = content.match(/^#\s+UW(?:\s+API)?\s+Batch\s*[—\-–]\s*(\d+)\/(\d+)\s+PASS/m)
   if (!headerMatch) return null
 
   const passCount = parseInt(headerMatch[1], 10)

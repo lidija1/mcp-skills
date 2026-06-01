@@ -1,4 +1,4 @@
-"""Compact markdown formatter for plain-English API assertion reports."""
+"""Compact markdown formatter for plain-English UW test assertion reports."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ def format_api_assertion_report(result: ApiAssertionRunResult) -> str:
     flow = result.flow_result
     primary = result.findings[0] if result.findings else None
     lines = [
-        f"# API Test Result - {status}",
+        f"# UW Test Result - {status}",
         "",
         f"**Status:** {status}",
         "",

@@ -149,6 +149,17 @@ def _vehicle_constraint_text(vehicle: dict, plural: bool = False) -> str:
     )
 
 
+def _apply_vehicle_from_catalog(persona: dict, vehicle: dict | None) -> dict:
+    """Force generated auto vehicle fields to match the local vehicle catalog."""
+    if not vehicle:
+        return persona
+    persona["Year"] = str(vehicle["Year"])
+    persona["Make"] = str(vehicle["Make"])
+    persona["Model"] = str(vehicle["Model"])
+    persona["Spec"] = str(vehicle["Spec"])
+    return persona
+
+
 def _ollama_base_url() -> str:
     base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip().rstrip("/")
     if base.endswith("/v1"):
@@ -251,6 +262,8 @@ def _generate_persona_variations_with_ollama(
 
 _ANTHROPIC_MODEL = "claude-opus-4-6"
 _OPENAI_MODEL = "gpt-4o"
+_DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+_DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 _OLLAMA_BASE_URL = "http://localhost:11434/v1"
 _OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 
@@ -258,12 +271,14 @@ _OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 def _detect_provider() -> str:
     """Return 'anthropic', 'openai', 'ollama', or 'none'."""
     forced = os.getenv("AI_PROVIDER", "").lower().strip()
-    if forced in ("anthropic", "openai", "ollama"):
+    if forced in ("anthropic", "openai", "deepseek", "ollama"):
         return forced
     if os.getenv("ANTHROPIC_API_KEY"):
         return "anthropic"
     if os.getenv("OPENAI_API_KEY"):
         return "openai"
+    if os.getenv("DEEPSEEK_API_KEY"):
+        return "deepseek"
     return "none"
 
 # ---------------------------------------------------------------------------
@@ -1265,6 +1280,24 @@ def generate_persona(lob: str, description: str) -> str:
             )
             raw = response.choices[0].message.content.strip()
 
+        elif provider == "deepseek":
+            import openai as _openai
+            client = _openai.OpenAI(
+                api_key=os.getenv("DEEPSEEK_API_KEY"),
+                base_url=_DEEPSEEK_BASE_URL,
+            )
+            response = client.chat.completions.create(
+                model=_DEEPSEEK_MODEL,
+                max_tokens=1024,
+                temperature=0,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+            raw = response.choices[0].message.content.strip()
+
         elif provider == "ollama":
             return _generate_persona_with_ollama(lob, system_prompt, user_message, description)
 
@@ -1278,6 +1311,8 @@ def generate_persona(lob: str, description: str) -> str:
 
         parsed = _parse_model_json(raw)
         parsed = _normalize_model_persona(lob, parsed)
+        if lob == "auto":
+            _apply_vehicle_from_catalog(parsed, vehicle)
         parsed["_lob"] = lob
         parsed["_provider"] = provider
         _ensure_persona_type(lob, parsed, description)
@@ -1397,6 +1432,24 @@ def _generate_persona_variation_chunk(
             )
             raw = response.choices[0].message.content.strip()
 
+        elif provider == "deepseek":
+            import openai as _openai
+            client = _openai.OpenAI(
+                api_key=os.getenv("DEEPSEEK_API_KEY"),
+                base_url=_DEEPSEEK_BASE_URL,
+            )
+            response = client.chat.completions.create(
+                model=_DEEPSEEK_MODEL,
+                max_tokens=8192,
+                temperature=0,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+            raw = response.choices[0].message.content.strip()
+
         elif provider == "ollama":
             raw = _ollama_chat(system_prompt, user_message, max_tokens=8192)
 
@@ -1415,6 +1468,8 @@ def _generate_persona_variation_chunk(
         for idx, persona in enumerate(parsed):
             if isinstance(persona, dict):
                 persona = _normalize_model_persona(lob, persona)
+                if lob == "auto" and vehicles and idx < len(vehicles):
+                    _apply_vehicle_from_catalog(persona, vehicles[idx])
                 parsed[idx] = persona
                 persona["_lob"] = lob
                 persona["_provider"] = provider

@@ -22,6 +22,7 @@ venv/
 .env/
 # Pytest
 .pytest_cache/
+.cache/
 .coverage
 htmlcov/
 screenshots/
@@ -75,6 +76,8 @@ data/*.db
 data/*.db-*
 dashboard/backend/data/*.db
 dashboard/backend/data/*.db-*
+*.db-shm
+*.db-wal
 
 # Local diagnostics and destructive maintenance tests
 tools/debug_rating_columns.py

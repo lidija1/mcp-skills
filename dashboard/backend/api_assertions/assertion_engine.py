@@ -1,4 +1,4 @@
-"""Deterministic assertions over OneShield API replay results."""
+"""Deterministic assertions over OneShield replay results."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-import {Moon, Sun} from 'lucide-react'
+import {Circle, Moon, Sun} from 'lucide-react'
 
 const THEME_OPTIONS = [
     {
@@ -10,6 +10,11 @@ const THEME_OPTIONS = [
         value: 'dark',
         label: 'Dark',
         icon: Moon,
+    },
+    {
+        value: 'black',
+        label: 'Black',
+        icon: Circle,
     },
 ]
 

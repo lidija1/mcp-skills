@@ -41,8 +41,26 @@ Step 1 — Does the user want to generate persona data only (no browser run)?
       Extract count from words like "20 different", "15 variations", "give me 5", etc.
       Default count = 5 if not specified.
 
-Step 2 — Does the user want API-level assertions with expected vs actual values?
-  • Plain-English API assertion / expected premium / actual premium / assert value
+Step 2 — Does the user assert against a SPECIFIC DOLLAR AMOUNT ($ sign, "usd", or explicit number)?
+  • "assert premium is around $1,200" / "premium should be exactly $950" / "cost under $800"
+      → run_assert_flow  (params: persona_description, expected_value, operator, assertion_type, tolerance_pct)
+
+  operator mapping (choose the most specific match):
+    "around" / "approximately" / "~" / "within" / "about"  → "approx"
+    "exactly" / "equals" / "is exactly" / "="              → "equals"
+    "more than" / "exceeds" / "above" / "over" / ">"       → "gt"
+    "less than" / "under" / "below" / "<"                  → "lt"
+    default (no qualifier)                                  → "approx"
+
+  assertion_type:
+    "premium" / "rate" / "policy premium" (default)        → "premium"
+    "total cost" / "annual cost" / "full cost"             → "total_cost"
+
+  tolerance_pct: extract from "within N%" → N, default 5.0
+  persona_description: strip out assertion phrases and dollar amounts; keep only persona traits.
+
+Step 2a — Does the user want UW test assertions WITHOUT a specific dollar amount?
+  • Plain-English UW assertion / expected premium / actual premium / assert value
       → run_api_assertion  (params: prompt)
       Keep the user's full message as prompt.
 
@@ -92,8 +110,14 @@ EXAMPLES
 "give me 10 cyber profiles for a healthcare company"
 → {{"tool":"create_persona_variations","params":{{"lob":"cyber","base_description":"healthcare company cyber profile","count":10}},"reply":"Generating 10 healthcare cyber persona variations."}}
 
+"assert that a young male driver with Gold coverage premium is around $1,200"
+→ {{"tool":"run_assert_flow","params":{{"persona_description":"young male driver with Gold coverage","expected_value":1200.0,"operator":"approx","assertion_type":"premium","tolerance_pct":5.0}},"reply":"Asserting that premium for a young male Gold driver is ≈ $1,200 (±5%)."}}
+
+"assert premium for a retired driver with clean record is less than $800"
+→ {{"tool":"run_assert_flow","params":{{"persona_description":"retired driver with clean record","expected_value":800.0,"operator":"lt","assertion_type":"premium","tolerance_pct":5.0}},"reply":"Asserting that premium for a retired driver with clean record is < $800."}}
+
 "assert that for young driver premium for gold coverage is 1000 usd"
-→ {{"tool":"run_api_assertion","params":{{"prompt":"assert that for young driver premium for gold coverage is 1000 usd"}},"reply":"Running an Auto API assertion and I will report expected versus actual values."}}
+→ {{"tool":"run_api_assertion","params":{{"prompt":"assert that for young driver premium for gold coverage is 1000 usd"}},"reply":"Running an Auto UW test assertion and I will report expected versus actual values."}}
 
 "create a homeowner persona for a luxury coastal home"
 → {{"tool":"create_persona","params":{{"lob":"homeowner","description":"luxury coastal home homeowner"}},"reply":"Creating a homeowner persona for a luxury coastal home."}}
@@ -112,7 +136,7 @@ EXAMPLES
 """
 
 
-def parse_intent(message: str) -> dict:
+def parse_intent(message: str, history: list[dict] | None = None) -> dict:
     """
     Translate a natural-language message into:
       { "tool": str | None, "params": dict, "reply": str }
@@ -125,7 +149,7 @@ def parse_intent(message: str) -> dict:
         return api_assertion
 
     system = _SYSTEM_TEMPLATE.format(tools=registry_summary_for_prompt())
-    raw = complete_json(system=system, user=message, max_tokens=600)
+    raw = complete_json(system=system, user=message, max_tokens=600, history=history)
 
     # Strip markdown fences if the model wraps output anyway
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -158,10 +182,12 @@ def _api_assertion_intent(message: str) -> dict | None:
         word in lower
         for word in ("api", "premium", "price", "rate", "coverage", "uw referral", "underwriting referral")
     )
-    if has_assertion_word and has_api_subject:
+    # If a specific dollar amount is present, let the LLM route to run_assert_flow instead
+    has_dollar_amount = "$" in text or bool(re.search(r"\b\d[\d,]*(\.\d+)?\s*(usd|dollars?)\b", lower))
+    if has_assertion_word and has_api_subject and not has_dollar_amount:
         return {
             "tool": "run_api_assertion",
             "params": {"prompt": text},
-            "reply": "Running an Auto API assertion and I will report expected versus actual values.",
+            "reply": "Running an Auto UW test assertion and I will report expected versus actual values.",
         }
     return None

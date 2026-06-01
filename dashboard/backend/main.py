@@ -65,7 +65,6 @@ from mcp_tools.policy_flow_generator.persona_generator import generate_persona, 
 from mcp_tools.policy_flow_generator.result_formatter import format_batch_summary, format_result
 from dashboard.backend.api_assertions.formatter import format_api_assertion_report
 from dashboard.backend.api_assertions.runner import run_plain_english_api_assertion
-from mcp_tools.oneshield_qa.report_formatter import format_assertion_suite_report
 from mcp_tools.uw_rules_validator.report_formatter import format_audit_report, format_boundary_report
 from mcp_tools.uw_rules_validator.rule_registry import CASES_BY_LOB, CASES_BY_RULE, RULE_METADATA
 from mcp_tools.uw_rules_validator.validator import validate_case
@@ -362,22 +361,8 @@ class ApiAssertionReq(BaseModel):
     prompt: str
 
 
-class ApiAssertionSuiteReq(BaseModel):
-    prompts: list[str]
-    suite_name: str = "Suite"
-    shared_persona_prompt: str | None = None
 
 
-class SmartVariationsReq(BaseModel):
-    builder: dict
-    count: int = 3
-
-
-class SaveSuiteReq(BaseModel):
-    name: str
-    prompts: list[str]
-    builder: dict = {}
-    shared_persona: bool = True
 
 
 class ExplorerReq(BaseModel):
@@ -799,7 +784,7 @@ def api_plain_assert_ep(req: ApiAssertionReq, bg: BackgroundTasks, request: Requ
 
     user = user_from_request(request)
     jid = _new_job(
-        f"API Assertion - {prompt[:60]}",
+        f"UW Assertion - {prompt[:60]}",
         execution_type="api_assertion",
         created_by=(user or {}).get("id"),
         metadata={"lob": "auto", "lob_display": "Personal Auto", "prompt": prompt},
@@ -807,9 +792,9 @@ def api_plain_assert_ep(req: ApiAssertionReq, bg: BackgroundTasks, request: Requ
 
     def _run():
         try:
-            _status(jid, "Generating persona", "Personal Auto API assertion")
+            _status(jid, "Generating persona", "Personal Auto UW assertion")
             result = run_plain_english_api_assertion(prompt)
-            _status(jid, "Evaluating assertions", "Deterministic API evidence")
+            _status(jid, "Evaluating assertions", "Deterministic UW evidence")
             _done(jid, format_api_assertion_report(result))
         except Exception as e:
             import traceback
@@ -819,55 +804,208 @@ def api_plain_assert_ep(req: ApiAssertionReq, bg: BackgroundTasks, request: Requ
     return {"job_id": jid}
 
 
-@app.post("/api/api-tests/suite")
-def api_suite_ep(req: ApiAssertionSuiteReq, bg: BackgroundTasks, request: Request):
-    prompts = [p.strip() for p in req.prompts if p.strip()]
-    if not prompts:
-        raise HTTPException(status_code=400, detail="prompts list must not be empty.")
 
-    suite_name = req.suite_name.strip() or f"Suite ({len(prompts)} assertions)"
+# ── Smart Assertion endpoints ────────────────────────────────────────────────
+
+class CompareReq(BaseModel):
+    description_a: str
+    description_b: str
+    relations: list[str]
+    lob: str = "auto"
+    label_a: str = ""
+    label_b: str = ""
+
+
+class LadderReq(BaseModel):
+    base_description: str
+    dimension: str = "coverage"
+    lob: str = "auto"
+    assert_monotonic: bool = True
+
+
+class AiAssertReq(BaseModel):
+    persona_description: str
+    lob: str = "auto"
+
+
+
+
+class AssertFlowReq(BaseModel):
+    persona_description: str
+    assertion_type: str = "premium"
+    expected_value: float
+    operator: str = "approx"
+    tolerance_pct: float = 5.0
+    lob: str = "auto"
+
+
+@app.post("/api/api-tests/compare")
+def compare_ep(req: CompareReq, bg: BackgroundTasks, request: Request):
+    """Run two personas in parallel and assert relational properties between them."""
+    from dashboard.backend.api_assertions.comparative import run_comparative, SUPPORTED_RELATIONS
+
+    if not req.description_a.strip() or not req.description_b.strip():
+        raise HTTPException(status_code=400, detail="Both description_a and description_b are required.")
+    unknown = [r for r in req.relations if r not in SUPPORTED_RELATIONS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown relation(s): {unknown}")
+
     user = user_from_request(request)
+    label_a = req.label_a or req.description_a[:40]
+    label_b = req.label_b or req.description_b[:40]
     jid = _new_job(
-        f"API Suite - {suite_name}",
-        execution_type="api_suite",
+        f"Compare: {label_a[:30]} vs {label_b[:30]}",
+        execution_type="api_compare",
         created_by=(user or {}).get("id"),
-        metadata={
-            "lob": "auto",
-            "lob_display": "Personal Auto",
-            "suite_name": suite_name,
-            "prompt_count": len(prompts),
-        },
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
     )
 
     def _run():
-        shared_persona: dict | None = None
-        if req.shared_persona_prompt:
-            try:
-                _status(jid, "Generating shared persona", req.shared_persona_prompt[:80])
-                raw = generate_persona("auto", req.shared_persona_prompt)
-                parsed = json.loads(raw)
-                if "error" not in parsed:
-                    shared_persona = parsed
-            except Exception as exc:
-                _fail(jid, f"Shared persona generation failed: {exc}")
-                return
-
-        def _run_one(prompt: str) -> dict:
-            try:
-                result = run_plain_english_api_assertion(prompt, pre_generated_persona=shared_persona)
-                return {"prompt": prompt, "result": result, "error": None}
-            except Exception as exc:
-                return {"prompt": prompt, "result": None, "error": str(exc)[:200]}
-
         try:
-            batch_note = f"{len(prompts)} assertions · 6 parallel"
-            _status(jid, "Running assertions", batch_note)
-            ordered: list[dict] = [{}] * len(prompts)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-                futures = {pool.submit(_run_one, p): i for i, p in enumerate(prompts)}
-                for future in concurrent.futures.as_completed(futures):
-                    ordered[futures[future]] = future.result()
-            _done(jid, format_assertion_suite_report(suite_name, ordered, shared_persona=shared_persona))
+            _status(jid, "Running both personas", "UW replay · parallel")
+            result = run_comparative(
+                req.description_a, req.description_b,
+                relations=req.relations, lob=req.lob,
+                label_a=req.label_a, label_b=req.label_b,
+            )
+            status_str = "✅ PASS" if result.passed else "❌ FAIL"
+            lines = [
+                f"## Comparative Assertion — {status_str}",
+                "",
+                f"| | A: {result.label_a[:40]} | B: {result.label_b[:40]} |",
+                "|---|---|---|",
+                f"| Premium | {'${:,.2f}'.format(result.premium_a) if result.premium_a else 'N/A'} | {'${:,.2f}'.format(result.premium_b) if result.premium_b else 'N/A'} |",
+                f"| UW conditions | {len(result.uw_conditions_a)} | {len(result.uw_conditions_b)} |",
+                f"| Blocked | {result.blocked_a} | {result.blocked_b} |",
+                f"| Snapshot | `{result.run_id_a[:8]}…` | `{result.run_id_b[:8]}…` |",
+                "",
+                "### Findings",
+            ]
+            for f in result.findings:
+                icon = "✅" if f.passed else "❌"
+                msg = f" — {f.message}" if f.message else ""
+                lines.append(f"- {icon} `{f.relation}`{msg}")
+            if result.uw_conditions_a:
+                lines += ["", "**A UW conditions:**"]
+                for cond in result.uw_conditions_a[:3]:
+                    lines.append(f"  - {cond[:120]}")
+            if result.uw_conditions_b:
+                lines += ["", "**B UW conditions:**"]
+                for cond in result.uw_conditions_b[:3]:
+                    lines.append(f"  - {cond[:120]}")
+            _done(jid, "\n".join(lines))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+@app.post("/api/api-tests/ladder")
+def ladder_ep(req: LadderReq, bg: BackgroundTasks, request: Request):
+    """Sweep a dimension (coverage/employment/vehicle_use/license/ownership) and check ordering."""
+    from dashboard.backend.api_assertions.ladder import run_ladder as _run_ladder_fn, DIMENSION_VALUES
+
+    if not req.base_description.strip():
+        raise HTTPException(status_code=400, detail="base_description is required.")
+    if req.dimension.lower() not in DIMENSION_VALUES:
+        raise HTTPException(status_code=400, detail=f"Unknown dimension. Valid: {list(DIMENSION_VALUES)}")
+
+    user = user_from_request(request)
+    jid = _new_job(
+        f"Ladder: {req.dimension.title()} sweep",
+        execution_type="api_ladder",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto", "dimension": req.dimension},
+    )
+
+    def _run():
+        try:
+            _status(jid, f"Running {req.dimension} sweep", "UW replay · parallel")
+            result = _run_ladder_fn(
+                base_description=req.base_description,
+                dimension=req.dimension.lower(),
+                lob=req.lob,
+                assert_monotonic=req.assert_monotonic,
+            )
+            status_str = "✅ PASS" if result.passed else "❌ FAIL"
+            lines = [
+                f"## Dimension Ladder: {req.dimension.title()} — {status_str}",
+                f"Base: _{req.base_description}_",
+                "",
+                "| Value | Premium | UW Conditions | Blocked |",
+                "|---|---|---|---|",
+            ]
+            for rung in result.rungs:
+                if rung.error:
+                    lines.append(f"| {rung.value} | ERROR | — | — |")
+                else:
+                    p = f"${rung.premium:,.2f}" if rung.premium else "N/A"
+                    lines.append(f"| {rung.value} | {p} | {len(rung.uw_conditions)} | {rung.blocked} |")
+            if result.findings:
+                lines += ["", "### Ordering Assertions"]
+                for finding in result.findings:
+                    icon = "✅" if finding.passed else "❌"
+                    msg = f" — {finding.message}" if finding.message else ""
+                    lines.append(f"- {icon} {finding.label}{msg}")
+            _done(jid, "\n".join(lines))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+@app.post("/api/api-tests/ai-assert")
+def ai_assert_ep(req: AiAssertReq, bg: BackgroundTasks, request: Request):
+    """Run replay, ask AI to decide assertions, evaluate them."""
+    from dashboard.backend.api_assertions.ai_assert import run_ai_assert
+
+    if not req.persona_description.strip():
+        raise HTTPException(status_code=400, detail="persona_description is required.")
+
+    user = user_from_request(request)
+    jid = _new_job(
+        f"AI Assert - {req.persona_description[:55]}",
+        execution_type="api_ai_assert",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Running UW replay", "Extracting premium & UW data")
+            result = run_ai_assert(
+                persona_description=req.persona_description,
+                lob=req.lob,
+            )
+            _status(jid, "Evaluating AI assertions", f"{len(result['ai_suggestions'])} suggestions")
+            status_str = "✅ PASS" if result["passed"] else "❌ FAIL"
+            lines = [
+                f"## AI-Decided Assertions — {status_str}",
+                f"**Persona**: {req.persona_description}",
+                f"**Premium**: {'${:,.2f}'.format(result['premium']) if result['premium'] else 'N/A'}",
+                f"**UW conditions**: {len(result['uw_conditions'])}",
+                f"**Blocked**: {result['blocked']}",
+                "",
+                "### AI Suggestions & Results",
+            ]
+            for finding in result["findings"]:
+                icon = "✅" if finding["passed"] else "❌"
+                suggestion = finding.get("suggestion", "")
+                actual = finding.get("actual", "")
+                expected = finding.get("expected", "")
+                msg = finding.get("message", "")
+                lines.append(f"- {icon} _{suggestion}_")
+                if actual is not None and actual != "":
+                    lines.append(f"  - actual: `{actual}` · expected: `{expected}`")
+                if msg:
+                    lines.append(f"  - _{msg}_")
+            if not result["findings"]:
+                lines.append("_(no assertions evaluated)_")
+            _done(jid, "\n".join(lines))
         except Exception as exc:
             import traceback
             _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
@@ -877,118 +1015,279 @@ def api_suite_ep(req: ApiAssertionSuiteReq, bg: BackgroundTasks, request: Reques
 
 
 
-@app.post("/api/api-tests/smart-variations")
-def smart_variations_ep(req: SmartVariationsReq):
-    """Ask AI to suggest UW boundary variations. Uses AI_PROVIDER env (anthropic/openai/ollama)."""
-    count = max(1, min(20, req.count or 3))
+@app.post("/api/api-tests/assert-flow")
+def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
+    """Run a structured UW assertion: persona → OneShield replay → PASS/FAIL against expected value."""
+    from mcp_tools.smart_assertions.server import (
+        STOP_AFTER, VALID_OPERATORS, _total_premium, _total_cost,
+        _coverage_premiums, _uw_conditions, _build_snapshot, _assert, _fmt_assert,
+    )
+    from mcp_tools.policy_flow_generator.persona_generator import generate_persona
+    from api_tests.oneshield_api_replay import OneShieldApiReplay
+    import json as _json
+
+    if not req.persona_description.strip():
+        raise HTTPException(status_code=400, detail="persona_description is required.")
+    if req.assertion_type not in STOP_AFTER:
+        raise HTTPException(status_code=400, detail=f"Invalid assertion_type. Valid: {sorted(STOP_AFTER)}")
+    if req.operator not in VALID_OPERATORS:
+        raise HTTPException(status_code=400, detail=f"Invalid operator. Valid: {sorted(VALID_OPERATORS)}")
+
+    op_label = f"≈±{req.tolerance_pct:.0f}%" if req.operator == "approx" else req.operator
+    user = user_from_request(request)
+    jid = _new_job(
+        f"Assert {req.assertion_type} {op_label} ${req.expected_value:,.2f} — {req.persona_description[:40]}",
+        execution_type="api_assert_flow",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Generating persona", req.persona_description[:60])
+            persona_raw = generate_persona(req.lob, req.persona_description)
+            persona = _json.loads(persona_raw)
+            if "error" in persona:
+                _fail(jid, f"Persona generation failed: {persona['error']}")
+                return
+
+            _status(jid, "Running UW replay", f"stop_after={STOP_AFTER[req.assertion_type]}")
+            client = OneShieldApiReplay()
+            try:
+                flow = client.run_captured_auto_flow(
+                    persona, stop_after=STOP_AFTER[req.assertion_type], fast_mode=False
+                )
+            finally:
+                client.close()
+
+            snap = _build_snapshot(req.persona_description, persona, flow, req.assertion_type, req.lob)
+            actual = snap.total_premium if req.assertion_type == "premium" else snap.total_cost
+            passed, message = _assert(actual, req.expected_value, req.operator, req.tolerance_pct)
+            import dashboard.backend.dashboard_db as _db
+            saved = _db.save_assertion_result(
+                persona_description=req.persona_description,
+                assertion_type=req.assertion_type,
+                expected_value=req.expected_value,
+                actual_value=actual,
+                operator=req.operator,
+                tolerance_pct=req.tolerance_pct,
+                passed=passed,
+                message=message,
+                lob=req.lob,
+                coverage_premiums=snap.coverage_premiums,
+                uw_conditions=snap.uw_conditions,
+                persona=snap.persona,
+                blocked=snap.blocked,
+                blocked_reason=snap.blocked_reason,
+                run_id=snap.run_id,
+                user_id=(user or {}).get("id"),
+            )
+            result_payload = {
+                "_type": "assert_flow",
+                "id": saved["id"],
+                "created_at": saved["created_at"],
+                "passed": passed,
+                "message": message,
+                "assertion_type": req.assertion_type,
+                "expected_value": req.expected_value,
+                "actual_value": actual,
+                "operator": req.operator,
+                "tolerance_pct": req.tolerance_pct,
+                "persona_description": req.persona_description,
+                "lob": req.lob,
+                "coverage_premiums": snap.coverage_premiums,
+                "uw_conditions": snap.uw_conditions,
+                "blocked": snap.blocked,
+                "blocked_reason": snap.blocked_reason,
+                "run_id": snap.run_id,
+                "persona": snap.persona,
+            }
+            _done(jid, _json.dumps(result_payload))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+class RegressionSweepReq(BaseModel):
+    baseline_description: str
+    lob: str = "auto"
+    focus: str | None = None
+
+
+@app.post("/api/api-tests/regression-sweep")
+def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: Request):
+    """AI-driven premium regression sweep: generate variants → parallel replay → rule + AI assertions."""
+    from dashboard.backend.api_assertions.regression_sweep import run_sweep
+
+    if not req.baseline_description.strip():
+        raise HTTPException(status_code=400, detail="baseline_description is required.")
+
+    user = user_from_request(request)
+    focus_label = f" [{req.focus}]" if req.focus else ""
+    jid = _new_job(
+        f"Regression Sweep{focus_label} — {req.baseline_description[:50]}",
+        execution_type="regression_sweep",
+        created_by=(user or {}).get("id"),
+        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+    )
+
+    def _run():
+        try:
+            _status(jid, "Generating variant list", "AI phase 1")
+            sweep = run_sweep(req.baseline_description, lob=req.lob, focus=req.focus)
+            _status(jid, "Analyzing results", "AI phase 4")
+            status_str = "✅ ALL PASS" if sweep.passed else f"❌ {sweep.fail_count} FAILED"
+            base_str = f"${sweep.baseline_premium:,.2f}" if sweep.baseline_premium else "N/A"
+            lines = [
+                f"## Regression Sweep — {status_str}",
+                f"**Baseline:** {sweep.baseline_description}",
+                f"**Baseline premium:** {base_str}",
+                f"**Variants:** {len(sweep.results)} | ✅ {sweep.pass_count}  ❌ {sweep.fail_count}",
+                "",
+            ]
+            cats = [("risk_adding", "RISK ADDING"), ("ladder", "LADDER"), ("discount", "DISCOUNTS"), ("hard_stop", "HARD STOPS")]
+            for cat_key, cat_label in cats:
+                cat_results = [r for r in sweep.results if r.variant.category == cat_key]
+                if not cat_results:
+                    continue
+                lines.append(f"### {cat_label}")
+                lines += ["| Variant | Premium | Delta | Result |", "|---|---|---|---|"]
+                for r in cat_results:
+                    if r.error:
+                        lines.append(f"| {r.variant.label} | — | — | ❌ `{r.error[:40]}` |")
+                        continue
+                    actual = f"${r.actual_premium:,.2f}" if r.actual_premium else ("blocked" if r.blocked else "N/A")
+                    delta = f"{r.delta_pct:+.1f}%" if r.delta_pct is not None else "—"
+                    ok = "✅" if r.passed else f"❌ {r.message[:60]}" if r.message else "❌"
+                    lines.append(f"| {r.variant.label} | {actual} | {delta} | {ok} |")
+                lines.append("")
+            if sweep.analysis:
+                a = sweep.analysis
+                lines.append("### AI Analysis")
+                for p in a.patterns:
+                    lines.append(f"- {p}")
+                if a.root_causes:
+                    lines.append("")
+                    lines.append("**Root causes:**")
+                    for c in a.root_causes:
+                        lines.append(f"- {c}")
+                if a.follow_up_variants:
+                    lines.append("")
+                    lines.append("**Suggested follow-ups:**")
+                    for v in a.follow_up_variants:
+                        lines.append(f"- **{v.label}** — expected `{v.expected_direction}`")
+            _done(jid, "\n".join(lines))
+        except Exception as exc:
+            import traceback
+            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+    bg.add_task(_run)
+    return {"job_id": jid}
+
+
+@app.get("/api/api-tests/results")
+def list_assertion_results_ep(request: Request):
+    """Return all saved assertion results for the current user, newest first."""
+    import dashboard.backend.dashboard_db as _db
+    user = user_from_request(request)
+    results = _db.list_assertion_results(user_id=(user or {}).get("id"))
+    return {"results": results}
+
+
+@app.delete("/api/api-tests/results/{result_id}")
+def delete_assertion_result_ep(result_id: int, request: Request):
+    """Delete a saved assertion result by id."""
+    import dashboard.backend.dashboard_db as _db
+    user = user_from_request(request)
+    deleted = _db.delete_assertion_result(result_id, user_id=(user or {}).get("id"))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Result not found or not authorized.")
+    return {"deleted": result_id}
+
+
+class ExplainAssertFlowReq(BaseModel):
+    persona_description: str
+    lob: str = "auto"
+    coverage_premiums: dict = {}
+    uw_conditions: list = []
+    actual_value: float | None = None
+    expected_value: float | None = None
+    assertion_type: str = "total_premium"
+    operator: str = "approx"
+    tolerance_pct: float = 5.0
+    passed: bool | None = None
+
+
+@app.post("/api/api-tests/explain")
+def explain_assert_flow_ep(req: ExplainAssertFlowReq):
+    """Call the AI to explain an assert_flow result in plain business language."""
+    cov_lines = "\n".join(
+        f"  {k}: ${v:,.2f}" for k, v in (req.coverage_premiums or {}).items()
+    ) or "  (none)"
+    uw_lines = "\n".join(f"  - {c}" for c in (req.uw_conditions or [])) or "  (none)"
+    verdict = "PASS" if req.passed else ("FAIL" if req.passed is False else "N/A")
+    actual_str = f"${req.actual_value:,.2f}" if req.actual_value is not None else "N/A"
+    expected_str = f"${req.expected_value:,.2f}" if req.expected_value is not None else "N/A"
 
     system = (
-        "You are a QA engineer writing insurance API test variations.\n"
-        "Given a base driver profile, generate distinct test cases targeting different UW rules.\n"
-        "Return JSON only: {\"variations\": [{\"title\": str, \"prompt\": str}, ...]}\n"
-        "Each prompt must be a complete plain-English assertion:\n"
-        "  'Generate Auto persona for <driver details> and assert <assertion>.'\n"
-        "Vary the risk profile meaningfully — SR-22, license status, age, coverage tier.\n"
-        "Return only the JSON object — no markdown fences, no explanation, no <think> tags."
+        "You are a senior insurance pricing analyst. "
+        "Answer in 4–6 concise business sentences. "
+        "No bullet points, no markdown, no headers — plain flowing prose only. "
+        "Focus on: what drives this premium, what each UW condition means for the risk, "
+        "and what one realistic change to the persona would most move the premium."
     )
     user_msg = (
-        f"Base profile:\n{json.dumps(req.builder, indent=2)}\n\n"
-        f"Generate {count} distinct UW boundary test variations as plain-English assertion prompts."
+        f"LOB: {req.lob}\n"
+        f"Persona: {req.persona_description}\n\n"
+        f"Coverage premiums:\n{cov_lines}\n\n"
+        f"Total premium: {actual_str}\n"
+        f"Assertion: {req.assertion_type} expected {expected_str} — {verdict}\n\n"
+        f"UW conditions triggered:\n{uw_lines}\n\n"
+        "Explain this result in plain business language."
     )
 
-    # Provider detection: AI_PROVIDER env wins; then key presence; then local Ollama.
-    forced = os.getenv("AI_PROVIDER", "").lower().strip()
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    if forced == "anthropic" or (not forced and anthropic_key):
-        provider = "anthropic"
-    elif forced == "openai" or (not forced and openai_key):
-        provider = "openai"
-    else:
-        provider = "ollama"
+    provider = os.environ.get("AI_PROVIDER", "")
+    if not provider:
+        provider = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "openai"
 
     try:
-        raw = ""
         if provider == "anthropic":
             import anthropic as _anthropic
-            client = _anthropic.Anthropic(api_key=anthropic_key)
-            msg = client.messages.create(
-                model="claude-opus-4-6",
-                max_tokens=1024,
+            client = _anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001", max_tokens=400,
                 system=system,
                 messages=[{"role": "user", "content": user_msg}],
             )
-            raw = msg.content[0].text.strip()
-        elif provider == "openai":
-            import openai as _openai
-            client = _openai.OpenAI(api_key=openai_key)
-            resp = client.chat.completions.create(
-                model="gpt-4o",
-                max_tokens=1024,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_msg},
-                ],
-                temperature=0.7,
-            )
-            raw = resp.choices[0].message.content.strip()
+            explanation = resp.content[0].text.strip()
         else:
             import openai as _openai
-            ollama_model = os.getenv("PARSER_OLLAMA_MODEL", os.getenv("OLLAMA_BASE_MODEL", "qwen3:8b"))
-            ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-            client = _openai.OpenAI(api_key="ollama", base_url=ollama_url)
+            client = _openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
             resp = client.chat.completions.create(
-                model=ollama_model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_msg},
-                ],
-                temperature=0.7,
+                model="gpt-4o-mini",
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": user_msg}],
+                temperature=0.3, max_tokens=400,
             )
-            raw = resp.choices[0].message.content.strip()
-
-        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-        raw = re.sub(r"^```[^\n]*\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
-        data = json.loads(raw)
-        return {"variations": data.get("variations", [])}
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail=f"Model returned invalid JSON: {exc}")
+            explanation = resp.choices[0].message.content.strip()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=f"AI explain failed: {exc}")
+
+    return {"explanation": explanation}
 
 
-# ── Saved Suites ──────────────────────────────────────────────────────────────
-@app.get("/api/suites")
-def list_suites_ep(request: Request):
-    user = user_from_request(request)
-    uid = (user or {}).get("id")
-    suites = dashboard_db.list_suites(user_id=uid)
-    return {"suites": suites}
+@app.get("/api/api-tests/snapshot/{run_id}")
+def get_snapshot_ep(run_id: str):
+    """Retrieve a cached replay snapshot by run_id (valid 1 hour)."""
+    from dashboard.backend.api_assertions.snapshot import snapshot_store
+    entry = snapshot_store.get(run_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Snapshot not found or expired.")
+    return entry.as_dict()
 
 
-@app.post("/api/suites")
-def save_suite_ep(req: SaveSuiteReq, request: Request):
-    name = req.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Suite name is required.")
-    prompts = [p.strip() for p in req.prompts if p.strip()]
-    if not prompts:
-        raise HTTPException(status_code=400, detail="At least one prompt is required.")
-    user = user_from_request(request)
-    uid = (user or {}).get("id")
-    suite = dashboard_db.save_suite(name, prompts, req.builder, req.shared_persona, user_id=uid)
-    return suite
-
-
-@app.delete("/api/suites/{suite_id}")
-def delete_suite_ep(suite_id: int, request: Request):
-    user = user_from_request(request)
-    uid = (user or {}).get("id")
-    deleted = dashboard_db.delete_suite(suite_id, user_id=uid)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Suite not found or not yours.")
-    return {"deleted": suite_id}
 
 
 def _empty_result(lob: str, error: str) -> dict:

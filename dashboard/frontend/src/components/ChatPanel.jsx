@@ -2,21 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../utils/api'
-import { Bot, SendHorizonal, User, CheckCircle2, XCircle } from 'lucide-react'
-
-const SUGGESTIONS = [
-  'Run a quick auto test for a young driver',
-  'Generate a homeowner profile',
-  'List all UW rules',
-  'Audit cyber underwriting rules',
-]
-
-const GUIDANCE_SUGGESTIONS = [
-  'Explain how Tools mode is restricted',
-  'How do I add a new policy workflow?',
-  'Help me improve auto test data',
-  'Why would a UW audit fail?',
-]
+import { cleanDisplayText } from '../utils/text'
+import { Bot, ChevronDown, ExternalLink, SendHorizonal, User, CheckCircle2, XCircle, Loader, Plus, RotateCcw } from 'lucide-react'
 
 function BotBubble({ text }) {
   return (
@@ -40,13 +27,77 @@ function UserBubble({ text }) {
   )
 }
 
-function JobBadge({ jobId, label }) {
+function JobResultBubble({ jobId, label, job, onOpenReport }) {
+  if (!job || job.status === 'running') {
+    return (
+      <div className="chat-job-badge">
+        <Loader size={13} className="chat-job-spinner" />
+        <span>Running — <em>{label}</em></span>
+      </div>
+    )
+  }
+
+  if (job.status === 'error') {
+    return (
+      <div className="chat-job-result chat-job-result--error">
+        <div className="chat-job-result-header">
+          <XCircle size={14} />
+          <span className="chat-job-result-label">{label}</span>
+          <span className="chat-job-result-badge error">Failed</span>
+        </div>
+        <pre className="chat-job-result-error">{job.error}</pre>
+      </div>
+    )
+  }
+
+  const result = cleanDisplayText(job.result || '')
+  const assertFlowData = parseAssertFlowResult(result)
+
   return (
-    <div className="chat-job-badge">
-      <CheckCircle2 size={14} />
-      <span>Job <code>{jobId}</code> started — <em>{label}</em></span>
+    <div className="chat-job-result">
+      <div className="chat-job-result-header">
+        <CheckCircle2 size={14} />
+        <span className="chat-job-result-label">{label}</span>
+        <span className="chat-job-result-badge success">Completed</span>
+        {onOpenReport && (
+          <button
+            type="button"
+            className="chat-job-open-btn"
+            onClick={() => onOpenReport(job)}
+          >
+            <ExternalLink size={11} /> Full report
+          </button>
+        )}
+      </div>
+      {assertFlowData ? (
+        <div className={`chat-inline-af ${assertFlowData.passed ? 'pass' : 'fail'}`}>
+          <span className="chat-inline-af-verdict">{assertFlowData.passed ? 'PASS' : 'FAIL'}</span>
+          <span className="chat-inline-af-type">
+            {(assertFlowData.assertion_type || '').replace('_', ' ')} assertion
+          </span>
+          {assertFlowData.message && (
+            <span className="chat-inline-af-msg">{assertFlowData.message}</span>
+          )}
+        </div>
+      ) : (
+        <div className="chat-job-result-body">
+          <div className="chat-table-wrap">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{result}</ReactMarkdown>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+function parseAssertFlowResult(text) {
+  if (!text.trimStart().startsWith('{')) return null
+  try {
+    const p = JSON.parse(text)
+    return p._type === 'assert_flow' ? p : null
+  } catch {
+    return null
+  }
 }
 
 function ConfirmCard({ toolCall, reply, onConfirm, onCancel }) {
@@ -77,15 +128,42 @@ function TypingIndicator() {
   )
 }
 
-export default function ChatPanel({ onJobDispatched }) {
+const TOOL_SUGGESTIONS = [
+  'run a quick auto test for a young male driver',
+  'run an auto policy flow for a married couple with two vehicles',
+  'run a homeowner policy flow for a coastal property with prior losses',
+  'run a cyber policy flow for a healthcare company',
+  'create an auto persona for a driver with SR-22 and revoked license',
+  'create a homeowner persona for a luxury coastal home',
+  'create a cyber persona for a small tech startup',
+  'generate 5 auto persona variations for high-risk young drivers',
+  'generate 10 homeowner personas for coastal properties with prior losses',
+  'generate 5 cyber personas for manufacturing companies',
+  'assert that a young male driver with Gold coverage premium is around $1,200',
+  'assert that a retired driver with clean record premium is less than $800',
+  'assert that a married homeowner with no claims total cost is under $2,000',
+  'run batch: young auto driver and retired homeowner',
+  'run batch: coastal homeowner and tech startup cyber',
+  'list all underwriting rules',
+  'audit auto underwriting rules',
+  'audit homeowner underwriting rules',
+  'audit cyber underwriting rules',
+  'run a full audit of all underwriting rules',
+]
+
+export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, expanded = false }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [streaming, setStreaming] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState(null)
-  const [mode, setMode] = useState('tools')
+  const [mode, setMode] = useState(() => localStorage.getItem('chat_mode') || 'guidance')
+  const [acSuggestions, setAcSuggestions] = useState([])
+  const [acIndex, setAcIndex] = useState(-1)
+  const [inputFocused, setInputFocused] = useState(false)
   const threadRef = useRef(null)
 
-  useEffect(() => {
+  const loadGreeting = useCallback(() => {
     api.chatGreeting()
       .then(data => {
         if (data.greeting) {
@@ -98,6 +176,17 @@ export default function ChatPanel({ onJobDispatched }) {
   }, [])
 
   useEffect(() => {
+    loadGreeting()
+  }, [loadGreeting])
+
+  const startNewChat = useCallback(() => {
+    setInput('')
+    setPendingConfirm(null)
+    setLoading(false)
+    loadGreeting()
+  }, [loadGreeting])
+
+  useEffect(() => {
     if (threadRef.current) {
       threadRef.current.scrollTop = threadRef.current.scrollHeight
     }
@@ -107,11 +196,40 @@ export default function ChatPanel({ onJobDispatched }) {
     setMessages(prev => [...prev, { role: 'bot', text, ...extra }])
   }, [])
 
+  useEffect(() => {
+    const trimmed = input.trim()
+    if (mode !== 'tools' || trimmed.length < 2 || !inputFocused) {
+      setAcSuggestions([])
+      return
+    }
+    const words = trimmed.toLowerCase().split(/\s+/)
+    setAcSuggestions(
+      TOOL_SUGGESTIONS.filter(s => words.every(w => s.includes(w))).slice(0, 6)
+    )
+  }, [input, mode, inputFocused])
+
+  useEffect(() => { setAcIndex(-1) }, [acSuggestions])
+
+  const selectSuggestion = useCallback((s) => {
+    setInput(s)
+    setAcSuggestions([])
+    setInputFocused(false)
+  }, [])
+
+  const buildHistory = (msgs) =>
+    msgs
+      .filter(m => m.text && !m.confirm)
+      .slice(-10)
+      .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text.slice(0, 800) }))
+
   const send = useCallback(async (userText, confirmedTool = null, confirmedParams = null) => {
     if (loading) return
 
     const trimmed = (userText || '').trim()
     if (!trimmed && !confirmedTool) return
+
+    // Snapshot history before the new user turn is appended
+    const history = confirmedTool ? [] : buildHistory(messages)
 
     if (!confirmedTool) {
       setMessages(prev => [...prev, { role: 'user', text: trimmed }])
@@ -121,27 +239,67 @@ export default function ChatPanel({ onJobDispatched }) {
     setLoading(true)
 
     try {
-      const resp = mode === 'guidance' && !confirmedTool
-        ? await api.chatAsk(trimmed)
-        : await api.chat(confirmedTool ? '' : trimmed, confirmedTool, confirmedParams)
-
-      if (resp.status === 'job') {
-        appendBot(resp.reply, { jobId: resp.job_id, jobLabel: resp.job_label })
-        if (resp.job_id && onJobDispatched) {
-          onJobDispatched(resp.job_id, resp.job_label || 'Chat job')
+      if (mode === 'guidance' && !confirmedTool) {
+        // ── Streaming path for Guidance mode ──────────────────────────────
+        const response = await api.chatAskStream(trimmed, history)
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.detail || data.error || 'Guidance stream failed')
         }
-      } else if (resp.status === 'confirm') {
-        appendBot(resp.reply, { confirm: resp.tool_call })
-        setPendingConfirm(resp.tool_call)
+
+        setStreaming(true)
+        setMessages(prev => [...prev, { role: 'bot', text: '' }])
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        let acc = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const parts = buf.split('\n\n')
+          buf = parts.pop() ?? ''
+          for (const part of parts) {
+            if (!part.startsWith('data: ')) continue
+            let evt
+            try { evt = JSON.parse(part.slice(6)) } catch { continue }
+            if (evt.error) throw new Error(evt.error)
+            if (evt.done) return
+            if (evt.t) {
+              acc += evt.t
+              setMessages(prev => {
+                const next = [...prev]
+                next[next.length - 1] = { role: 'bot', text: acc }
+                return next
+              })
+            }
+          }
+        }
       } else {
-        appendBot(resp.reply || '(no response)')
+        // ── Standard path for Tools mode and confirmed dispatches ──────────
+        const resp = await api.chat(confirmedTool ? '' : trimmed, confirmedTool, confirmedParams, history)
+
+        if (resp.status === 'job') {
+          appendBot(resp.reply, { jobId: resp.job_id, jobLabel: resp.job_label })
+          if (resp.job_id && onJobDispatched) {
+            onJobDispatched(resp.job_id, resp.job_label || 'Chat job')
+          }
+        } else if (resp.status === 'confirm') {
+          appendBot(resp.reply, { confirm: resp.tool_call })
+          setPendingConfirm(resp.tool_call)
+        } else {
+          appendBot(resp.reply || '(no response)')
+        }
       }
     } catch (err) {
       appendBot(`Error: ${err.message}`)
     } finally {
+      setStreaming(false)
       setLoading(false)
     }
-  }, [loading, mode, appendBot, onJobDispatched])
+  }, [loading, mode, messages, appendBot, onJobDispatched])
 
   const handleConfirm = useCallback(() => {
     if (!pendingConfirm) return
@@ -154,24 +312,38 @@ export default function ChatPanel({ onJobDispatched }) {
   }, [appendBot])
 
   const handleKeyDown = useCallback(e => {
+    if (acSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setAcIndex(i => Math.min(i + 1, acSuggestions.length - 1)); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setAcIndex(i => Math.max(i - 1, -1)); return }
+      if (e.key === 'Escape')    { setAcSuggestions([]); return }
+      if (e.key === 'Enter' && acIndex >= 0) { e.preventDefault(); selectSuggestion(acSuggestions[acIndex]); return }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       send(input)
     }
-  }, [input, send])
+  }, [input, send, acSuggestions, acIndex, selectSuggestion])
 
-  const suggestions = mode === 'guidance' ? GUIDANCE_SUGGESTIONS : SUGGESTIONS
+  const isFreshChat = messages.length <= 1 && !loading
+  const visibleMessages = expanded && isFreshChat ? [] : messages
 
   return (
-    <div className="chat-panel-page">
+    <div className={`chat-panel-page${isFreshChat ? ' chat-panel-page--empty' : ''}`}>
       <div className="chat-thread" ref={threadRef}>
-        {messages.map((msg, i) => (
+        {visibleMessages.map((msg, i) => (
           <div key={i}>
             {msg.role === 'user'
               ? <UserBubble text={msg.text} />
               : <BotBubble text={msg.text} />
             }
-            {msg.jobId && <JobBadge jobId={msg.jobId} label={msg.jobLabel} />}
+            {msg.jobId && (
+              <JobResultBubble
+                jobId={msg.jobId}
+                label={msg.jobLabel}
+                job={jobs.find(j => j.id === msg.jobId)}
+                onOpenReport={onOpenReport}
+              />
+            )}
             {msg.confirm && (
               <div className="chat-bubble-row bot">
                 <span className="chat-avatar bot" style={{ visibility: 'hidden' }}><Bot size={16} /></span>
@@ -185,65 +357,86 @@ export default function ChatPanel({ onJobDispatched }) {
             )}
           </div>
         ))}
-        {loading && <TypingIndicator />}
+        {loading && !streaming && <TypingIndicator />}
       </div>
 
-      {messages.length <= 1 && !loading && (
-        <div className="chat-suggestions">
-          {suggestions.map(s => (
-            <button key={s} className="chat-suggestion-chip" type="button" onClick={() => send(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="chat-mode-row" role="group" aria-label="Chat mode">
+      <div className="chat-toolbar">
         <button
-          className={`chat-mode-btn ${mode === 'tools' ? 'active' : ''}`}
+          className="chat-new-btn"
           type="button"
-          onClick={() => {
-            setMode('tools')
-            setPendingConfirm(null)
-          }}
+          onClick={startNewChat}
           disabled={loading}
         >
-          Tools
+          <Plus size={14} />
+          <span>New chat</span>
         </button>
         <button
-          className={`chat-mode-btn ${mode === 'guidance' ? 'active' : ''}`}
+          className="chat-refresh-btn"
           type="button"
-          onClick={() => {
-            setMode('guidance')
-            setPendingConfirm(null)
-          }}
+          onClick={loadGreeting}
           disabled={loading}
+          aria-label="Refresh greeting"
         >
-          Guidance
+          <RotateCcw size={14} />
         </button>
       </div>
 
       <div className="chat-input-row">
+        {acSuggestions.length > 0 && (
+          <div className="chat-ac-dropdown">
+            {acSuggestions.map((s, i) => (
+              <button
+                key={s}
+                type="button"
+                className={`chat-ac-item${i === acIndex ? ' chat-ac-item--active' : ''}`}
+                onMouseDown={e => { e.preventDefault(); selectSuggestion(s) }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           className="chat-input"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
           placeholder={mode === 'guidance'
             ? 'Ask for explanations, troubleshooting, or implementation guidance...'
             : 'Ask me to run a policy test, generate a profile, audit UW rules...'}
           rows={1}
           disabled={loading}
         />
-        <button
-          className="chat-send-btn"
-          type="button"
-          onClick={() => send(input)}
-          disabled={loading || !input.trim()}
-          aria-label="Send"
-        >
-          <SendHorizonal size={18} />
-        </button>
+        <label className="chat-mode-select-wrap" aria-label="Chat response mode">
+          <select
+            className="chat-mode-select"
+            value={mode}
+            onChange={e => {
+              const m = e.target.value
+              setMode(m)
+              localStorage.setItem('chat_mode', m)
+              setPendingConfirm(null)
+            }}
+            disabled={loading}
+          >
+            <option value="tools">Tools</option>
+            <option value="guidance">Ask</option>
+          </select>
+          <ChevronDown size={14} />
+        </label>
+        {!expanded && (
+          <button
+            className="chat-send-btn"
+            type="button"
+            onClick={() => send(input)}
+            disabled={loading || !input.trim()}
+            aria-label="Send"
+          >
+            <SendHorizonal size={18} />
+          </button>
+        )}
       </div>
     </div>
   )

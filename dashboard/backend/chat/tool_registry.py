@@ -121,12 +121,38 @@ REGISTRY: dict[str, dict] = {
     },
     "run_api_assertion": {
         "description": (
-            "Run a plain-English Auto API assertion. Generates an Auto persona, "
-            "runs browserless OneShield API replay, and returns compact PASS/FAIL "
+            "Run a plain-English Auto UW test assertion. Generates an Auto persona, "
+            "runs browserless OneShield replay, and returns compact PASS/FAIL "
             "with expected and actual values."
         ),
         "params": {
             "prompt": {"type": "str", "required": True, "max_len": 1000},
+        },
+        "requires_confirmation": False,
+        "creates_job": True,
+    },
+    "run_assert_flow": {
+        "description": (
+            "Assert that a persona's premium or total cost matches an expected dollar value. "
+            "Generates a persona, replays the OneShield flow, and returns PASS/FAIL with "
+            "actual vs expected value inline in chat. Use when the user gives a specific dollar amount."
+        ),
+        "params": {
+            "persona_description": {"type": "str", "required": True, "max_len": 500},
+            "expected_value": {"type": "float", "required": True, "min": 0},
+            "assertion_type": {
+                "type": "str",
+                "required": False,
+                "allowed_values": ["premium", "total_cost"],
+                "default": "premium",
+            },
+            "operator": {
+                "type": "str",
+                "required": False,
+                "allowed_values": ["approx", "equals", "eq", "gt", "greater_than", "lt", "less_than"],
+                "default": "approx",
+            },
+            "tolerance_pct": {"type": "float", "required": False, "min": 0, "max": 50, "default": 5.0},
         },
         "requires_confirmation": False,
         "creates_job": True,
@@ -167,7 +193,10 @@ def validate_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
             if required:
                 raise ToolValidationError(f"Missing required parameter: {param_name!r}")
             _type = spec["type"]
-            cleaned[param_name] = spec.get("default", 0 if _type == "int" else [] if _type == "list" else "")
+            cleaned[param_name] = spec.get(
+                "default",
+                0 if _type == "int" else 0.0 if _type == "float" else [] if _type == "list" else "",
+            )
             continue
 
         if spec["type"] == "str":
@@ -188,6 +217,18 @@ def validate_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
                 val = int(val)
             except (TypeError, ValueError):
                 raise ToolValidationError(f"Parameter {param_name!r} must be an integer.")
+            min_val = spec.get("min")
+            max_val = spec.get("max")
+            if min_val is not None and val < min_val:
+                raise ToolValidationError(f"Parameter {param_name!r} must be >= {min_val}.")
+            if max_val is not None and val > max_val:
+                raise ToolValidationError(f"Parameter {param_name!r} must be <= {max_val}.")
+
+        elif spec["type"] == "float":
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                raise ToolValidationError(f"Parameter {param_name!r} must be a number.")
             min_val = spec.get("min")
             max_val = spec.get("max")
             if min_val is not None and val < min_val:

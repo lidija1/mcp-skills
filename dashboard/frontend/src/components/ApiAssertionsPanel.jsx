@@ -1,28 +1,33 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useState} from 'react'
 import {api} from '../utils/api'
 import {
-  AlertTriangle,
-  Bookmark,
-  BookmarkCheck,
   Check,
-  ClipboardCheck,
-  Layers,
-  Play,
-  Plus,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Download,
+  History,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
+  Target,
   Trash2,
-  WandSparkles,
+  TrendingUp,
   X,
-  Zap,
 } from 'lucide-react'
 
-const SINGLE_EXAMPLES = [
-  'Generate a young driver with Gold coverage and assert premium is around 1000 USD',
-  'Generate a 22 year old driver with SR-22 and assert underwriting referral contains "All drivers under 25 years of age"',
-  'Generate a clean adult driver with Gold coverage and assert premium is less than 2500 USD',
-  'Generate a driver under 25 with Bronze coverage and assert flow is not blocked',
+const SWEEP_FOCUS_OPTIONS = [
+  {value: '', label: 'All categories'},
+  {value: 'risk_adding', label: 'Risk adding only'},
+  {value: 'discount', label: 'Discounts only'},
+  {value: 'hard_stop', label: 'Hard stops only'},
+  {value: 'ladder', label: 'Ladder only'},
+]
+
+const SWEEP_EXAMPLES = [
+  '35-year-old married driver, Gold coverage, clean record, pleasure use',
+  '28-year-old single male driver, Silver coverage, clean record, commute use',
+  '45-year-old married female driver, Platinum coverage, clean record, pleasure use',
+  '22-year-old single driver, Bronze coverage, clean record, pleasure use',
 ]
 
 const DRIVER_PROFILES = [
@@ -34,121 +39,22 @@ const DRIVER_PROFILES = [
 ]
 
 const COVERAGES = ['Bronze', 'Silver', 'Gold', 'Platinum']
-const EMPLOYMENT = ['Employed', 'Unemployed', 'Retired', 'Student']
-const OCCUPATIONS = ['Day Care', 'Office worker', 'Healthcare worker', 'Teacher', 'Retail worker', 'Contractor']
 const LICENSE_STATUSES = ['Active License', 'Suspended', 'Revoked']
 const VEHICLE_USES = ['Pleasure', 'Commute', 'Business']
 const OWNERSHIPS = ['Owned', 'Leased', 'Financed']
 const MARITAL_STATUSES = ['Single', 'Married', 'Divorced', 'Widowed']
 const GENDERS = ['Male', 'Female']
-const DAMAGE_OPTIONS = ['No prior damage', 'Prior damage']
 
-const ASSERTION_TYPES = [
-  {value: 'total_premium', label: 'Total premium'},
-  {value: 'total_cost', label: 'Total cost'},
-  {value: 'policy_status', label: 'Policy status'},
-  {value: 'uw_condition_text', label: 'UW condition text'},
-  {value: 'coverage', label: 'Coverage'},
-  {value: 'base_rate_coverage', label: 'Base rate for a coverage'},
-  {value: 'premium_summary_tab', label: 'Total premium (from Summary tab)'},
+const DIRECT_ASSERT_TYPES = [
+  {value: 'premium', label: 'Total premium (Rating Detail)'},
+  {value: 'total_cost', label: 'Total cost (Verify Billing)'},
 ]
 
-const PREMIUM_OPERATORS = [
-  {value: 'lt', label: 'less than'},
-  {value: 'gt', label: 'greater than'},
-  {value: 'between', label: 'between'},
-  {value: 'approx', label: 'around'},
-  {value: 'equals', label: 'equals'},
-]
-
-const BASE_RATE_COVERAGES = [
-  'Bodily Injury',
-  'Collision',
-  'Comprehensive',
-  'Medical Payments',
-  'Personal Injury Protection',
-  'Property Damage',
-  'Uninsured Motorist Bodily Injury',
-  'Uninsured Motorist Property Damage',
-]
-
-const POLICY_STATUSES = ['Rated', 'Referral', 'Issued', 'Bound', 'Cancelled']
-
-const VARIATION_STRATEGIES = [
-  {
-    title: 'Clean baseline',
-    apply: base => ({
-      ...base,
-      sr22: 'No',
-      licenseStatus: 'Active License',
-      damageInfo: 'No prior damage',
-      vehicleUse: base.vehicleUse || 'Pleasure',
-      ownership: base.ownership || 'Owned',
-    }),
-  },
-  {
-    title: 'Coverage sensitivity',
-    apply: base => ({
-      ...base,
-      coverage: nextFrom(COVERAGES, base.coverage),
-      sr22: 'No',
-      licenseStatus: 'Active License',
-    }),
-  },
-  {
-    title: 'Business use',
-    apply: base => ({
-      ...base,
-      vehicleUse: 'Business',
-      employment: 'Employed',
-      sr22: 'No',
-      licenseStatus: 'Active License',
-    }),
-  },
-  {
-    title: 'SR-22 trigger',
-    apply: base => ({
-      ...base,
-      sr22: 'Yes',
-      licenseStatus: 'Active License',
-    }),
-  },
-  {
-    title: 'License trigger',
-    apply: base => ({
-      ...base,
-      licenseStatus: base.licenseStatus === 'Revoked' ? 'Suspended' : 'Revoked',
-      sr22: 'No',
-    }),
-  },
-  {
-    title: 'Leased high coverage',
-    apply: base => ({
-      ...base,
-      ownership: 'Leased',
-      coverage: 'Platinum',
-      vehicleUse: base.vehicleUse === 'Business' ? 'Business' : 'Commute',
-    }),
-  },
-]
-
-const SUITE_PRESETS = [
-  {
-    name: 'SR-22 Regression',
-    prompts: [
-      'Generate a 22-year-old driver with SR-22 and Gold coverage and assert UW condition contains sr-22',
-      'Generate a clean 35-year-old driver with Gold coverage and assert flow is not blocked',
-      'Generate a 19-year-old driver with Gold coverage and assert premium is less than 2000',
-    ],
-  },
-  {
-    name: 'Premium Range Check',
-    prompts: [
-      'Generate a young driver with Bronze coverage and assert premium is greater than 500',
-      'Generate a clean middle-aged driver with Silver coverage and assert premium is between 600 and 1800',
-      'Generate a clean senior driver with Gold coverage and assert premium is less than 2500',
-    ],
-  },
+const OPERATORS = [
+  {value: 'approx', label: '≈ Approx (±%)'},
+  {value: 'equals', label: '= Exact match'},
+  {value: 'gt', label: '> Greater than'},
+  {value: 'lt', label: '< Less than'},
 ]
 
 const DEFAULT_BUILDER = {
@@ -164,166 +70,96 @@ const DEFAULT_BUILDER = {
   coverage: 'Gold',
   vehicleUse: 'Pleasure',
   ownership: 'Owned',
-  assertionType: 'total_premium',
-  premiumOperator: 'lt',
-  premiumTarget: '1500',
-  premiumMin: '600',
-  premiumMax: '2200',
-  baseCoverage: 'Bodily Injury',
-  baseCoverageExpected: '281',
-  totalCostTarget: '2500',
-  policyStatusExpected: 'Rated',
-  uwConditionText: 'SR-22',
-  variationCount: 3,
 }
 
 export default function ApiAssertionsPanel({submitJob}) {
-  const [activeTab, setActiveTab] = useState('single')
+  const [activeTab, setActiveTab] = useState('sweep')
 
-  const [prompt, setPrompt] = useState('')
-  const [loadingSingle, setLoadingSingle] = useState(false)
-  const [submittedSingle, setSubmittedSingle] = useState(false)
+  // Regression Sweep tab
+  const [sweepBaseline, setSweepBaseline] = useState('')
+  const [sweepFocus, setSweepFocus] = useState('')
+  const [loadingSweep, setLoadingSweep] = useState(false)
+  const [submittedSweep, setSubmittedSweep] = useState(false)
 
-  const [suiteName, setSuiteName] = useState('')
-  const [suitePrompts, setSuitePrompts] = useState(['', ''])
-  const [loadingSuite, setLoadingSuite] = useState(false)
-  const [submittedSuite, setSubmittedSuite] = useState(false)
-  const [builder, setBuilder] = useState(DEFAULT_BUILDER)
-  const [sharedPersona, setSharedPersona] = useState(true)
-  const [loadingSmartVariations, setLoadingSmartVariations] = useState(false)
-  const [smartVariationsError, setSmartVariationsError] = useState('')
-  const [savedSuites, setSavedSuites] = useState([])
-  const [savingSuite, setSavingSuite] = useState(false)
-  const [savedConfirm, setSavedConfirm] = useState(false)
+  // History tab
+  const [historyRows, setHistoryRows] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyFilter, setHistoryFilter] = useState('all')
+  const [expandedId, setExpandedId] = useState(null)
 
-  const generatedPrompt = useMemo(() => buildPrompt(builder), [builder])
-  const filledCount = suitePrompts.filter(p => p.trim()).length
-
-  useEffect(() => {
-    api.getSuites().then(data => setSavedSuites(data.suites || [])).catch(() => {})
+  const fetchHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const data = await api.getAssertionHistory()
+      setHistoryRows(data.results || [])
+    } catch {
+      setHistoryRows([])
+    } finally {
+      setHistoryLoading(false)
+    }
   }, [])
 
-  const handleSaveSuite = async () => {
-    const filled = suitePrompts.filter(p => p.trim())
-    if (filled.length === 0) return
-    const name = suiteName.trim() || `Auto Suite (${filled.length} assertions)`
-    setSavingSuite(true)
+  useEffect(() => {
+    if (activeTab !== 'history') return
+    fetchHistory()
+    const timer = setInterval(fetchHistory, 8000)
+    return () => clearInterval(timer)
+  }, [activeTab, fetchHistory])
+
+  const handleDeleteResult = async id => {
     try {
-      const saved = await api.saveSuite(name, filled, builder, sharedPersona)
-      setSavedSuites(prev => [saved, ...prev])
-      setSavedConfirm(true)
-      setTimeout(() => setSavedConfirm(false), 2500)
-    } catch (_) {
-      // silently ignore — network error doesn't block workflow
-    } finally {
-      setSavingSuite(false)
-    }
+      await api.deleteAssertionResult(id)
+      setHistoryRows(prev => prev.filter(r => r.id !== id))
+      if (expandedId === id) setExpandedId(null)
+    } catch { /* ignore */ }
   }
 
-  const handleDeleteSaved = async id => {
-    try {
-      await api.deleteSuite(id)
-      setSavedSuites(prev => prev.filter(s => s.id !== id))
-    } catch (_) {}
-  }
+  // Direct Assert tab
+  const [assertBuilder, setAssertBuilder] = useState(DEFAULT_BUILDER)
+  const [assertType, setAssertType] = useState('premium')
+  const [assertExpected, setAssertExpected] = useState('')
+  const [assertOperator, setAssertOperator] = useState('approx')
+  const [assertTolerance, setAssertTolerance] = useState('5')
+  const [loadingAssert, setLoadingAssert] = useState(false)
+  const [submittedAssert, setSubmittedAssert] = useState(false)
 
-  const handleRunSingle = async () => {
-    if (!prompt.trim()) return
-    setLoadingSingle(true)
-    setSubmittedSingle(false)
-    try {
-      await submitJob(
-        () => api.runApiPlainAssertion(prompt),
-        `API Assertion - ${prompt.slice(0, 54)}`,
-        {metadata: {lob: 'auto', lob_display: 'Personal Auto'}},
-      )
-      setSubmittedSingle(true)
-      setTimeout(() => setSubmittedSingle(false), 3000)
-    } finally {
-      setLoadingSingle(false)
-    }
-  }
-
-  const handleRunSuite = async () => {
-    const filled = suitePrompts.filter(p => p.trim())
-    if (filled.length === 0) return
-    setLoadingSuite(true)
-    setSubmittedSuite(false)
-    const name = suiteName.trim() || `Auto Suite (${filled.length} assertions)`
-    const personaDescription = sharedPersona ? buildPersonaDescription(builder) : null
+  const handleRunSweep = async () => {
+    if (!sweepBaseline.trim()) return
+    setLoadingSweep(true)
+    setSubmittedSweep(false)
     try {
       await submitJob(
-        () => api.runApiSuite(filled, name, personaDescription),
-        `API Suite - ${name}`,
+        () => api.runRegressionSweep(sweepBaseline, 'auto', sweepFocus || null),
+        `Regression Sweep — ${sweepBaseline.slice(0, 50)}`,
         {metadata: {lob: 'auto', lob_display: 'Personal Auto'}},
       )
-      setSubmittedSuite(true)
-      setTimeout(() => setSubmittedSuite(false), 3000)
+      setSubmittedSweep(true)
+      setTimeout(() => setSubmittedSweep(false), 3000)
     } finally {
-      setLoadingSuite(false)
+      setLoadingSweep(false)
     }
   }
 
-  const updateBuilder = (key, value) => setBuilder(prev => ({...prev, [key]: value}))
-  const addPromptRow = () => setSuitePrompts(prev => (prev.length >= 20 ? prev : [...prev, generatedPrompt]))
-  const removePromptRow = i => setSuitePrompts(prev => prev.filter((_, idx) => idx !== i))
-  const updatePromptRow = (i, val) =>
-    setSuitePrompts(prev => prev.map((p, idx) => (idx === i ? val : p)))
-
-  const loadPreset = preset => {
-    setSuiteName(preset.name)
-    setSuitePrompts(preset.prompts.slice(0, 20))
-  }
-
-  const loadSaved = saved => {
-    setSuiteName(saved.name)
-    setSuitePrompts(saved.prompts.slice(0, 20))
-    if (saved.builder && Object.keys(saved.builder).length > 0) {
-      setBuilder(prev => ({...prev, ...saved.builder}))
-    }
-    setSharedPersona(saved.shared_persona)
-    setActiveTab('suite')
-  }
-
-  const useCurrentPrompt = () => {
-    setSuitePrompts([generatedPrompt])
-    setSuiteName(suiteName || promptSuiteName(builder))
-  }
-
-  const generateVariations = () => {
-    const count = Number(builder.variationCount) || 1
-    const variations = Array.from({length: Math.min(20, Math.max(1, count))}, (_, index) => {
-      const strategy = VARIATION_STRATEGIES[index % VARIATION_STRATEGIES.length]
-      const variant = strategy.apply(builder)
-      return buildPrompt(variant, {
-        note: strategy.title,
-        index: index + 1,
-        count,
-      })
-    })
-    setSuitePrompts(variations)
-    setSuiteName(suiteName || promptSuiteName(builder))
-  }
-
-  const generateSmartVariations = async () => {
-    setLoadingSmartVariations(true)
-    setSmartVariationsError('')
+  const handleRunAssertFlow = async () => {
+    const expected = parseFloat(assertExpected)
+    if (!assertExpected.trim() || isNaN(expected)) return
+    const personaDesc = buildPersonaDescription(assertBuilder)
+    setLoadingAssert(true)
+    setSubmittedAssert(false)
     try {
-      const count = Number(builder.variationCount) || 3
-      const {variations} = await api.smartVariations(builder, count)
-      if (!variations || variations.length === 0) {
-        setSmartVariationsError('No variations returned.')
-        return
-      }
-      setSuitePrompts(variations.map(v => v.prompt))
-      setSuiteName(suiteName || promptSuiteName(builder))
-      setSharedPersona(false)
-    } catch (err) {
-      setSmartVariationsError(err.message || 'Smart variations failed.')
+      await submitJob(
+        () => api.runAssertFlow(personaDesc, assertType, expected, assertOperator, parseFloat(assertTolerance) || 5),
+        `Assert ${assertType} — ${personaDesc.slice(0, 50)}`,
+        {metadata: {lob: 'auto', lob_display: 'Personal Auto'}},
+      )
+      setSubmittedAssert(true)
+      setTimeout(() => setSubmittedAssert(false), 3000)
     } finally {
-      setLoadingSmartVariations(false)
+      setLoadingAssert(false)
     }
   }
+
+  const updateAssertBuilder = (key, value) => setAssertBuilder(prev => ({...prev, [key]: value}))
 
   return (
     <div className="panel-stack animate-fade-in">
@@ -331,10 +167,10 @@ export default function ApiAssertionsPanel({submitJob}) {
         <div className="panel-hero-copy">
           <span className="overview-eyebrow">
             <ShieldCheck size={14}/>
-            API Evidence
+            UW Evidence
           </span>
-          <h1>Plain-English API Assertions</h1>
-          <p>Generate Auto customers, run OneShield API replay, and validate results from business language - no browser required.</p>
+          <h1>UW Assertion Tests</h1>
+          <p>Run premium regression sweeps and direct assertions against the OneShield rating flow — no policy is bound.</p>
         </div>
       </section>
 
@@ -342,40 +178,48 @@ export default function ApiAssertionsPanel({submitJob}) {
         <div className="card-content">
           <div className="api-tab-row" role="group" aria-label="Assertion mode">
             <button
-              className={`api-tab-btn ${activeTab === 'single' ? 'active' : ''}`}
+              className={`api-tab-btn ${activeTab === 'sweep' ? 'active' : ''}`}
               type="button"
-              onClick={() => setActiveTab('single')}
+              onClick={() => setActiveTab('sweep')}
             >
-              <Zap size={13}/>
-              Single Assertion
+              <TrendingUp size={13}/>
+              Regression Sweep
             </button>
             <button
-              className={`api-tab-btn ${activeTab === 'suite' ? 'active' : ''}`}
+              className={`api-tab-btn ${activeTab === 'assert' ? 'active' : ''}`}
               type="button"
-              onClick={() => setActiveTab('suite')}
+              onClick={() => setActiveTab('assert')}
             >
-              <Layers size={13}/>
-              Auto Batch Builder
+              <Target size={13}/>
+              Direct Assert
+            </button>
+            <button
+              className={`api-tab-btn api-tab-btn--history ${activeTab === 'history' ? 'active' : ''}`}
+              type="button"
+              onClick={() => setActiveTab('history')}
+            >
+              <History size={13}/>
+              History
             </button>
           </div>
 
-          {activeTab === 'single' && (
+          {activeTab === 'sweep' && (
             <>
               <div className="card-copy">
-                <h2>Ask for an API test in plain English</h2>
-                <p>The system converts the request into a generated Auto persona, runs the API flow, then checks assertions against API evidence.</p>
+                <h2>AI-driven premium regression sweep</h2>
+                <p>Describe a clean baseline driver. The system generates variants (risk-adding, discounts, hard stops, ladders), runs them in parallel, and asserts that each mutation moves the premium in the expected direction.</p>
               </div>
 
               <div className="field-wrap large">
                 <textarea
                   className="field"
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
-                  placeholder="e.g. Generate a young driver with Gold coverage and assert premium is around 1000 USD"
+                  value={sweepBaseline}
+                  onChange={e => setSweepBaseline(e.target.value)}
+                  placeholder="e.g. 35-year-old married driver, Gold coverage, clean record, pleasure use"
                 />
-                {prompt && (
+                {sweepBaseline && (
                   <button
-                    onClick={() => setPrompt('')}
+                    onClick={() => setSweepBaseline('')}
                     className="clear-button"
                     title="Clear"
                     aria-label="Clear"
@@ -386,73 +230,177 @@ export default function ApiAssertionsPanel({submitJob}) {
                 )}
               </div>
 
+              <div className="suite-form-grid dense">
+                <FieldSelect
+                  label="Focus category"
+                  value={sweepFocus}
+                  onChange={setSweepFocus}
+                  options={SWEEP_FOCUS_OPTIONS}
+                />
+              </div>
+
               <div className="card-action-row">
                 <button
-                  onClick={handleRunSingle}
-                  disabled={!prompt.trim() || loadingSingle}
-                  className={`action-button blue ${submittedSingle ? 'completed' : ''}`}
+                  onClick={handleRunSweep}
+                  disabled={!sweepBaseline.trim() || loadingSweep}
+                  className={`action-button blue ${submittedSweep ? 'completed' : ''}`}
                   type="button"
                 >
-                  {loadingSingle
+                  {loadingSweep
                     ? <span className="spinner"/>
-                    : submittedSingle
+                    : submittedSweep
                       ? <Check size={17}/>
-                      : <Play size={17}/>}
+                      : <TrendingUp size={17}/>}
                   <span>
-                    {loadingSingle ? 'Submitting...' : submittedSingle ? 'Submitted' : 'Run API Assertion'}
+                    {loadingSweep ? 'Submitting...' : submittedSweep ? 'Submitted' : 'Run Regression Sweep'}
                   </span>
                 </button>
               </div>
             </>
           )}
 
-          {activeTab === 'suite' && (
-            <AutoBatchBuilder
-              builder={builder}
-              generatedPrompt={generatedPrompt}
-              suiteName={suiteName}
-              suitePrompts={suitePrompts}
-              filledCount={filledCount}
-              loadingSuite={loadingSuite}
-              submittedSuite={submittedSuite}
-              loadingSmartVariations={loadingSmartVariations}
-              smartVariationsError={smartVariationsError}
-              sharedPersona={sharedPersona}
-              savingSuite={savingSuite}
-              savedConfirm={savedConfirm}
-              onBuilderChange={updateBuilder}
-              onSuiteNameChange={setSuiteName}
-              onSharedPersonaChange={setSharedPersona}
-              onUseCurrentPrompt={useCurrentPrompt}
-              onGenerateVariations={generateVariations}
-              onSmartVariations={generateSmartVariations}
-              onAddPrompt={addPromptRow}
-              onRemovePrompt={removePromptRow}
-              onPromptChange={updatePromptRow}
-              onRunSuite={handleRunSuite}
-              onSaveSuite={handleSaveSuite}
+          {activeTab === 'history' && (
+            <AssertionHistory
+              rows={historyRows}
+              loading={historyLoading}
+              filter={historyFilter}
+              onFilterChange={setHistoryFilter}
+              expandedId={expandedId}
+              onExpand={id => setExpandedId(prev => prev === id ? null : id)}
+              onDelete={handleDeleteResult}
+              onRefresh={fetchHistory}
             />
+          )}
+
+          {activeTab === 'assert' && (
+            <>
+              <div className="card-copy">
+                <h2>Assert a specific value against the UW test result</h2>
+                <p>Configure a driver profile, set your expected value and operator, then run — you get a clear PASS or FAIL with per-coverage breakdown.</p>
+              </div>
+
+              <div className="suite-form-grid">
+                <FieldSelect
+                  label="Driver profile"
+                  value={assertBuilder.driverProfile}
+                  onChange={v => updateAssertBuilder('driverProfile', v)}
+                  options={DRIVER_PROFILES.map(i => ({value: i.value, label: i.label}))}
+                />
+                <FieldInput
+                  label="Exact age"
+                  value={assertBuilder.customAge}
+                  disabled={assertBuilder.driverProfile !== 'custom'}
+                  onChange={v => updateAssertBuilder('customAge', v)}
+                  type="number"
+                  min="16"
+                  max="90"
+                />
+                <FieldSelect
+                  label="Coverage"
+                  value={assertBuilder.coverage}
+                  onChange={v => updateAssertBuilder('coverage', v)}
+                  options={COVERAGES}
+                />
+                <FieldSelect
+                  label="Vehicle use"
+                  value={assertBuilder.vehicleUse}
+                  onChange={v => updateAssertBuilder('vehicleUse', v)}
+                  options={VEHICLE_USES}
+                />
+              </div>
+
+              <div className="suite-section-title">
+                <SlidersHorizontal size={15}/>
+                Driver details
+              </div>
+              <div className="suite-form-grid dense">
+                <FieldSelect label="Gender" value={assertBuilder.gender} onChange={v => updateAssertBuilder('gender', v)} options={GENDERS}/>
+                <FieldSelect label="Marital status" value={assertBuilder.maritalStatus} onChange={v => updateAssertBuilder('maritalStatus', v)} options={MARITAL_STATUSES}/>
+                <FieldSelect label="License" value={assertBuilder.licenseStatus} onChange={v => updateAssertBuilder('licenseStatus', v)} options={LICENSE_STATUSES}/>
+                <FieldSelect label="SR-22" value={assertBuilder.sr22} onChange={v => updateAssertBuilder('sr22', v)} options={['No', 'Yes']}/>
+                <FieldSelect label="Ownership" value={assertBuilder.ownership} onChange={v => updateAssertBuilder('ownership', v)} options={OWNERSHIPS}/>
+              </div>
+
+              <div className="suite-section-title">
+                <Target size={15}/>
+                Assertion
+              </div>
+              <div className="suite-form-grid">
+                <FieldSelect
+                  label="Assertion type"
+                  value={assertType}
+                  onChange={setAssertType}
+                  options={DIRECT_ASSERT_TYPES}
+                />
+                <FieldSelect
+                  label="Operator"
+                  value={assertOperator}
+                  onChange={setAssertOperator}
+                  options={OPERATORS}
+                />
+                <label className="builder-field">
+                  <span>Expected value ($)</span>
+                  <input
+                    className="field"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={assertExpected}
+                    onChange={e => setAssertExpected(e.target.value)}
+                    placeholder="e.g. 2030"
+                  />
+                </label>
+                {assertOperator === 'approx' && (
+                  <FieldInput
+                    label="Tolerance (%)"
+                    value={assertTolerance}
+                    onChange={setAssertTolerance}
+                    type="number"
+                    min="0"
+                    max="50"
+                  />
+                )}
+              </div>
+
+              <div className="card-action-row">
+                <button
+                  onClick={handleRunAssertFlow}
+                  disabled={!assertExpected.trim() || isNaN(parseFloat(assertExpected)) || loadingAssert}
+                  className={`action-button blue ${submittedAssert ? 'completed' : ''}`}
+                  type="button"
+                >
+                  {loadingAssert
+                    ? <span className="spinner"/>
+                    : submittedAssert
+                      ? <Check size={17}/>
+                      : <Target size={17}/>}
+                  <span>
+                    {loadingAssert ? 'Submitting...' : submittedAssert ? 'Submitted' : 'Run Assertion'}
+                  </span>
+                </button>
+              </div>
+            </>
           )}
         </div>
       </section>
 
-      {activeTab === 'single' && (
+      {activeTab === 'sweep' && (
         <section className="tool-card">
           <div className="card-content">
             <div className="batch-header">
               <div className="card-copy">
-                <h2>Business examples</h2>
-                <p>Click to load into the assertion field. Runs live API replay - no policy is bound.</p>
+                <h2>Baseline examples</h2>
+                <p>Click to load a clean baseline. The sweep generates all variants automatically.</p>
               </div>
-              <ClipboardCheck size={24}/>
+              <TrendingUp size={24}/>
             </div>
             <div className="scenario-list">
-              {SINGLE_EXAMPLES.map(example => (
+              {SWEEP_EXAMPLES.map(example => (
                 <button
                   key={example}
                   className="text-button"
                   type="button"
-                  onClick={() => setPrompt(example)}
+                  onClick={() => setSweepBaseline(example)}
                 >
                   {example}
                 </button>
@@ -461,388 +409,200 @@ export default function ApiAssertionsPanel({submitJob}) {
           </div>
         </section>
       )}
+    </div>
+  )
+}
 
-      {activeTab === 'suite' && (
-        <section className="tool-card">
-          <div className="card-content">
-            <div className="batch-header">
-              <div className="card-copy">
-                <h2>Preset suites</h2>
-                <p>Load a ready-made regression suite, then edit any generated prompt before running.</p>
-              </div>
-              <ClipboardCheck size={24}/>
-            </div>
-            <div className="scenario-list">
-              {SUITE_PRESETS.map(preset => (
-                <button
-                  key={preset.name}
-                  className="text-button"
-                  type="button"
-                  onClick={() => loadPreset(preset)}
-                >
-                  <Layers size={14}/>
-                  {preset.name} - {preset.prompts.length} assertions
-                </button>
+/* ─── Assertion History ───────────────────────────────────────── */
+
+const OP_LABEL = {
+  approx:       (tol) => `approx ±${Number(tol).toFixed(0)}%`,
+  equals:       () => 'exact',
+  eq:           () => 'exact',
+  gt:           () => 'greater than',
+  greater_than: () => 'greater than',
+  lt:           () => 'less than',
+  less_than:    () => 'less than',
+}
+
+function fmtMoney(v) {
+  if (v === null || v === undefined) return 'N/A'
+  return `$${Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+}
+
+function fmtDate(ts) {
+  if (!ts) return '—'
+  return new Date(ts * 1000).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
+function downloadPersonaJson(row) {
+  const blob = new Blob([JSON.stringify(row.persona || {}, null, 2)], {type: 'application/json'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `persona-${row.id || 'export'}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function AssertionHistory({rows, loading, filter, onFilterChange, expandedId, onExpand, onDelete, onRefresh}) {
+  const filtered = useMemo(() => {
+    if (filter === 'pass') return rows.filter(r => r.passed)
+    if (filter === 'fail') return rows.filter(r => !r.passed)
+    return rows
+  }, [rows, filter])
+
+  return (
+    <div className="ah-root">
+      <div className="ah-toolbar">
+        <div className="ah-filter-group">
+          {['all', 'pass', 'fail'].map(f => (
+            <button
+              key={f}
+              type="button"
+              className={`ah-filter-btn ${filter === f ? 'active' : ''}`}
+              onClick={() => onFilterChange(f)}
+            >
+              {f === 'all' ? 'All' : f.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="ah-refresh-btn" onClick={onRefresh} title="Refresh">
+          <Clock size={14}/>
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="ah-empty"><span className="spinner"/></div>
+      ) : filtered.length === 0 ? (
+        <div className="ah-empty">
+          <History size={36} strokeWidth={1.4}/>
+          <p>{rows.length === 0 ? 'No assertion results saved yet.' : 'No results match this filter.'}</p>
+        </div>
+      ) : (
+        <div className="ah-table-wrap">
+          <table className="ah-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Persona</th>
+                <th>Type</th>
+                <th>Expected</th>
+                <th>Actual</th>
+                <th>Result</th>
+                <th/>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(row => (
+                <AssertionHistoryRow
+                  key={row.id}
+                  row={row}
+                  expanded={expandedId === row.id}
+                  onExpand={() => onExpand(row.id)}
+                  onDelete={() => onDelete(row.id)}
+                />
               ))}
-            </div>
-
-            {savedSuites.length > 0 && (
-              <>
-                <div className="batch-header" style={{marginTop: '1.25rem'}}>
-                  <div className="card-copy">
-                    <h2>Saved suites</h2>
-                    <p>Your saved suite definitions — click to restore the full builder state.</p>
-                  </div>
-                  <Bookmark size={24}/>
-                </div>
-                <div className="scenario-list">
-                  {savedSuites.map(suite => (
-                    <div key={suite.id} className="saved-suite-row">
-                      <button
-                        className="text-button"
-                        type="button"
-                        onClick={() => loadSaved(suite)}
-                      >
-                        <BookmarkCheck size={14}/>
-                        {suite.name} - {suite.prompts.length} assertion{suite.prompts.length !== 1 ? 's' : ''}
-                      </button>
-                      <button
-                        className="icon-button danger"
-                        type="button"
-                        title="Delete saved suite"
-                        onClick={() => handleDeleteSaved(suite.id)}
-                      >
-                        <Trash2 size={13}/>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </section>
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
 }
 
-function AutoBatchBuilder({
-  builder,
-  generatedPrompt,
-  suiteName,
-  suitePrompts,
-  filledCount,
-  loadingSuite,
-  submittedSuite,
-  loadingSmartVariations,
-  smartVariationsError,
-  sharedPersona,
-  savingSuite,
-  savedConfirm,
-  onBuilderChange,
-  onSuiteNameChange,
-  onSharedPersonaChange,
-  onUseCurrentPrompt,
-  onGenerateVariations,
-  onSmartVariations,
-  onAddPrompt,
-  onRemovePrompt,
-  onPromptChange,
-  onRunSuite,
-  onSaveSuite,
-}) {
-  const suggestion = useMemo(() => getAssertionSuggestion(builder), [builder])
-  const triggerKey = `${builder.sr22}|${builder.licenseStatus}|${builder.driverProfile}|${builder.customAge}`
-  const [dismissedForKey, setDismissedForKey] = useState(null)
-  const showSuggestion = suggestion && builder.assertionType !== suggestion.type && dismissedForKey !== triggerKey
+function AssertionHistoryRow({row, expanded, onExpand, onDelete}) {
+  const opFn = OP_LABEL[row.operator]
+  const opText = opFn ? opFn(row.tolerance_pct) : row.operator
+  const coverageEntries = Object.entries(row.coverage_premiums || {})
 
   return (
     <>
-      <div className="batch-builder-header">
-        <div className="card-copy">
-          <h2>Create Auto assertions from controlled inputs</h2>
-          <p>Choose driver, coverage, risk, vehicle, and assertion criteria. The generated prompts remain editable and are saved into the job report.</p>
-        </div>
-        <span className="suite-pill">
-          <Sparkles size={14}/>
-          6 parallel · 20 max
-        </span>
-      </div>
+      <tr className={`ah-row ${expanded ? 'ah-row-expanded' : ''}`} onClick={onExpand}>
+        <td className="ah-col-date">{fmtDate(row.created_at)}</td>
+        <td className="ah-col-persona" title={row.persona_description}>
+          {row.persona_description.length > 60
+            ? row.persona_description.slice(0, 60) + '…'
+            : row.persona_description}
+        </td>
+        <td className="ah-col-type">{(row.assertion_type || '').replace('_', ' ')}</td>
+        <td className="ah-col-money">{fmtMoney(row.expected_value)}</td>
+        <td className="ah-col-money">{fmtMoney(row.actual_value)}</td>
+        <td className="ah-col-result">
+          <span className="ah-verdict">{row.passed ? 'PASS' : 'FAIL'}</span>
+        </td>
+        <td className="ah-col-chevron">
+          {expanded ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+        </td>
+      </tr>
 
-      <div className="suite-form-grid">
-        <FieldSelect
-          label="Driver profile"
-          value={builder.driverProfile}
-          onChange={value => onBuilderChange('driverProfile', value)}
-          options={DRIVER_PROFILES.map(item => ({value: item.value, label: item.label}))}
-        />
-        <FieldInput
-          label="Exact age"
-          value={builder.customAge}
-          disabled={builder.driverProfile !== 'custom'}
-          onChange={value => onBuilderChange('customAge', value)}
-          type="number"
-          min="16"
-          max="90"
-        />
-        <FieldSelect
-          label="Coverage"
-          value={builder.coverage}
-          onChange={value => onBuilderChange('coverage', value)}
-          options={COVERAGES}
-        />
-        <FieldSelect
-          label="Assertion"
-          value={builder.assertionType}
-          onChange={value => onBuilderChange('assertionType', value)}
-          options={ASSERTION_TYPES}
-        />
-      </div>
+      {expanded && (
+        <tr className="ah-detail-row">
+          <td colSpan={7}>
+            <div className="ah-detail">
+              <div className="ah-detail-prompt">
+                <span className="ah-detail-label">Tested persona</span>
+                <p>{row.persona_description}</p>
+              </div>
 
-      {showSuggestion && (
-        <div className="assertion-suggestion">
-          <AlertTriangle size={14} className="assertion-suggestion-icon"/>
-          <span>
-            <strong>{suggestion.label}</strong> is the meaningful assertion here — {suggestion.reason}.
-          </span>
-          <button
-            type="button"
-            className="assertion-suggestion-apply"
-            onClick={() => onBuilderChange('assertionType', suggestion.type)}
-          >
-            Apply
-          </button>
-          <button
-            type="button"
-            className="assertion-suggestion-dismiss"
-            aria-label="Dismiss suggestion"
-            onClick={() => setDismissedForKey(triggerKey)}
-          >
-            <X size={13}/>
-          </button>
-        </div>
+              <div className="ah-detail-grid">
+                <div className="ah-detail-kv"><span>Expected</span><strong>{fmtMoney(row.expected_value)}</strong></div>
+                <div className="ah-detail-kv"><span>Actual</span><strong>{fmtMoney(row.actual_value)}</strong></div>
+                <div className="ah-detail-kv"><span>Operator</span><strong>{opText}</strong></div>
+                {row.message && <div className="ah-detail-kv ah-detail-kv-wide"><span>Detail</span><strong>{row.message}</strong></div>}
+              </div>
+
+              {coverageEntries.length > 0 && (
+                <div className="ah-detail-section">
+                  <span className="ah-detail-label">Coverage premiums</span>
+                  <table className="ah-coverage-table">
+                    <tbody>
+                      {coverageEntries.map(([cov, prem]) => (
+                        <tr key={cov}><td>{cov}</td><td>{fmtMoney(prem)}</td></tr>
+                      ))}
+                      <tr className="ah-coverage-total"><td>Total</td><td>{fmtMoney(row.actual_value)}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {row.uw_conditions?.length > 0 && (
+                <div className="ah-detail-section">
+                  <span className="ah-detail-label">UW conditions</span>
+                  <ul className="ah-uw-list">
+                    {row.uw_conditions.map((c, i) => <li key={i}>{c}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <div className="ah-detail-actions">
+                {row.persona && Object.keys(row.persona).length > 0 && (
+                  <button
+                    type="button"
+                    className="ah-action-btn"
+                    onClick={e => { e.stopPropagation(); downloadPersonaJson(row) }}
+                  >
+                    <Download size={14}/>
+                    Download JSON
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="ah-action-btn danger"
+                  onClick={e => { e.stopPropagation(); onDelete() }}
+                >
+                  <Trash2 size={14}/>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </td>
+        </tr>
       )}
-
-      <div className="suite-section-title">
-        <SlidersHorizontal size={15}/>
-        Driver and risk details
-      </div>
-      <div className="suite-form-grid dense">
-        <FieldSelect label="Gender" value={builder.gender} onChange={value => onBuilderChange('gender', value)} options={GENDERS}/>
-        <FieldSelect label="Marital status" value={builder.maritalStatus} onChange={value => onBuilderChange('maritalStatus', value)} options={MARITAL_STATUSES}/>
-        <FieldSelect label="Employment" value={builder.employment} onChange={value => onBuilderChange('employment', value)} options={EMPLOYMENT}/>
-        <FieldSelect label="Occupation" value={builder.occupation} onChange={value => onBuilderChange('occupation', value)} options={OCCUPATIONS}/>
-        <FieldSelect label="License" value={builder.licenseStatus} onChange={value => onBuilderChange('licenseStatus', value)} options={LICENSE_STATUSES}/>
-        <FieldSelect label="SR-22" value={builder.sr22} onChange={value => onBuilderChange('sr22', value)} options={['No', 'Yes']}/>
-      </div>
-
-      <div className="suite-section-title">
-        <Layers size={15}/>
-        Vehicle and rating inputs
-      </div>
-      <div className="suite-form-grid dense">
-        <FieldSelect label="Vehicle use" value={builder.vehicleUse} onChange={value => onBuilderChange('vehicleUse', value)} options={VEHICLE_USES}/>
-        <FieldSelect label="Ownership" value={builder.ownership} onChange={value => onBuilderChange('ownership', value)} options={OWNERSHIPS}/>
-        <FieldSelect label="Prior damage" value={builder.damageInfo} onChange={value => onBuilderChange('damageInfo', value)} options={DAMAGE_OPTIONS}/>
-        <FieldSelect
-          label="Variations"
-          value={String(builder.variationCount)}
-          onChange={value => onBuilderChange('variationCount', Number(value))}
-          options={['1', '2', '3', '4', '5', '6', '8', '10', '12', '15', '20']}
-        />
-      </div>
-
-      {(builder.assertionType === 'total_premium' || builder.assertionType === 'premium_summary_tab') && (
-        <div className="suite-form-grid dense">
-          <FieldSelect
-            label="Operator"
-            value={builder.premiumOperator}
-            onChange={value => onBuilderChange('premiumOperator', value)}
-            options={PREMIUM_OPERATORS}
-          />
-          {builder.premiumOperator === 'between' ? (
-            <>
-              <FieldInput label="Min premium" value={builder.premiumMin} onChange={value => onBuilderChange('premiumMin', value)} type="number"/>
-              <FieldInput label="Max premium" value={builder.premiumMax} onChange={value => onBuilderChange('premiumMax', value)} type="number"/>
-            </>
-          ) : (
-            <FieldInput label="Premium target" value={builder.premiumTarget} onChange={value => onBuilderChange('premiumTarget', value)} type="number"/>
-          )}
-        </div>
-      )}
-
-      {builder.assertionType === 'base_rate_coverage' && (
-        <div className="suite-form-grid dense">
-          <FieldSelect
-            label="Coverage"
-            value={builder.baseCoverage}
-            onChange={value => onBuilderChange('baseCoverage', value)}
-            options={BASE_RATE_COVERAGES}
-          />
-          <FieldInput
-            label="Expected base rate"
-            value={builder.baseCoverageExpected}
-            onChange={value => onBuilderChange('baseCoverageExpected', value)}
-            type="number"
-          />
-        </div>
-      )}
-
-      {builder.assertionType === 'total_cost' && (
-        <div className="suite-form-grid dense">
-          <FieldInput label="Total cost target" value={builder.totalCostTarget} onChange={value => onBuilderChange('totalCostTarget', value)} type="number"/>
-        </div>
-      )}
-
-      {builder.assertionType === 'policy_status' && (
-        <div className="suite-form-grid dense">
-          <FieldSelect
-            label="Expected status"
-            value={builder.policyStatusExpected}
-            onChange={value => onBuilderChange('policyStatusExpected', value)}
-            options={POLICY_STATUSES}
-          />
-        </div>
-      )}
-
-      {builder.assertionType === 'uw_condition_text' && (
-        <div className="suite-form-grid dense">
-          <FieldInput label="Condition text" value={builder.uwConditionText} onChange={value => onBuilderChange('uwConditionText', value)}/>
-        </div>
-      )}
-
-      <div className="suite-preview">
-        <div className="suite-preview-heading">
-          <div>
-            <strong>Prompt preview</strong>
-            <span>This exact text will be sent unless you edit it below.</span>
-          </div>
-          <button className="text-button" type="button" onClick={onUseCurrentPrompt}>
-            <Plus size={14}/>
-            Use this prompt
-          </button>
-        </div>
-        <p>{generatedPrompt}</p>
-      </div>
-
-      <div className="suite-toolbar">
-        <div className="field-wrap suite-name-wrap">
-          <input
-            type="text"
-            className="field"
-            value={suiteName}
-            onChange={e => onSuiteNameChange(e.target.value)}
-            placeholder="Suite name, e.g. Auto Premium Sensitivity"
-          />
-        </div>
-        <label
-          className="shared-persona-toggle"
-          title={sharedPersona
-            ? 'One persona generated and reused across all assertions — coverage is the isolated variable'
-            : 'Each assertion generates its own persona — use for intentional risk-profile variation'}
-        >
-          <input
-            type="checkbox"
-            checked={sharedPersona}
-            onChange={e => onSharedPersonaChange(e.target.checked)}
-          />
-          Shared persona
-        </label>
-        <button
-          className="action-button purple"
-          type="button"
-          onClick={onSmartVariations}
-          disabled={loadingSmartVariations}
-          title="Ask local AI to suggest UW boundary variations targeting distinct rules"
-        >
-          {loadingSmartVariations ? <span className="spinner"/> : <Sparkles size={17}/>}
-          <span>{loadingSmartVariations ? 'Thinking...' : `Smart Variations`}</span>
-        </button>
-        <button className="action-button ghost" type="button" onClick={onGenerateVariations}>
-          <WandSparkles size={17}/>
-          <span>Generate {builder.variationCount}</span>
-        </button>
-        <button
-          className={`action-button ghost ${savedConfirm ? 'completed' : ''}`}
-          type="button"
-          onClick={onSaveSuite}
-          disabled={savingSuite || filledCount === 0}
-          title="Save this suite definition for later"
-        >
-          {savingSuite
-            ? <span className="spinner"/>
-            : savedConfirm
-              ? <BookmarkCheck size={17}/>
-              : <Bookmark size={17}/>}
-          <span>{savedConfirm ? 'Saved' : 'Save Suite'}</span>
-        </button>
-      </div>
-      {smartVariationsError && (
-        <p className="suite-error">{smartVariationsError}</p>
-      )}
-
-      <div className="suite-prompt-editor">
-        <div className="suite-prompt-editor-header">
-          <strong>Generated prompts</strong>
-          <span>{filledCount} / 6 ready</span>
-        </div>
-        {suitePrompts.map((p, i) => (
-          <div key={i} className="prompt-row structured">
-            <label>Assertion {i + 1}</label>
-            <textarea
-              className="field"
-              value={p}
-              onChange={e => onPromptChange(i, e.target.value)}
-              placeholder={`Prompt for assertion ${i + 1}`}
-            />
-            {suitePrompts.length > 1 && (
-              <button
-                className="row-remove"
-                type="button"
-                aria-label={`Remove assertion ${i + 1}`}
-                onClick={() => onRemovePrompt(i)}
-              >
-                <X size={14}/>
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="suite-add-row">
-        <button
-          className="text-button"
-          type="button"
-          onClick={onAddPrompt}
-          disabled={suitePrompts.length >= 20}
-        >
-          <Plus size={14}/>
-          Add prompt
-        </button>
-        <span className="suite-count">{filledCount} filled · {20 - suitePrompts.length} slots left · 6 run in parallel</span>
-      </div>
-
-      <div className="card-action-row">
-        <button
-          onClick={onRunSuite}
-          disabled={filledCount === 0 || loadingSuite}
-          className={`action-button blue ${submittedSuite ? 'completed' : ''}`}
-          type="button"
-        >
-          {loadingSuite
-            ? <span className="spinner"/>
-            : submittedSuite
-              ? <Check size={17}/>
-              : <Layers size={17}/>}
-          <span>
-            {loadingSuite
-              ? 'Submitting...'
-              : submittedSuite
-                ? 'Submitted'
-                : `Run Suite (${filledCount})`}
-          </span>
-        </button>
-      </div>
     </>
   )
 }
@@ -881,8 +641,12 @@ function FieldInput({label, value, onChange, disabled = false, type = 'text', mi
 }
 
 function personaDetails(config) {
+  const profile = DRIVER_PROFILES.find(i => i.value === config.driverProfile)
+  const driverText = config.driverProfile === 'custom'
+    ? `${config.customAge || 35}-year-old driver`
+    : profile?.text || 'driver'
   return [
-    driverText(config),
+    driverText,
     `${config.gender.toLowerCase()} driver`,
     `${config.maritalStatus.toLowerCase()} marital status`,
     `${config.employment.toLowerCase()} employment category`,
@@ -898,86 +662,4 @@ function personaDetails(config) {
 
 function buildPersonaDescription(config) {
   return personaDetails(config).join(', ')
-}
-
-function buildPrompt(config, variation = null) {
-  const details = personaDetails(config)
-  const variationPrefix = variation
-    ? `Generate Auto variation ${variation.index} of ${variation.count} (${variation.note}) for `
-    : 'Generate Auto persona for '
-  return `${variationPrefix}${details.join(', ')} and ${assertionText(config)}.`
-}
-
-function driverText(config) {
-  if (config.driverProfile === 'custom') {
-    return `${config.customAge || 35}-year-old driver`
-  }
-  const profile = DRIVER_PROFILES.find(item => item.value === config.driverProfile)
-  return profile?.text || 'driver'
-}
-
-function assertionText(config) {
-  switch (config.assertionType) {
-    case 'total_premium':
-    case 'premium_summary_tab': {
-      const op = config.premiumOperator || 'lt'
-      if (op === 'between') return `assert premium is between ${config.premiumMin || 600} and ${config.premiumMax || 2200}`
-      if (op === 'approx') return `assert premium is around ${config.premiumTarget || 1500} USD`
-      if (op === 'gt') return `assert premium is greater than ${config.premiumTarget || 1500}`
-      if (op === 'equals') return `assert premium equals ${config.premiumTarget || 1500}`
-      return `assert premium is less than ${config.premiumTarget || 1500}`
-    }
-    case 'total_cost':
-      return `assert total cost is less than ${config.totalCostTarget || 2500}`
-    case 'policy_status':
-      return `assert policy status equals ${config.policyStatusExpected || 'Rated'}`
-    case 'uw_condition_text':
-      return `assert UW condition contains "${config.uwConditionText || 'SR-22'}"`
-    case 'coverage':
-      return `assert coverage equals ${config.coverage}`
-    case 'base_rate_coverage':
-      return `base rate for ${config.baseCoverage || 'Bodily Injury'} is ${config.baseCoverageExpected || 281}`
-    default:
-      return 'assert premium exists'
-  }
-}
-
-const ASSERTION_SUGGESTION_MAP = [
-  {
-    test: b => b.sr22 === 'Yes',
-    type: 'uw_condition_text',
-    reason: 'SR-22 filing almost always triggers a UW referral — assert the condition text directly',
-  },
-  {
-    test: b => b.licenseStatus === 'Suspended' || b.licenseStatus === 'Revoked',
-    type: 'uw_condition_text',
-    reason: 'Suspended/Revoked license is a UW rule trigger — assert the condition text directly',
-  },
-  {
-    test: b =>
-      b.driverProfile === 'young' ||
-      b.driverProfile === 'teen' ||
-      (b.driverProfile === 'custom' && Number(b.customAge) < 25),
-    type: 'uw_condition_text',
-    reason: 'Driver under 25 triggers the age-based UW referral rule',
-  },
-]
-
-function getAssertionSuggestion(builder) {
-  for (const rule of ASSERTION_SUGGESTION_MAP) {
-    if (rule.test(builder)) {
-      return {type: rule.type, label: ASSERTION_TYPES.find(a => a.value === rule.type)?.label, reason: rule.reason}
-    }
-  }
-  return null
-}
-
-function nextFrom(values, current) {
-  const index = values.indexOf(current)
-  return values[(index + 1 + values.length) % values.length]
-}
-
-function promptSuiteName(config) {
-  const profile = DRIVER_PROFILES.find(item => item.value === config.driverProfile)?.label || 'Auto'
-  return `${profile} ${config.coverage} ${ASSERTION_TYPES.find(item => item.value === config.assertionType)?.label || 'Assertions'}`
 }

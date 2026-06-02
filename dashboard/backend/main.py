@@ -1055,7 +1055,7 @@ def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
             client = OneShieldApiReplay()
             try:
                 flow = client.run_captured_auto_flow(
-                    persona, stop_after=STOP_AFTER[req.assertion_type], fast_mode=False
+                    persona, stop_after=STOP_AFTER[req.assertion_type], fast_mode=True
                 )
             finally:
                 client.close()
@@ -1179,6 +1179,45 @@ def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: R
                     lines.append("**Suggested follow-ups:**")
                     for v in a.follow_up_variants:
                         lines.append(f"- **{v.label}** — expected `{v.expected_direction}`")
+
+            # Save to database — one summary row per sweep
+            import dashboard.backend.dashboard_db as _db
+            variant_summary = [
+                {
+                    "label": r.variant.label,
+                    "category": r.variant.category,
+                    "expected_direction": r.variant.expected_direction,
+                    "actual_premium": r.actual_premium,
+                    "delta_pct": r.delta_pct,
+                    "passed": r.passed,
+                    "blocked": r.blocked,
+                    "message": r.message,
+                    "error": r.error,
+                }
+                for r in sweep.results
+            ]
+            analysis_summary = {
+                "patterns": sweep.analysis.patterns if sweep.analysis else [],
+                "root_causes": sweep.analysis.root_causes if sweep.analysis else [],
+            }
+            _db.save_assertion_result(
+                persona_description=req.baseline_description,
+                assertion_type="regression_sweep",
+                expected_value=0,
+                actual_value=sweep.baseline_premium,
+                operator="sweep",
+                tolerance_pct=0,
+                passed=sweep.passed,
+                message=f"{sweep.pass_count}/{len(sweep.results)} variants passed",
+                lob=req.lob,
+                coverage_premiums={"variants": variant_summary},
+                uw_conditions=[p for p in (sweep.analysis.patterns if sweep.analysis else [])],
+                persona=sweep.baseline_persona,
+                blocked=False,
+                run_id=sweep.sweep_id,
+                user_id=(user or {}).get("id"),
+            )
+
             _done(jid, "\n".join(lines))
         except Exception as exc:
             import traceback
@@ -1234,9 +1273,9 @@ def explain_assert_flow_ep(req: ExplainAssertFlowReq):
 
     system = (
         "You are a senior insurance pricing analyst. "
-        "Answer in 4–6 concise business sentences. "
-        "No bullet points, no markdown, no headers — plain flowing prose only. "
-        "Focus on: what drives this premium, what each UW condition means for the risk, "
+        "Answer using bullet points only — no prose paragraphs, no headers. "
+        "Return 4–6 bullets, each a single punchy sentence (max 20 words). "
+        "Cover: what drives this premium, what each UW condition means for the risk, "
         "and what one realistic change to the persona would most move the premium."
     )
     user_msg = (

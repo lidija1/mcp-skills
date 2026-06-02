@@ -386,7 +386,7 @@ def _dispatch_run_assert_flow(jid: str, params: dict):
             client = OneShieldApiReplay()
             try:
                 flow = client.run_captured_auto_flow(
-                    persona, stop_after=STOP_AFTER[assertion_type], fast_mode=False
+                    persona, stop_after=STOP_AFTER[assertion_type], fast_mode=True
                 )
             finally:
                 client.close()

@@ -763,6 +763,7 @@ textarea.field {
     cursor: pointer;
     user-select: none;
 }
+/*the mcp project is ready for presenting and i'm ready too, i will just continue practising today*/
 
 .shared-persona-toggle input[type="checkbox"] {
     width: 15px;
@@ -2726,6 +2727,11 @@ textarea.field {
     border-radius: 8px;
     font-size: 12px;
     line-height: 1.35;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .job-error{
+    color: #f8cdcd;
+    background: rgb(236 2 2 / 0.09);
 }
 
 .job-hint {
@@ -7755,10 +7761,10 @@ button.jobs-group-row {
     box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
 }
 
-.jobs-table-row.has-error,
-.jobs-table-row.is-canceled {
-    background: #fffdf8;
-}
+/*.jobs-table-row.has-error,*/
+/*.jobs-table-row.is-canceled {*/
+/*    background: #fffdf8;*/
+/*}*/
 
 .jobs-job-title {
     display: flex;
@@ -7800,6 +7806,9 @@ button.jobs-group-row {
 }
 
 .job-status {
+    --status-color: #2563eb;
+    --status-bg: #eff6ff;
+    --status-border: #bfdbfe;
     min-height: 28px;
     display: inline-flex;
     align-items: center;
@@ -7811,6 +7820,56 @@ button.jobs-group-row {
     border-radius: 999px;
     font-size: 12px;
     font-weight: 820;
+}
+
+.job-status.running {
+    --status-color: #2563eb;
+    --status-bg: #eff6ff;
+    --status-border: #bfdbfe;
+}
+
+.job-status.done {
+    --status-color: #15803d;
+    --status-bg: #f0fdf4;
+    --status-border: #bbf7d0;
+}
+
+.job-status.error,
+.job-status.failed {
+    --status-color: #b91c1c;
+    --status-bg: #fef2f2;
+    --status-border: #fecaca;
+}
+
+.job-status.canceled {
+    --status-color: #b45309;
+    --status-bg: #fffbeb;
+    --status-border: #fde68a;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .job-status.running {
+    --status-color: #93c5fd;
+    --status-bg: rgba(59, 130, 246, 0.16);
+    --status-border: rgba(147, 197, 253, 0.30);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .job-status.done {
+    --status-color: #86efac;
+    --status-bg: rgba(22, 163, 74, 0.16);
+    --status-border: rgba(134, 239, 172, 0.30);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .job-status.error,
+:is([data-theme='dark'], [data-theme='black']) .job-status.failed {
+    --status-color: #fca5a5;
+    --status-bg: rgba(239, 68, 68, 0.16);
+    --status-border: rgba(248, 113, 113, 0.30);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .job-status.canceled {
+    --status-color: #fdba74;
+    --status-bg: rgba(249, 115, 22, 0.16);
+    --status-border: rgba(251, 146, 60, 0.30);
 }
 
 .job-status i {
@@ -7863,6 +7922,11 @@ button.jobs-group-row {
 }
 
 .jobs-icon-btn:hover {
+    color: #0f172a;
+    background: #eef4fb;
+    border-color: #cbd5e1;
+}
+:is([data-theme='dark'], [data-theme='black']) .jobs-icon-btn:hover {
     color: #0f172a;
     background: #eef4fb;
     border-color: #cbd5e1;
@@ -7922,7 +7986,7 @@ button.jobs-group-row {
 .overview-metric-card-label strong {
     font-size: 15px;
     font-weight: 850;
-    color: #0f172a;
+    color: var(--text);
 }
 
 .overview-metric-card-label span {
@@ -7970,7 +8034,7 @@ button.jobs-group-row {
 .overview-metric-card .overview-metric-card-label span,
 .overview-metric-card .overview-finished-breakdown li span {
     display: block;
-    color: #64748b;
+    color: var(--muted);
     font-size: 16px;
     font-weight: 800;
     margin-bottom: 7px;
@@ -7979,7 +8043,7 @@ button.jobs-group-row {
 .overview-metric-card .overview-metric-card-label strong {
     display: block;
     overflow: hidden;
-    color: #0b1120;
+    color: var(--text);
     font-size: 15px;
     line-height: 1.1;
     font-weight: 850;
@@ -8040,6 +8104,91 @@ button.jobs-group-row {
 
 .activity-card .activity-report-button.run-again:hover {
     background: #fed7aa;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card {
+    color: var(--text);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    border-color: var(--border);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-metric-card-label span,
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li span {
+    color: var(--muted);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-metric-card-label strong,
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-metric-card-label.results span {
+    color: var(--text);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .customer-type-icon.green {
+    color: #86efac;
+    background: rgba(22, 163, 74, 0.18);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li:nth-child(1) {
+    background: rgba(22, 163, 74, 0.14);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li:nth-child(1) span,
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li strong.is-completed {
+    color: #86efac;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li:nth-child(2) {
+    background: rgba(239, 68, 68, 0.14);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li:nth-child(2) span,
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li strong.is-failed {
+    color: #fca5a5;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li:nth-child(3) {
+    background: rgba(249, 115, 22, 0.14);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li:nth-child(3) span,
+:is([data-theme='dark'], [data-theme='black']) .overview-metric-card .overview-finished-breakdown li strong.is-canceled {
+    color: #fdba74;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .activity-card-actions .activity-report-button {
+    color: #93c5fd;
+    background: rgba(59, 130, 246, 0.18);
+    border: 1px solid rgba(147, 197, 253, 0.24);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .jobs-icon-btn:hover,
+:is([data-theme='dark'], [data-theme='black']) .activity-card-actions .activity-report-button:hover {
+    color: var(--text);
+    background: rgba(59, 130, 246, 0.28);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .activity-card-actions .activity-report-button.run-again {
+    color: #fdba74;
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(251, 146, 60, 0.24);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .activity-card-actions .activity-report-button.run-again:hover {
+    color: #fed7aa;
+    background: rgba(249, 115, 22, 0.28);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .activity-card-actions .activity-cancel-button {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(248, 113, 113, 0.26);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .activity-card-actions .activity-cancel-button:hover {
+    color: #fecaca;
+    background: rgba(239, 68, 68, 0.28);
 }
 
 @media (max-width: 980px) {
@@ -8221,7 +8370,7 @@ button.jobs-group-row {
 
 .overview-metric-card .overview-metric-card-label.results span {
     margin-bottom: 0;
-    color: #0f172a;
+    color: var(--text);
 }
 
 .overview-metric-card .overview-finished-breakdown {
@@ -8424,10 +8573,10 @@ button.jobs-group-row {
     background: transparent;
 }
 
-.jobs-table-row.has-error,
-.jobs-table-row.is-canceled {
-    background: color-mix(in srgb, var(--surface) 93%, #f59e0b);
-}
+/*.jobs-table-row.has-error,*/
+/*.jobs-table-row.is-canceled {*/
+/*    background: color-mix(in srgb, var(--surface) 93%, #f59e0b);*/
+/*}*/
 
 .jobs-job-title,
 .jobs-job-title strong {

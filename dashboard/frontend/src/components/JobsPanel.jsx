@@ -6,14 +6,6 @@ import { getDisplayStatus } from '../utils/jobStatus.js'
 import {api} from '../utils/api'
 import {BriefcaseBusiness, CalendarDays, ChevronRight, FileText, RotateCw, X} from 'lucide-react'
 
-const STATUS_CONFIG = {
-    running: {color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', label: 'Running'},
-    done: {color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', label: 'Done'},
-    error: {color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', label: 'Error'},
-    failed: {color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', label: 'Failed'},
-    canceled: {color: '#b45309', bg: '#fffbeb', border: '#fde68a', label: 'Canceled'},
-}
-
 function elapsed(job) {
     const end = job.finished ?? Date.now() / 1000
     const secs = Math.max(0, Math.round(end - job.started))
@@ -253,7 +245,6 @@ function SummaryMetric({label, value}) {
 
 function HistoryRow({job, onSelect, onRerun, onCancel}) {
     const displayStatus = getDisplayStatus(job)
-    const cfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.running
     const jobLabel = cleanDisplayText(job.label)
     const canOpen =
     displayStatus === 'done' ||
@@ -261,11 +252,6 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
     displayStatus === 'failed'
     const owner = job.created_by_user
     const ownerName = owner?.display_name || owner?.username
-    const statusStyle = {
-        '--status-color': cfg.color,
-        '--status-bg': cfg.bg,
-        '--status-border': cfg.border,
-    }
 
     return (<article
         className={`jobs-table-row ${displayStatus === 'error' ? 'has-error' : ''} ${displayStatus === 'canceled' ? 'is-canceled' : ''}`}>
@@ -274,9 +260,9 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
             {ownerName && <small className="jobs-owner">Created by {ownerName}</small>}
         </div>
         <div>
-        <span className="job-status" style={statusStyle}>
+        <span className={`job-status ${displayStatus}`}>
           <i/>
-            {cfg.label}
+            {statusLabel(displayStatus)}
         </span>
         </div>
         <div className="jobs-cell-muted">{startedTime(job)}</div>
@@ -339,4 +325,12 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
         </div>
         {getDisplayStatus(job) === 'error' && job.error && (<div className="job-error">{job.error}</div>)}
     </article>)
+}
+
+function statusLabel(status) {
+    if (status === 'done') return 'Done'
+    if (status === 'error') return 'Error'
+    if (status === 'failed') return 'Failed'
+    if (status === 'canceled') return 'Canceled'
+    return 'Running'
 }

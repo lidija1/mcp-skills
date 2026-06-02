@@ -1,7 +1,7 @@
 /** Infer policy execution kind from type, tool name, or job label. */
 export function inferExecutionType(job) {
   const explicit = job?.execution_type
-  if (explicit === 'quick_run' || explicit === 'policy_flow') return explicit
+  if (explicit === 'quick_run' || explicit === 'policy_flow' || explicit === 'create_persona') return explicit
 
   if (explicit === 'chat_execution') {
     const tool = job?.metadata?.tool

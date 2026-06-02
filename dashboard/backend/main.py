@@ -80,13 +80,14 @@ _status = _job_store.update_job_status
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
-POLICY_LOBS = {"auto", "cyber", "homeowner"}
+POLICY_LOBS = {"personal-auto", "cyber", "homeowner"}
 POLICY_LOB_ALIASES = {
     "personal-auto": "auto",
     "personal_auto": "auto",
     "personal auto": "auto",
 }
 LOB_DISPLAY = {
+    "personal-auto": "Personal Auto",
     "auto": "Personal Auto",
     "cyber": "Cyber",
     "homeowner": "Homeowner",
@@ -434,6 +435,19 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
 
     metadata = job.get("metadata") or {}
     payload = metadata.get("rerun_payload")
+    execution_type = job.get("execution_type")
+
+    if not payload:
+        if execution_type in {"quick_run", "create_persona"} and metadata.get("description"):
+            payload = {
+                "lob": metadata.get("requested_lob") or metadata.get("lob") or "personal-auto",
+                "description": metadata.get("description"),
+            }
+        elif execution_type == "policy_flow" and metadata.get("persona_json"):
+            payload = {
+                "lob": metadata.get("requested_lob") or metadata.get("lob") or "personal-auto",
+                "persona_json": metadata.get("persona_json"),
+            }
 
     if not payload:
         raise HTTPException(
@@ -441,12 +455,10 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
             detail="This job cannot be rerun",
         )
 
-    execution_type = job.get("execution_type")
-
-    if execution_type != "policy_flow":
+    if execution_type not in {"policy_flow", "quick_run", "create_persona"}:
         raise HTTPException(
             status_code=400,
-            detail="Rerun currently supported only for policy flows",
+            detail="Rerun currently supported only for policy flow jobs",
         )
 
     policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
@@ -455,6 +467,74 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
         policy_lob,
         payload["lob"].strip().upper()
     )
+
+    if execution_type == "create_persona":
+        description = payload.get("description") or metadata.get("description") or ""
+        new_jid = _new_job(
+            f"Build Profile - {display}",
+            execution_type="create_persona",
+            metadata=_job_lob_metadata(
+                policy_lob,
+                description=description,
+                requested_lob=payload["lob"],
+                rerun_of=job_id,
+                rerun_payload={
+                    "lob": payload["lob"],
+                    "description": description,
+                },
+            ),
+        )
+
+        def _run_create_persona():
+            try:
+                persona_json = generate_persona(engine_lob, description)
+                data = json.loads(persona_json)
+                if "error" in data:
+                    _fail(new_jid, data["error"])
+                    return
+                _done(new_jid, _format_persona_report(display, description, persona_json))
+            except Exception as e:
+                _fail(new_jid, str(e))
+
+        bg.add_task(_run_create_persona)
+        return {"job_id": new_jid}
+
+    if execution_type == "quick_run":
+        description = payload.get("description") or metadata.get("description") or ""
+        new_jid = _new_job(
+            f"Quick Policy Test - {display}",
+            execution_type="quick_run",
+            metadata=_job_lob_metadata(
+                policy_lob,
+                description=description,
+                requested_lob=payload["lob"],
+                rerun_of=job_id,
+                rerun_payload={
+                    "mode": "quick_run",
+                    "lob": payload["lob"],
+                    "description": description,
+                },
+            ),
+        )
+
+        def _run_quick_run():
+            try:
+                _status(new_jid, "Generating profile", display)
+                persona_json = generate_persona(engine_lob, description)
+                data = json.loads(persona_json)
+                if "error" in data:
+                    _fail(new_jid, data["error"])
+                    return
+                result = _run_flow_threaded(
+                    engine_lob, data, _make_policy_progress_callback(new_jid, policy_lob), new_jid
+                )
+                persona_section = _format_persona_report(display, description, persona_json) + "\n\n---\n\n"
+                _done(new_jid, persona_section + format_result(result))
+            except Exception as e:
+                _fail(new_jid, str(e))
+
+        bg.add_task(_run_quick_run)
+        return {"job_id": new_jid}
 
     new_jid = _new_job(
         f"Policy Journey - {display}",
@@ -472,7 +552,7 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
             _status(new_jid, "Preparing profile", display)
 
             persona = _parse_run_flow_persona(
-                policy_lob,
+                engine_lob,
                 payload["persona_json"],
             )
 
@@ -890,12 +970,20 @@ def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
     jid = _new_job(
         f"Build Profile - {display}",
         execution_type="create_persona",
-        metadata=_job_lob_metadata(policy_lob, description=req.description),
+        metadata=_job_lob_metadata(
+            policy_lob,
+            description=req.description,
+            requested_lob=req.lob,
+            rerun_payload={
+                "lob": req.lob,
+                "description": req.description,
+            },
+        ),
     )
 
     def _run():
         try:
-            persona_json = generate_persona(lob, req.description)
+            persona_json = generate_persona(engine_lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
@@ -929,7 +1017,7 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     def _run():
         try:
             _status(jid, "Preparing profile", display)
-            persona = _parse_run_flow_persona(policy_lob, req.persona_json)
+            persona = _parse_run_flow_persona(engine_lob, req.persona_json)
             result = _run_flow_threaded(
                 engine_lob, persona, _make_policy_progress_callback(jid, policy_lob), jid
             )
@@ -951,13 +1039,22 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     jid = _new_job(
         f"Quick Policy Test - {display}",
         execution_type="quick_run",
-        metadata=_job_lob_metadata(policy_lob, description=req.description),
+        metadata=_job_lob_metadata(
+            policy_lob,
+            description=req.description,
+            requested_lob=req.lob,
+            rerun_payload={
+                "mode": "quick_run",
+                "lob": req.lob,
+                "description": req.description,
+            },
+        ),
     )
 
     def _run():
         try:
-            _status(jid, "Generating profile", LOB_DISPLAY.get(lob, req.lob.upper()))
-            persona_json = generate_persona(lob, req.description)
+            _status(jid, "Generating profile", display)
+            persona_json = generate_persona(engine_lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])

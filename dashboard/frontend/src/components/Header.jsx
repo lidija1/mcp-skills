@@ -28,7 +28,7 @@ export default function Header({backendOk, user, onLogout}) {
                 <button className="icon-action" title="Notifications" aria-label="Notifications">
                     <Bell size={21}/>
                 </button>
-                <button className="profile-button" title="Sign in" aria-label={`Signed in as ${displayName}. Sign out`}>
+                <button className="profile-button" title="Sign out" aria-label={`Signed in as ${displayName}. Sign out`}>
                     <span className="profile-initials">{initials}</span>
                     <span className="profile-copy">
             <strong>{displayName}</strong>

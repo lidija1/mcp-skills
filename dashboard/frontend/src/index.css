@@ -2748,7 +2748,7 @@ textarea.field {
 }
 
 .report-dialog {
-    width: min(1020px, 95vw);
+    width: min(1340px, 96vw);
     max-height: 90vh;
     display: flex;
     flex-direction: column;
@@ -3319,7 +3319,7 @@ code.asr-val-code.fail {
 
 .af-report {
     padding: 28px 32px 32px;
-    max-width: 680px;
+    max-width: 900px;
     margin: 0 auto;
 }
 
@@ -3506,6 +3506,32 @@ code.asr-val-code.fail {
     font-size: 14px;
     line-height: 1.7;
     color: var(--text);
+}
+
+.af-explain-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.af-explain-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text);
+}
+
+.af-explain-list li::before {
+    content: '•';
+    flex-shrink: 0;
+    color: var(--blue);
+    font-weight: 800;
+    margin-top: 1px;
 }
 
 .af-explain-error {

@@ -134,7 +134,7 @@ def _run_rung(lob: str, base_persona: dict, dimension: str, value: str) -> Ladde
         flow_result = client.run_captured_auto_flow(
             persona,
             stop_after="rating-detail",
-            fast_mode=False,
+            fast_mode=True,
         )
     finally:
         client.close()
@@ -160,9 +160,18 @@ def _run_rung(lob: str, base_persona: dict, dimension: str, value: str) -> Ladde
 # Assertion checkers
 # ---------------------------------------------------------------------------
 
-def _check_monotonic_increase(rungs: list[LadderRung], dimension: str) -> list[LadderFinding]:
+def _check_monotonic_increase(
+    rungs: list[LadderRung], dimension: str, original_value: str | None = None
+) -> list[LadderFinding]:
     findings: list[LadderFinding] = []
-    valid = [r for r in rungs if r.premium is not None and not r.error]
+    # Exclude the rung that matches the original base persona value — comparing
+    # a persona against itself always produces delta=0 and poisons adjacent checks.
+    valid = [
+        r for r in rungs
+        if r.premium is not None
+        and not r.error
+        and (original_value is None or r.value.strip().lower() != original_value.strip().lower())
+    ]
     if len(valid) < 2:
         return [LadderFinding(
             label="Monotonic premium increase",
@@ -265,6 +274,11 @@ def run_ladder(
                     error=str(exc)[:200],
                 )
 
+    # The original value in the base persona (before any rung overrides) — rungs
+    # that land on this value compare the persona against itself and must be excluded.
+    field_name = DIMENSION_FIELD[dimension]
+    original_value: str | None = base_persona.get(field_name)
+
     # Decide assertions
     do_monotonic = assert_monotonic
     if do_monotonic is None:
@@ -272,7 +286,7 @@ def run_ladder(
 
     findings: list[LadderFinding] = []
     if do_monotonic:
-        findings.extend(_check_monotonic_increase(rungs, dimension))
+        findings.extend(_check_monotonic_increase(rungs, dimension, original_value))
 
     # Always check for UW escalation on license dimension
     if dimension == "license":

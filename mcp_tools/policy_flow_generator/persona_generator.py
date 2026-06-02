@@ -336,11 +336,16 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "Model":              string,    // pre-assigned from vehicle catalog — copy exact value from user message
   "Spec":               string,    // pre-assigned from vehicle catalog — copy exact value from user message
   "VehicleUse":         "Pleasure" | "Commute" | "Business",
+  "DistanceToWork":     string,    // miles one-way; REQUIRED when VehicleUse="Commute" (e.g. "10"); OMIT otherwise
   "Ownership":          "Owned" | "Leased" | "Financed",
   "LossPayeeType":      "Leased" | "Financed",  // REQUIRED when Ownership != "Owned"; OMIT otherwise
   "LossPayeeName":      string,                  // REQUIRED when Ownership != "Owned"; OMIT otherwise
   "PolicyCoverage":     "Bronze" | "Silver" | "Gold" | "Platinum",
-  "PaymentPlan":        "Pay In Full"
+  "PaymentPlan":        "Pay In Full",
+  "FullTimeStudent":    "Yes" | "No",   // OMIT unless driver is under 25 and persona implies student status
+  "VehicleWithStudentAtSchool": "Yes" | "No",  // REQUIRED when FullTimeStudent="Yes"; OMIT otherwise
+  "GoodStudent":        "Yes" | "No",   // REQUIRED when FullTimeStudent="Yes"; "Yes" if GPA >= B average; OMIT otherwise
+  "DefensiveDriver":    "Yes" | "No"    // "Yes" if persona completed a defensive driver course; OMIT or "No" otherwise
 }}
 
 ════════════════════════════════════════════════
@@ -367,6 +372,10 @@ PERSONA ARCHETYPE GUIDE
   "multiple_accidents"           → DamageInfo="Yes", DescribeDamage="Multiple prior accident damage on front and rear bumper"
   "full_coverage"                → PolicyCoverage="Platinum"
   "minimum_coverage"             → PolicyCoverage="Bronze"
+  "good_student"                 → DOB after {_UNDER_25_CUTOFF.strftime('%m/%d/%Y')} (age 19-24), EmploymentCategory="Student", FullTimeStudent="Yes", VehicleWithStudentAtSchool="No", GoodStudent="Yes"
+  "defensive_driver"             → DefensiveDriver="Yes" (any age)
+  "low_mileage_commuter"         → VehicleUse="Commute", DistanceToWork="5"
+  "high_mileage_commuter"        → VehicleUse="Commute", DistanceToWork="50"
 
 Return ONLY a valid JSON object. No explanation, markdown, or extra text.
 """

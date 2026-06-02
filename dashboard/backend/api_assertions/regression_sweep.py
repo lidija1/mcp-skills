@@ -184,9 +184,9 @@ Each variant changes exactly ONE risk factor from the baseline.
 
 Return ONLY a JSON array. Each element must have exactly these keys:
 {
-  "label": "short human-readable name (e.g. '1 speeding ticket')",
+  "label": "short human-readable name (e.g. 'coverage Bronze' or 'SR-22 required')",
   "persona_description": "full NL baseline description WITH the mutation applied",
-  "field_mutated": "the OneShield persona JSON field being changed (e.g. 'PriorIncidents')",
+  "field_mutated": "the OneShield persona JSON field being changed (e.g. 'PolicyCoverage' or 'LicenseStatus')",
   "category": "risk_adding | discount | hard_stop | ladder",
   "expected_direction": "gt | lt | blocked",
   "min_delta_pct": <number or null>,
@@ -195,16 +195,27 @@ Return ONLY a JSON array. Each element must have exactly these keys:
 
 Rules:
 - persona_description must include all baseline details plus the single mutation
-- category "ladder" = sequential series (1 ticket, 2 tickets, 3 tickets)
+- category "ladder" = sequential series of the same factor stepped up (e.g. Bronze → Silver → Gold → Platinum)
 - expected_direction "blocked" = flow declined entirely (no premium expected)
 - min_delta_pct: minimum absolute % change from baseline (null if not applicable)
-- max_delta_pct: sanity cap — one ticket should not double the premium (null if uncapped)
+- max_delta_pct: sanity cap to catch runaway surcharges (null if uncapped)
 
 Unless focus is specified, cover ALL four categories:
-  RISK ADDING:  1/2/3 speeding tickets (ladder), at-fault accident, young driver (16-year-old added),
-                elderly driver (78+), high-value vehicle, sport/exotic vehicle, prior lapse in coverage, SR-22
-  DISCOUNTS:    multi-policy, good student, anti-theft device, higher deductible, low annual mileage, mature driver
-  HARD STOPS:   DUI conviction, 3+ at-fault accidents, suspended license, revoked license
+  RISK ADDING:  young driver (DOB ~20 years ago),
+                elderly driver (DOB ~75 years ago), business vehicle use (VehicleUse=Business),
+                SR-22 required (SR22=Yes), leased vehicle (Ownership=Leased)
+  DISCOUNTS:    good student (FullTimeStudent=Yes + GoodStudent=Yes, driver under 25),
+                defensive driver course (DefensiveDriver=Yes),
+                low mileage commuter (VehicleUse=Commute + DistanceToWork=5),
+                minimum coverage (PolicyCoverage=Bronze)
+  HARD STOPS:   suspended license (LicenseStatus=Suspended), revoked license (LicenseStatus=Revoked)
+  LADDER:       coverage tier — generate exactly 4 variants in order:
+                  Bronze (PolicyCoverage=Bronze, expected lt baseline),
+                  Silver (PolicyCoverage=Silver, expected lt baseline if baseline is Gold/Platinum),
+                  Gold (PolicyCoverage=Gold),
+                  Platinum (PolicyCoverage=Platinum, expected gt baseline)
+                Each step must have expected_direction relative to the BASELINE (not prior step).
+                Use min_delta_pct=2 between each tier as a sanity floor.
 """
 
 
@@ -242,7 +253,7 @@ def _run_persona(description: str, lob: str) -> tuple[dict, dict]:
         raise ValueError(f"Persona generation failed: {persona['error']}")
     client = OneShieldApiReplay()
     try:
-        flow = client.run_captured_auto_flow(persona, stop_after="rating-detail", fast_mode=False)
+        flow = client.run_captured_auto_flow(persona, stop_after="rating-detail", fast_mode=True)
     finally:
         client.close()
     return persona, flow
@@ -253,13 +264,16 @@ def _assert_variant(
     actual_premium: float | None,
     baseline_premium: float | None,
     blocked: bool,
+    uw_conditions: list[str] | None = None,
 ) -> tuple[bool, bool | None, float | None, str]:
     """Returns (direction_passed, magnitude_passed, delta_pct, message)."""
     messages: list[str] = []
     direction = variant.expected_direction
 
     if direction == "blocked":
-        direction_passed = blocked
+        # UW Referral page counts as blocked — OneShield still computes a premium
+        # even for hard-stop profiles, so blocked_reason alone is insufficient.
+        direction_passed = blocked or bool(uw_conditions)
         if not direction_passed:
             p = f"${actual_premium:,.2f}" if actual_premium else "no premium"
             messages.append(f"expected blocked but got {p}")
@@ -300,7 +314,12 @@ def _assert_variant(
     return direction_passed, magnitude_passed, delta_pct, "; ".join(messages)
 
 
-def _run_variant_task(variant: RegressionVariant, lob: str, baseline_premium: float | None) -> VariantResult:
+def _run_variant_task(
+    variant: RegressionVariant,
+    lob: str,
+    baseline_premium: float | None,
+    baseline_persona: dict[str, Any] | None = None,
+) -> VariantResult:
     try:
         persona, flow = _run_persona(variant.persona_description, lob)
     except Exception as exc:
@@ -318,8 +337,37 @@ def _run_variant_task(variant: RegressionVariant, lob: str, baseline_premium: fl
     blocked = bool(flow.get("blocked_reason"))
     blocked_reason = flow.get("blocked_reason", "")
 
+    # Skip direction/magnitude comparison when the variant mutates a field that
+    # already has the same value in the baseline persona — comparing a persona
+    # against itself always produces delta=0 and will trivially fail gt/lt checks.
+    field = variant.field_mutated
+    if (
+        baseline_persona
+        and field
+        and field in persona
+        and field in baseline_persona
+        and str(persona[field]).strip().lower() == str(baseline_persona[field]).strip().lower()
+    ):
+        delta_pct: float | None = None
+        if baseline_premium and actual_premium:
+            delta_pct = ((actual_premium - baseline_premium) / baseline_premium) * 100
+        return VariantResult(
+            variant=variant,
+            run_id=run_id,
+            persona=persona,
+            actual_premium=actual_premium,
+            delta_pct=delta_pct,
+            uw_conditions=uw_conditions,
+            blocked=blocked,
+            blocked_reason=blocked_reason,
+            direction_passed=True,
+            magnitude_passed=None,
+            passed=True,
+            message=f"skipped — {field}={persona[field]!r} matches baseline (same value)",
+        )
+
     direction_passed, magnitude_passed, delta_pct, message = _assert_variant(
-        variant, actual_premium, baseline_premium, blocked
+        variant, actual_premium, baseline_premium, blocked, uw_conditions
     )
     passed = direction_passed and (magnitude_passed is None or magnitude_passed)
 
@@ -339,9 +387,21 @@ def _run_variant_task(variant: RegressionVariant, lob: str, baseline_premium: fl
     )
 
 
+_COVERAGE_RANK = {"bronze": 0, "silver": 1, "gold": 2, "platinum": 3}
+
+
 def _check_ladder_monotonic(results: list[VariantResult]) -> list[str]:
     """Checks that ladder-category variants are monotonically increasing in premium."""
     ladder = [r for r in results if r.variant.category == "ladder" and r.actual_premium is not None]
+    # Sort by coverage tier if this is a coverage ladder; otherwise preserve result order
+    def _sort_key(r: VariantResult) -> int:
+        label_lower = r.variant.label.lower()
+        for tier, rank in _COVERAGE_RANK.items():
+            if tier in label_lower:
+                return rank
+        return 999
+    if any(_sort_key(r) < 999 for r in ladder):
+        ladder = sorted(ladder, key=_sort_key)
     violations = []
     for i in range(len(ladder) - 1):
         lo, hi = ladder[i], ladder[i + 1]
@@ -479,22 +539,24 @@ def run_sweep(
     """
     sweep_id = str(uuid.uuid4())[:8]
 
-    # Phase 1: Generate variants
-    variants = _generate_variants(baseline_description, lob, focus)
+    # Phase 1 + 2: Generate variants and run baseline concurrently
+    with ThreadPoolExecutor(max_workers=2) as bootstrap:
+        variant_future = bootstrap.submit(_generate_variants, baseline_description, lob, focus)
+        baseline_future = bootstrap.submit(_run_persona, baseline_description, lob)
+        variants = variant_future.result()
+        baseline_persona, baseline_flow = baseline_future.result()
 
-    # Phase 2: Baseline
-    baseline_persona, baseline_flow = _run_persona(baseline_description, lob)
     baseline_premium = _extract_premium(baseline_flow)
     baseline_run_id = snapshot_store.save(
         baseline_persona, baseline_flow, lob=lob,
         persona_desc=f"[baseline] {baseline_description}",
     )
 
-    # Phase 3: Parallel variants
+    # Phase 3: Parallel variants — all fire at once (pure I/O, no CPU contention)
     results: list[VariantResult] = [None] * len(variants)  # type: ignore[list-item]
-    with ThreadPoolExecutor(max_workers=min(len(variants), 6)) as pool:
+    with ThreadPoolExecutor(max_workers=len(variants)) as pool:
         futures = {
-            pool.submit(_run_variant_task, v, lob, baseline_premium): i
+            pool.submit(_run_variant_task, v, lob, baseline_premium, baseline_persona): i
             for i, v in enumerate(variants)
         }
         for future in as_completed(futures):

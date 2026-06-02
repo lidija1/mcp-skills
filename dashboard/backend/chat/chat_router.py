@@ -412,6 +412,7 @@ def _dispatch_run_assert_flow(jid: str, params: dict):
                 coverage_premiums=snap.coverage_premiums,
                 uw_conditions=snap.uw_conditions,
                 persona=snap.persona,
+                flow_result=flow,
                 blocked=snap.blocked,
                 blocked_reason=snap.blocked_reason,
                 run_id=snap.run_id,

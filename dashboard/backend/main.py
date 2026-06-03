@@ -59,7 +59,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # â”€â”€ MCP Tool imports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 from mcp_tools.policy_flow_generator.flow_runner import run_flow
@@ -80,13 +80,14 @@ _status = _job_store.update_job_status
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
-POLICY_LOBS = {"auto", "cyber", "homeowner"}
+POLICY_LOBS = {"personal-auto", "cyber", "homeowner"}
 POLICY_LOB_ALIASES = {
     "personal-auto": "auto",
     "personal_auto": "auto",
     "personal auto": "auto",
 }
 LOB_DISPLAY = {
+    "personal-auto": "Personal Auto",
     "auto": "Personal Auto",
     "cyber": "Cyber",
     "homeowner": "Homeowner",
@@ -114,15 +115,58 @@ def _make_policy_progress_callback(jid: str, lob: str):
     return _update
 
 
+def _canonical_policy_lob(raw: str, *, unknown_fallback: str | None = None) -> str:
+    """Normalize dashboard LOB strings (personal-auto variants, auto alias, etc.)."""
+    key = re.sub(r"[\s_]+", "-", (raw or "").strip().lower())
+    if key in ("personal-auto", "personalauto", "auto", "car", "vehicle"):
+        return "personal-auto"
+    if key == "cyber":
+        return "cyber"
+    if key in ("homeowner", "home"):
+        return "homeowner"
+    if unknown_fallback is not None:
+        return unknown_fallback
+    return key
+
+
+def _to_flow_engine_lob(policy_lob: str) -> str:
+    """Map dashboard policy LOB keys to flow_runner / persona_generator keys."""
+    if policy_lob == "personal-auto":
+        return "auto"
+    return policy_lob
+
+
+def _resolve_run_flow_lob(raw: str) -> tuple[str, str]:
+    """Resolve Run Policy Journey LOB without HTTP errors. Unknown → personal-auto."""
+    policy_lob = _canonical_policy_lob(raw or "personal-auto", unknown_fallback="personal-auto")
+    return policy_lob, _to_flow_engine_lob(policy_lob)
+
+
 def _validate_policy_lob(lob: str) -> str:
-    normalized = POLICY_LOB_ALIASES.get(lob.lower().strip(), lob.lower().strip())
+    normalized = _canonical_policy_lob(lob)
     if normalized not in POLICY_LOBS:
-        valid = ", ".join(sorted([*POLICY_LOBS, *POLICY_LOB_ALIASES]))
+        valid = ", ".join(sorted(POLICY_LOBS))
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported policy-flow LOB '{lob}'. Valid options: {valid}.",
         )
     return normalized
+
+
+def _job_lob_metadata(policy_lob: str, **extra) -> dict:
+    """Canonical lob + display label stored on every job for the Jobs UI."""
+    if policy_lob == "all":
+        meta = {"lob": "all", "lob_display": "All LOBs"}
+    elif policy_lob == "multi":
+        meta = {"lob": "multi", "lob_display": "Multi-LOB"}
+    else:
+        canonical = _canonical_policy_lob(policy_lob)
+        if canonical not in POLICY_LOBS and canonical == "auto":
+            canonical = "personal-auto"
+        display = LOB_DISPLAY.get(canonical, canonical.replace("-", " ").title())
+        meta = {"lob": canonical, "lob_display": display}
+    meta.update(extra)
+    return meta
 
 
 def _normalize_policy_tc_id(raw: str) -> str | None:
@@ -167,6 +211,52 @@ def _parse_policy_persona_input(lob: str, persona_input: str) -> dict:
             return _load_policy_persona_from_tc_id(lob, tc_id)
     if not isinstance(parsed, dict):
         raise ValueError("Run Policy Journey expects profile JSON or a TC_ID such as TC_ID_0001.")
+    return parsed
+
+
+def _parse_run_flow_persona(policy_lob: str, persona_input: str | dict) -> dict:
+    """Lenient persona parsing for Run Policy Journey (errors surface in job logs)."""
+    if isinstance(persona_input, dict):
+        return persona_input
+
+    if not isinstance(persona_input, str):
+        raise ValueError("persona_json must be a JSON string or object.")
+
+    text = persona_input.strip()
+    if not text:
+        raise ValueError("persona_json is empty — paste profile JSON or a TC_ID such as TC_ID_0001.")
+
+    tc_id = _normalize_policy_tc_id(text)
+    if tc_id:
+        try:
+            return _load_policy_persona_from_tc_id(policy_lob, tc_id)
+        except Exception as exc:
+            raise ValueError(f"Could not load test case {tc_id}: {exc}") from exc
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"persona_json is not valid JSON: {exc}") from exc
+
+    if isinstance(parsed, str):
+        nested = parsed.strip()
+        tc_id = _normalize_policy_tc_id(nested)
+        if tc_id:
+            try:
+                return _load_policy_persona_from_tc_id(policy_lob, tc_id)
+            except Exception as exc:
+                raise ValueError(f"Could not load test case {tc_id}: {exc}") from exc
+        try:
+            parsed = json.loads(nested)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"persona_json contained a string that is not valid JSON: {exc}"
+            ) from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            "Run Policy Journey expects a profile JSON object or a TC_ID such as TC_ID_0001."
+        )
     return parsed
 
 
@@ -345,6 +435,19 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
 
     metadata = job.get("metadata") or {}
     payload = metadata.get("rerun_payload")
+    execution_type = job.get("execution_type")
+
+    if not payload:
+        if execution_type in {"quick_run", "create_persona"} and metadata.get("description"):
+            payload = {
+                "lob": metadata.get("requested_lob") or metadata.get("lob") or "personal-auto",
+                "description": metadata.get("description"),
+            }
+        elif execution_type == "policy_flow" and metadata.get("persona_json"):
+            payload = {
+                "lob": metadata.get("requested_lob") or metadata.get("lob") or "personal-auto",
+                "persona_json": metadata.get("persona_json"),
+            }
 
     if not payload:
         raise HTTPException(
@@ -352,12 +455,10 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
             detail="This job cannot be rerun",
         )
 
-    execution_type = job.get("execution_type")
-
-    if execution_type != "policy_flow":
+    if execution_type not in {"policy_flow", "quick_run", "create_persona"}:
         raise HTTPException(
             status_code=400,
-            detail="Rerun currently supported only for policy flows",
+            detail="Rerun currently supported only for policy flow jobs",
         )
 
     policy_lob, engine_lob = _resolve_run_flow_lob(payload["lob"])
@@ -366,6 +467,74 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
         policy_lob,
         payload["lob"].strip().upper()
     )
+
+    if execution_type == "create_persona":
+        description = payload.get("description") or metadata.get("description") or ""
+        new_jid = _new_job(
+            f"Build Profile - {display}",
+            execution_type="create_persona",
+            metadata=_job_lob_metadata(
+                policy_lob,
+                description=description,
+                requested_lob=payload["lob"],
+                rerun_of=job_id,
+                rerun_payload={
+                    "lob": payload["lob"],
+                    "description": description,
+                },
+            ),
+        )
+
+        def _run_create_persona():
+            try:
+                persona_json = generate_persona(engine_lob, description)
+                data = json.loads(persona_json)
+                if "error" in data:
+                    _fail(new_jid, data["error"])
+                    return
+                _done(new_jid, _format_persona_report(display, description, persona_json))
+            except Exception as e:
+                _fail(new_jid, str(e))
+
+        bg.add_task(_run_create_persona)
+        return {"job_id": new_jid}
+
+    if execution_type == "quick_run":
+        description = payload.get("description") or metadata.get("description") or ""
+        new_jid = _new_job(
+            f"Quick Policy Test - {display}",
+            execution_type="quick_run",
+            metadata=_job_lob_metadata(
+                policy_lob,
+                description=description,
+                requested_lob=payload["lob"],
+                rerun_of=job_id,
+                rerun_payload={
+                    "mode": "quick_run",
+                    "lob": payload["lob"],
+                    "description": description,
+                },
+            ),
+        )
+
+        def _run_quick_run():
+            try:
+                _status(new_jid, "Generating profile", display)
+                persona_json = generate_persona(engine_lob, description)
+                data = json.loads(persona_json)
+                if "error" in data:
+                    _fail(new_jid, data["error"])
+                    return
+                result = _run_flow_threaded(
+                    engine_lob, data, _make_policy_progress_callback(new_jid, policy_lob), new_jid
+                )
+                persona_section = _format_persona_report(display, description, persona_json) + "\n\n---\n\n"
+                _done(new_jid, persona_section + format_result(result))
+            except Exception as e:
+                _fail(new_jid, str(e))
+
+        bg.add_task(_run_quick_run)
+        return {"job_id": new_jid}
 
     new_jid = _new_job(
         f"Policy Journey - {display}",
@@ -383,7 +552,7 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
             _status(new_jid, "Preparing profile", display)
 
             persona = _parse_run_flow_persona(
-                policy_lob,
+                engine_lob,
                 payload["persona_json"],
             )
 
@@ -416,8 +585,9 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
 @app.get("/api/policy/archetypes")
 def get_archetypes(lob: str = ""):
     if lob:
-        _validate_policy_lob(lob)
-    return {"result": list_archetypes(lob or None)}
+        policy_lob = _validate_policy_lob(lob)
+        return {"result": list_archetypes(_to_flow_engine_lob(policy_lob))}
+    return {"result": list_archetypes(None)}
 
 
 # â”€â”€ Pydantic models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -427,8 +597,24 @@ class PersonaReq(BaseModel):
 
 
 class FlowReq(BaseModel):
-    lob: str
-    persona_json: str
+    lob: str = "personal-auto"
+    persona_json: str | dict = ""
+
+    @field_validator("lob", mode="before")
+    @classmethod
+    def _coerce_flow_lob(cls, value):
+        if value is None:
+            return "personal-auto"
+        return str(value)
+
+    @field_validator("persona_json", mode="before")
+    @classmethod
+    def _coerce_flow_persona(cls, value):
+        if value is None:
+            return ""
+        if isinstance(value, dict):
+            return value
+        return str(value)
 
 
 class BatchReq(BaseModel):
@@ -762,7 +948,7 @@ def explorer_run_ep(req: ExplorerRunReq, bg: BackgroundTasks):
 
 @app.post("/api/explorer/prompt")
 def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
-    jid = _new_job("Explorer Prompt")
+    jid = _new_job("Explorer Prompt", execution_type="explorer_prompt", metadata={"prompt": req.prompt})
 
     def _run():
         try:
@@ -778,12 +964,26 @@ def explorer_prompt_ep(req: ExplorerReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Build Profile (AI call only, ~5s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/create-persona")
 def create_persona_ep(req: PersonaReq, bg: BackgroundTasks):
-    lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Build Profile - {req.lob.upper()}")
+    policy_lob = _validate_policy_lob(req.lob)
+    engine_lob = _to_flow_engine_lob(policy_lob)
+    display = LOB_DISPLAY[policy_lob]
+    jid = _new_job(
+        f"Build Profile - {display}",
+        execution_type="create_persona",
+        metadata=_job_lob_metadata(
+            policy_lob,
+            description=req.description,
+            requested_lob=req.lob,
+            rerun_payload={
+                "lob": req.lob,
+                "description": req.description,
+            },
+        ),
+    )
 
     def _run():
         try:
-            persona_json = generate_persona(lob, req.description)
+            persona_json = generate_persona(engine_lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
@@ -817,7 +1017,7 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
     def _run():
         try:
             _status(jid, "Preparing profile", display)
-            persona = _parse_run_flow_persona(policy_lob, req.persona_json)
+            persona = _parse_run_flow_persona(engine_lob, req.persona_json)
             result = _run_flow_threaded(
                 engine_lob, persona, _make_policy_progress_callback(jid, policy_lob), jid
             )
@@ -833,13 +1033,28 @@ def run_flow_ep(req: FlowReq, bg: BackgroundTasks):
 # â”€â”€ Policy: Quick Run (AI + browser, ~100s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/policy/quick-run")
 def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
-    lob = _validate_policy_lob(req.lob)
-    jid = _new_job(f"Quick Policy Test - {req.lob.upper()}")
+    policy_lob = _validate_policy_lob(req.lob)
+    engine_lob = _to_flow_engine_lob(policy_lob)
+    display = LOB_DISPLAY[policy_lob]
+    jid = _new_job(
+        f"Quick Policy Test - {display}",
+        execution_type="quick_run",
+        metadata=_job_lob_metadata(
+            policy_lob,
+            description=req.description,
+            requested_lob=req.lob,
+            rerun_payload={
+                "mode": "quick_run",
+                "lob": req.lob,
+                "description": req.description,
+            },
+        ),
+    )
 
     def _run():
         try:
-            _status(jid, "Generating profile", LOB_DISPLAY.get(lob, req.lob.upper()))
-            persona_json = generate_persona(lob, req.description)
+            _status(jid, "Generating profile", display)
+            persona_json = generate_persona(engine_lob, req.description)
             data = json.loads(persona_json)
             if "error" in data:
                 _fail(jid, data["error"])
@@ -867,16 +1082,17 @@ def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
         try:
             results = []
             for s in req.scenarios[:25]:
-                lob = _validate_policy_lob(str(s.get("lob", "auto")))
+                policy_lob = _validate_policy_lob(str(s.get("lob", "personal-auto")))
+                engine_lob = _to_flow_engine_lob(policy_lob)
+                pjson = generate_persona(engine_lob, s.get("description", ""))
                 try:
-                    pjson = generate_persona(lob, s.get("description", ""))
                     p = json.loads(pjson)
                     if "error" in p:
-                        r = _empty_result(lob, p.get("error", "persona error"))
+                        r = _empty_result(engine_lob, p.get("error", "persona error"))
                     else:
                         r = _run_flow_threaded(engine_lob, p, None, jid)
                 except Exception as ex:
-                    r = _empty_result(lob, str(ex))
+                    r = _empty_result(engine_lob, str(ex))
                 results.append(r)
             _done(jid, format_batch_summary(results))
         except Exception as e:
@@ -1480,7 +1696,12 @@ def _format_persona_report(lob: str, description: str, persona_json: str) -> str
 @app.get("/api/uw/rules")
 def list_rules(lob: str = ""):
     target = lob.lower().strip() if lob else None
-    lob_display = {"auto": "Personal Auto", "cyber": "Cyber", "homeowner": "Homeowner"}
+    lob_display = {
+        "auto": "Personal Auto",
+        "personal-auto": "Personal Auto",
+        "cyber": "Cyber",
+        "homeowner": "Homeowner",
+    }
     sev_icon = {"critical": "ðŸ”´", "high": "ðŸŸ ", "warning": "ðŸŸ¡"}
     lob_groups: dict[str, list] = {}
 
@@ -1513,7 +1734,13 @@ def list_rules(lob: str = ""):
 # â”€â”€ UW: Department Audit (browser Ã— all LOB cases) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/audit")
 def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
-    jid = _new_job(f"Department Audit â€” {req.lob.upper()}")
+    audit_lob = _canonical_policy_lob(req.lob)
+    audit_display = LOB_DISPLAY.get(audit_lob, req.lob.replace("-", " ").title())
+    jid = _new_job(
+        f"Department Audit â€” {audit_display}",
+        execution_type="underwriting_audit",
+        metadata=_job_lob_metadata(audit_lob),
+    )
 
     def _run():
         try:
@@ -1533,7 +1760,12 @@ def run_audit_ep(req: AuditReq, bg: BackgroundTasks):
 # â”€â”€ UW: Single Rule Cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/rule-cases")
 def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
-    jid = _new_job(f"Rule Test â€” {req.rule_id}")
+    rule_lob = _canonical_policy_lob(req.lob)
+    jid = _new_job(
+        f"Rule Test â€” {req.rule_id}",
+        execution_type="uw_rule",
+        metadata=_job_lob_metadata(rule_lob, rule_id=req.rule_id),
+    )
 
     def _run():
         try:
@@ -1553,7 +1785,13 @@ def rule_cases_ep(req: RuleCasesReq, bg: BackgroundTasks):
 # â”€â”€ UW: Custom Boundary Test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/custom-boundary")
 def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
-    jid = _new_job(f"Edge Case â€” {req.lob.upper()}")
+    boundary_lob = _canonical_policy_lob(req.lob)
+    boundary_display = LOB_DISPLAY.get(boundary_lob, req.lob.replace("-", " ").title())
+    jid = _new_job(
+        f"Edge Case â€” {boundary_display}",
+        execution_type="uw_custom_boundary",
+        metadata=_job_lob_metadata(boundary_lob, description=req.description),
+    )
 
     def _run():
         try:
@@ -1598,7 +1836,11 @@ def boundary_ep(req: BoundaryReq, bg: BackgroundTasks):
 # â”€â”€ UW: Full System Audit (all LOBs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.post("/api/uw/full-audit")
 def full_audit_ep(bg: BackgroundTasks):
-    jid = _new_job("Full System Audit â€” ALL LOBs")
+    jid = _new_job(
+        "Full System Audit â€” ALL LOBs",
+        execution_type="underwriting_audit",
+        metadata=_job_lob_metadata("all"),
+    )
 
     def _run():
         try:

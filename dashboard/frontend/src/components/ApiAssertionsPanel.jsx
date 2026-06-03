@@ -102,8 +102,6 @@ export default function ApiAssertionsPanel({submitJob}) {
   useEffect(() => {
     if (activeTab !== 'history') return
     fetchHistory()
-    const timer = setInterval(fetchHistory, 8000)
-    return () => clearInterval(timer)
   }, [activeTab, fetchHistory])
 
   const handleDeleteResult = async id => {

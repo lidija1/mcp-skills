@@ -129,6 +129,7 @@ def init_db() -> None:
                 coverage_premiums_json TEXT NOT NULL DEFAULT '{}',
                 uw_conditions_json TEXT NOT NULL DEFAULT '[]',
                 persona_json TEXT NOT NULL DEFAULT '{}',
+                flow_result_json TEXT NOT NULL DEFAULT '{}',
                 blocked INTEGER NOT NULL DEFAULT 0,
                 blocked_reason TEXT NOT NULL DEFAULT '',
                 run_id TEXT,
@@ -138,6 +139,7 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_column(conn, "assertion_results", "flow_result_json", "TEXT NOT NULL DEFAULT '{}'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assertion_results_created_at ON assertion_results(created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assertion_results_created_by ON assertion_results(created_by)")
 
@@ -217,6 +219,7 @@ def save_assertion_result(
     coverage_premiums: dict[str, Any] | None = None,
     uw_conditions: list[str] | None = None,
     persona: dict[str, Any] | None = None,
+    flow_result: dict[str, Any] | None = None,
     blocked: bool = False,
     blocked_reason: str = "",
     run_id: str | None = None,
@@ -230,14 +233,15 @@ def save_assertion_result(
             INSERT INTO assertion_results (
                 persona_description, assertion_type, expected_value, actual_value,
                 operator, tolerance_pct, passed, message, lob,
-                coverage_premiums_json, uw_conditions_json, persona_json,
+                coverage_premiums_json, uw_conditions_json, persona_json, flow_result_json,
                 blocked, blocked_reason, run_id, created_by, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 persona_description, assertion_type, expected_value, actual_value,
                 operator, tolerance_pct, int(passed), message, lob,
                 _json(coverage_premiums or {}), _json(uw_conditions or []), _json(persona or {}),
+                _json(flow_result or {}),
                 int(blocked), blocked_reason or "", run_id,
                 user_id, now,
             ),
@@ -294,6 +298,7 @@ def _row_to_assertion_result(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "coverage_premiums": _loads(data["coverage_premiums_json"], {}),
         "uw_conditions": _loads(data["uw_conditions_json"], []),
         "persona": _loads(data["persona_json"], {}),
+        "flow_result": _loads(data.get("flow_result_json"), {}),
         "blocked": bool(data["blocked"]),
         "blocked_reason": data["blocked_reason"] or "",
         "run_id": data.get("run_id"),

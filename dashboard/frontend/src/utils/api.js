@@ -74,6 +74,8 @@ export const api = {
   // ── Jobs ──────────────────────────────────────────────────────────────
   listJobs: () => get('/api/jobs'),
   getJob: id => get(`/api/jobs/${id}`),
+  cancelJob: id => post(`/api/jobs/${id}/cancel`, {}),
+  rerunJob: id => post(`/api/jobs/${id}/rerun`, {}),
   explorerPrompt: prompt => post('/api/explorer/prompt', { prompt }),
   explorerRun: prompt => post('/api/explorer/run', { prompt }),
 
@@ -127,12 +129,12 @@ runCompare: (description_a, description_b, relations, label_a = '', label_b = ''
       history,
     }),
   chatAsk: (message, history = []) => post('/api/chat/ask', { message, history }),
-  chatAskStream: (message, history = []) =>
+  chatAskStream: (message, history = [], maxTokens = 1200) =>
     fetch('/api/chat/ask/stream', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, history, max_tokens: maxTokens }),
     }),
 
   // ── Auth ──────────────────────────────────────────────────────────────

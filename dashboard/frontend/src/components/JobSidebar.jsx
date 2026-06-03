@@ -5,6 +5,7 @@ const STATUS_CONFIG = {
   running: { color: '#2563eb', label: 'Running' },
   done: { color: '#16a34a', label: 'Done' },
   error: { color: '#dc2626', label: 'Error' },
+  canceled: { color: '#d97706', label: 'Canceled' },
 }
 
 function elapsed(job) {

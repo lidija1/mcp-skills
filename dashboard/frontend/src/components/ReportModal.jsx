@@ -9,19 +9,22 @@ import {
   FileJson,
   FileSpreadsheet,
   Pencil,
+  RefreshCw,
   ShieldAlert,
   X,
 } from 'lucide-react'
 import { cleanDisplayText } from '../utils/text'
 import { api } from '../utils/api'
 
-export default function ReportModal({ job, onClose }) {
+export default function ReportModal({ job, onClose, onRerun }) {
   const ref = useRef(null)
   const feedbackTimerRef = useRef(null)
   const [activeAction, setActiveAction] = useState('')
+  const [rerunning, setRerunning] = useState(false)
   const jobLabel = cleanDisplayText(job.label || '')
   const jobResult = cleanDisplayText(job.result || '')
   const jobError = cleanDisplayText(job.error || '')
+  const canRerun = canRerunJob(job)
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -137,6 +140,17 @@ export default function ReportModal({ job, onClose }) {
     editor.document.close()
   }
 
+  const handleRerun = async () => {
+    if (!canRerun || !onRerun || rerunning) return
+    triggerActionFeedback('rerun')
+    setRerunning(true)
+    try {
+      await onRerun(job)
+    } finally {
+      setRerunning(false)
+    }
+  }
+
   return (
     <div ref={ref} onClick={handleBackdrop} className="report-backdrop">
       <section className="report-dialog" role="dialog" aria-modal="true" aria-label="Job report">
@@ -196,6 +210,18 @@ export default function ReportModal({ job, onClose }) {
                 View JSON
               </button>
             )}
+            {canRerun && onRerun && (
+              <button
+                onClick={handleRerun}
+                className={reportActionClass('rerun')}
+                type="button"
+                title="Run this policy flow again"
+                disabled={rerunning}
+              >
+                <RefreshCw size={16} />
+                Run again
+              </button>
+            )}
             <button onClick={withActionFeedback('copy', copyReport)} className={reportActionClass('copy')} type="button">
               <Copy size={16} />
               Copy
@@ -245,6 +271,12 @@ export default function ReportModal({ job, onClose }) {
       </section>
     </div>
   )
+}
+
+function canRerunJob(job) {
+  if (!job) return false
+  const metadata = job.metadata || {}
+  return job.execution_type === 'policy_flow' && Boolean(metadata.rerun_payload)
 }
 
 function DocKV({ label, value }) {

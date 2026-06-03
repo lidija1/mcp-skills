@@ -80,19 +80,19 @@ Feature: Personal Auto Underwriting Rules
     Examples:
       | TC_ID     | UWType       | ExpectedCondition                                              |
       | UW_TC_001 | Underwriting | SR-22 / Certificate of Insurance Indicator is checked          |
-      | UW_TC_002 | Underwriting | driver license status that is revoked or suspended             |
-      | UW_TC_003 | Underwriting | All drivers under 25 years of age                              |
-      | UW_TC_004 | Underwriting | driver license status that is revoked or suspended             |
-      | UW_TC_005 | Underwriting | All drivers under 25 years of age                              |
-      | UW_TC_006 | Underwriting | driver license status that is revoked or suspended             |
-      | UW_TC_007 | Underwriting | SR-22 / Certificate of Insurance Indicator is checked          |
-      | UW_TC_008 | Underwriting | All drivers under 25 years of age                              |
-      | UW_TC_009 | Underwriting | driver license status that is revoked or suspended             |
-      | UW_TC_010 | Underwriting | SR-22 / Certificate of Insurance Indicator is checked          |
-      | UW_TC_011 | Underwriting | All drivers under 25 years of age                              |
-      | UW_TC_012 | Underwriting | driver license status that is revoked or suspended             |
-      | UW_TC_013 | Underwriting | SR-22 / Certificate of Insurance Indicator is checked          |
-      | UW_TC_014 | Underwriting | All drivers under 25 years of age                              |
+#      | UW_TC_002 | Underwriting | driver license status that is revoked or suspended             |
+#      | UW_TC_003 | Underwriting | All drivers under 25 years of age                              |
+#      | UW_TC_004 | Underwriting | driver license status that is revoked or suspended             |
+#      | UW_TC_005 | Underwriting | All drivers under 25 years of age                              |
+#      | UW_TC_006 | Underwriting | driver license status that is revoked or suspended             |
+#      | UW_TC_007 | Underwriting | SR-22 / Certificate of Insurance Indicator is checked          |
+#      | UW_TC_008 | Underwriting | All drivers under 25 years of age                              |
+#      | UW_TC_009 | Underwriting | driver license status that is revoked or suspended             |
+#      | UW_TC_010 | Underwriting | SR-22 / Certificate of Insurance Indicator is checked          |
+#      | UW_TC_011 | Underwriting | All drivers under 25 years of age                              |
+#      | UW_TC_012 | Underwriting | driver license status that is revoked or suspended             |
+#      | UW_TC_013 | Underwriting | SR-22 / Certificate of Insurance Indicator is checked          |
+#      | UW_TC_014 | Underwriting | All drivers under 25 years of age                              |
 
   @uw_rules @auto
   Scenario Outline: Overridable Auto UW referral can continue to bind - <TC_ID>

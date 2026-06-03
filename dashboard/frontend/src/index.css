@@ -1901,12 +1901,30 @@ textarea.field {
     transform: translateY(-1px);
 }
 
+.activity-cancel-button {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    background: #fee2e2;
+    color: #dc2626;
+    box-shadow: 0 10px 20px rgba(220, 38, 38, 0.12);
+}
+
+.activity-cancel-button:hover {
+    transform: translateY(-1px);
+    background: #fecaca;
+}
+
 .activity-card.done {
     box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.08);
 }
 
 .activity-card.error {
     box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.08);
+}
+
+.activity-card.canceled {
+    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.12);
 }
 
 .activity-card-top {
@@ -1935,6 +1953,10 @@ textarea.field {
 
 .activity-dot.error {
     background: #dc2626;
+}
+
+.activity-dot.canceled {
+    background: #d97706;
 }
 
 .activity-status {
@@ -2240,7 +2262,7 @@ textarea.field {
 
 .jobs-summary-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 14px;
 }
 
@@ -2310,7 +2332,7 @@ textarea.field {
 .jobs-table-header,
 .jobs-table-row {
     display: grid;
-    grid-template-columns: minmax(260px, 1.8fr) 130px 120px 120px 130px 130px;
+    grid-template-columns: minmax(220px, 1.8fr) 110px 110px 110px 110px 170px;
     align-items: center;
     gap: 18px;
 }
@@ -2346,7 +2368,7 @@ textarea.field {
 
 .jobs-day-row {
     min-height: 54px;
-    background: #fbfcff;
+    background: rgb(240 240 251 / 0.68);
 }
 
 .jobs-lob-row {
@@ -2421,6 +2443,7 @@ textarea.field {
     font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding-right: 6px;
 }
 
 .jobs-report-cell {
@@ -5635,7 +5658,6 @@ code.asr-val-code.fail {
 :is([data-theme='dark'], [data-theme='black']) .explorer-report,
 :is([data-theme='dark'], [data-theme='black']) .help-modal,
 :is([data-theme='dark'], [data-theme='black']) .chat-confirm-card,
-:is([data-theme='dark'], [data-theme='black']) .chat-bubble.bot,
 :is([data-theme='dark'], [data-theme='black']) .chat-typing,
 :is([data-theme='dark'], [data-theme='black']) .chat-suggestion-chip {
     background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -6024,10 +6046,15 @@ code.asr-val-code.fail {
     background: #16a34a;
 }
 
-:is([data-theme='dark'], [data-theme='black']) .chat-bubble.user,
 :is([data-theme='dark'], [data-theme='black']) .chat-send-btn,
 :is([data-theme='dark'], [data-theme='black']) .action-button.blue {
     color: #0b1120;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .chat-bubble.user {
+    background: var(--surface-soft);
+    color: var(--text);
+    border-color: var(--border);
 }
 
 :is([data-theme='dark'], [data-theme='black']) .doc-report {
@@ -6410,15 +6437,15 @@ code.asr-val-code.fail {
     padding: 24px 16px 8px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 18px;
 }
 
 .chat-sidebar--expanded .chat-thread {
     width: 100%;
     max-width: 920px;
     margin: 0 auto;
-    padding: 34px 28px 18px;
-    gap: 18px;
+    padding: 40px 28px 18px;
+    gap: 24px;
 }
 
 .chat-sidebar--expanded .chat-panel-page--empty .chat-thread {
@@ -6445,8 +6472,8 @@ code.asr-val-code.fail {
 
 .chat-avatar {
     flex-shrink: 0;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -6464,36 +6491,42 @@ code.asr-val-code.fail {
 }
 
 .chat-bubble {
-    max-width: 72%;
+    max-width: 78%;
     padding: 10px 14px;
-    border-radius: 16px;
-    font-size: 0.875rem;
-    line-height: 1.55;
+    border-radius: 18px;
+    font-size: 1rem;
+    line-height: 1.72;
 }
 
 .chat-sidebar--expanded .chat-bubble {
-    max-width: min(76%, 680px);
-    font-size: 0.95rem;
-    line-height: 1.62;
+    max-width: min(88%, 740px);
+    font-size: 1rem;
+    line-height: 1.72;
 }
 
+/* Bot — no card background, pure flowing text (Claude style) */
 .chat-bubble.bot {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-bottom-left-radius: 4px;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+    max-width: 92%;
     color: var(--text);
 }
 
 .chat-sidebar--expanded .chat-bubble.bot {
-    border-color: transparent;
     background: transparent;
-    padding: 4px 0;
+    border: none;
+    padding: 2px 0;
+    max-width: 92%;
 }
 
+/* User — soft neutral pill */
 .chat-bubble.user {
-    background: var(--blue);
-    color: #fff;
-    border-bottom-right-radius: 4px;
+    background: var(--surface-soft);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 10px 16px;
 }
 
 .chat-sidebar--expanded .chat-bubble.user {
@@ -6501,23 +6534,91 @@ code.asr-val-code.fail {
     color: var(--text);
     border: 1px solid var(--border-soft);
     border-radius: 18px;
-    padding: 12px 16px;
+    padding: 12px 18px;
 }
 
-.chat-bubble.bot p:first-child {
-    margin-top: 0;
+/* ── Bot bubble markdown typography ─────────────────────────────────────── */
+
+.chat-bubble.bot p {
+    margin: 0 0 0.8em;
+}
+.chat-bubble.bot p:first-child { margin-top: 0; }
+.chat-bubble.bot p:last-child  { margin-bottom: 0; }
+
+.chat-bubble.bot h1,
+.chat-bubble.bot h2,
+.chat-bubble.bot h3,
+.chat-bubble.bot h4 {
+    font-weight: 600;
+    margin: 1.1em 0 0.4em;
+    line-height: 1.4;
+    color: var(--text);
+}
+.chat-bubble.bot h1:first-child,
+.chat-bubble.bot h2:first-child,
+.chat-bubble.bot h3:first-child { margin-top: 0; }
+.chat-bubble.bot h1 { font-size: 1.2rem; }
+.chat-bubble.bot h2 { font-size: 1.1rem; }
+.chat-bubble.bot h3 { font-size: 1rem; }
+
+.chat-bubble.bot ul,
+.chat-bubble.bot ol {
+    margin: 0.4em 0 0.8em;
+    padding-left: 1.5em;
+}
+.chat-bubble.bot li {
+    margin: 0.3em 0;
+    line-height: 1.65;
+}
+.chat-bubble.bot li > ul,
+.chat-bubble.bot li > ol { margin: 0.2em 0; }
+
+.chat-bubble.bot code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.875em;
+    background: var(--surface-soft);
+    border: 1px solid var(--border-soft);
+    padding: 0.15em 0.42em;
+    border-radius: 5px;
 }
 
-.chat-bubble.bot p:last-child {
-    margin-bottom: 0;
+.chat-bubble.bot pre {
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0.55em 0 0.85em;
+    line-height: 1.6;
+}
+.chat-bubble.bot pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.875rem;
+}
+
+.chat-bubble.bot strong { font-weight: 600; }
+
+.chat-bubble.bot hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.9em 0;
+}
+
+.chat-bubble.bot blockquote {
+    border-left: 3px solid var(--border);
+    margin: 0.5em 0;
+    padding-left: 1em;
+    color: var(--muted);
 }
 
 .chat-job-badge {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin: 4px 0 4px 36px;
-    font-size: 0.78rem;
+    margin: 4px 0 4px 40px;
+    font-size: 0.82rem;
     color: var(--muted);
 }
 
@@ -6539,11 +6640,11 @@ code.asr-val-code.fail {
 /* ── Inline job result card ───────────────────────────────────────────────── */
 
 .chat-job-result {
-    margin: 4px 0 4px 36px;
+    margin: 4px 0 4px 40px;
     border: 1px solid var(--border);
     border-radius: 10px;
     overflow: hidden;
-    font-size: 0.82rem;
+    font-size: 0.875rem;
     background: var(--surface);
 }
 
@@ -6791,11 +6892,10 @@ code.asr-val-code.fail {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 12px 16px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    border-bottom-left-radius: 4px;
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
 }
 
 .chat-typing span {
@@ -7116,7 +7216,7 @@ code.asr-val-code.fail {
 
 .chat-table-wrap table {
     border-collapse: collapse;
-    font-size: 0.82rem;
+    font-size: 0.9rem;
     width: 100%;
 }
 
@@ -7475,4 +7575,96 @@ code.asr-val-code.fail {
     border-color: #dc2626;
     color: #dc2626;
     background: #fef2f2;
+}
+
+.jobs-icon-btn {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, gap 0.2s ease, padding 0.2s ease;
+
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+.jobs-icon-btn .icon {
+    flex: 0 0 16px;
+    width: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+}
+
+.jobs-icon-btn .label {
+    opacity: 0;
+    max-width: 0;
+    overflow: hidden;
+
+    transition: opacity 0.2s ease, max-width 0.2s ease;
+
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+
+.jobs-icon-btn.expand-on-hover:hover {
+    background: #f3f4f6;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 14px 0 10px;
+    width: auto;
+}
+
+.jobs-icon-btn.expand-on-hover:hover .label {
+    opacity: 1;
+    max-width: 120px;
+}
+
+.jobs-icon-btn.expand-on-hover[data-label="view-report"]:hover {
+    min-width: 118px;
+}
+
+.jobs-icon-btn.expand-on-hover[data-label="run-again"]:hover {
+    min-width: 108px;
+}
+
+.jobs-icon-btn.always-labeled {
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 14px 0 10px;
+    width: auto;
+}
+
+.jobs-icon-btn.always-labeled .label {
+    opacity: 1;
+    max-width: 120px;
+}
+
+.jobs-icon-btn.always-labeled.danger {
+    background: #fee2e2;
+    color: #dc2626;
+    min-width: 92px;
+}
+
+.jobs-icon-btn.always-labeled.danger:hover {
+    background: #fecaca;
+}
+
+.jobs-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
 }

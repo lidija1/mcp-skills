@@ -316,7 +316,7 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
         setStreaming(true)
         setMessages(prev => [...prev, { role: 'bot', text: '' }])
         try {
-          const response = await api.chatAskStream(help.query, buildHistory(messages))
+          const response = await api.chatAskStream(help.query, buildHistory(messages), 4000)
           if (!response.ok) {
             const data = await response.json().catch(() => ({}))
             throw new Error(data.detail || data.error || 'Help stream failed')

@@ -107,6 +107,10 @@ class ChatMessageResp(BaseModel):
 class ChatAskReq(BaseModel):
     message: str = ""
     history: list[dict] = []
+    max_tokens: int = 1200
+
+    def effective_max_tokens(self) -> int:
+        return max(256, min(self.max_tokens, 6000))
 
 
 class ChatAskResp(BaseModel):
@@ -408,6 +412,7 @@ def _dispatch_run_assert_flow(jid: str, params: dict):
                 coverage_premiums=snap.coverage_premiums,
                 uw_conditions=snap.uw_conditions,
                 persona=snap.persona,
+                flow_result=flow,
                 blocked=snap.blocked,
                 blocked_reason=snap.blocked_reason,
                 run_id=snap.run_id,
@@ -549,7 +554,7 @@ def chat_ask(req: ChatAskReq):
             tools=registry_summary_for_prompt(),
             context=graph_context,
         )
-        reply = complete_text(system=system, user=message, max_tokens=1200, history=history)
+        reply = complete_text(system=system, user=message, max_tokens=req.effective_max_tokens(), history=history)
     except Exception as exc:
         return ChatAskResp(reply=f"Could not generate guidance: {exc}", status="error")
 
@@ -588,7 +593,7 @@ def chat_ask_stream(req: ChatAskReq):
                 tools=registry_summary_for_prompt(),
                 context=graph_context,
             )
-            for token in complete_text_stream(system=system, user=message, max_tokens=1200, history=history):
+            for token in complete_text_stream(system=system, user=message, max_tokens=req.effective_max_tokens(), history=history):
                 yield f"data: {json.dumps({'t': token})}\n\n"
             yield 'data: {"done": true}\n\n'
         except Exception as exc:

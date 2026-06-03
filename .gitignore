@@ -2,6 +2,8 @@
 .env
 .env.local
 config/secrets.yaml
+.err.log
+.out.log
 
 # Claude Code local settings (may contain API keys or sensitive paths)
 .claude/settings.local.json

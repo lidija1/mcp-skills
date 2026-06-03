@@ -10,6 +10,7 @@
 
 .auth-card {
   width: min(440px, 100%);
+  color-scheme: light;
   background: #ffffff;
   border: 1px solid #dbe3ee;
   border-radius: 8px;
@@ -68,6 +69,7 @@
 
 .auth-card input {
   width: 100%;
+  color-scheme: light;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -81,6 +83,18 @@
 .auth-card input:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.auth-card input::placeholder {
+  color: #94a3b8;
+}
+
+.auth-card input:-webkit-autofill,
+.auth-card input:-webkit-autofill:hover,
+.auth-card input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #111827;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  caret-color: #111827;
 }
 
 .auth-card button {
@@ -146,4 +160,14 @@
   .auth-card {
     padding: 26px;
   }
+}
+
+:is([data-theme='dark'], [data-theme='black']) .auth-field input {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #111827;
+}
+
+:is([data-theme='dark'], [data-theme='black']) .auth-field input::placeholder {
+    color: #94a3b8;
 }

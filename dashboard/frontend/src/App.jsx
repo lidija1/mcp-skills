@@ -329,6 +329,15 @@ export default function App() {
     }
 
     const currentPath = location.pathname
+    const pageKey = currentPath.startsWith('/uw-tests') || currentPath.startsWith('/api-tests')
+        ? 'uw-tests'
+        : currentPath === '/settings'
+            ? 'settings'
+            : currentPath === '/jobs'
+                ? 'jobs'
+                : currentPath === '/dashboard'
+                    ? 'overview'
+                    : 'default'
 
     const requireAuth = component => {
         if (!dashboardUser) {
@@ -393,7 +402,7 @@ export default function App() {
                     </nav>
                 </aside>
 
-                <main className="content-pane">
+                <main className={`content-pane content-pane--${pageKey}`}>
                     {backendOk === false && (
                         <div className="status-alert">
                             Backend not reachable. Start it with <code>python dashboard/backend/main.py</code>
@@ -634,6 +643,17 @@ function HelpModal({onClose}) {
                         <h3>Jobs</h3>
                         <p>Every dispatched run appears in the Jobs tab. Jobs poll every 2.5 s while running. Click any
                             completed job to open its report.</p>
+                    </div>
+                    <div className="help-section">
+                        <h3>UW Tests</h3>
+                        <p>Run underwriting evidence checks without binding a policy. Use <strong>Regression Sweep</strong>
+                            {' '}to compare generated rating variants, <strong>Direct Assert</strong> to validate a specific
+                            premium or billing value, and <strong>History</strong> to review saved assertion results.</p>
+                    </div>
+                    <div className="help-section">
+                        <h3>Settings</h3>
+                        <p>Use Settings to change the dashboard theme for this browser. Light, Dark, and Black modes are
+                            saved locally and apply across navigation, pages, reports, and modal windows.</p>
                     </div>
                     <div className="help-section">
                         <h3>Chat Assistant</h3>

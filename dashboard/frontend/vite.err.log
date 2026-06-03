@@ -1,0 +1,21 @@
+[2m12:00:32 PM[22m [31m[1m[vite][22m[39m [31mInternal server error: [postcss] C:/Users/LidijaDubovac/OneDrive - Inforce Technologies/Documents/Projects/sendbox-playwright/dashboard/frontend/src/index.css:8574:5: Unknown word marg[39m
+  Plugin: [35mvite:css[39m
+  File: [36mC:/Users/LidijaDubovac/OneDrive - Inforce Technologies/Documents/Projects/sendbox-playwright/dashboard/frontend/src/index.css[39m:8574:4
+[33m  8572|  .overview-metric-card .overview-metric-card-label.results {
+  8573|      margin-bottom: 0;
+  8574|      marg
+     |      ^
+  8575|  }
+  8576|  [39m
+      at Input.error (C:\Users\LidijaDubovac\OneDrive - Inforce Technologies\Documents\Projects\sendbox-playwright\dashboard\frontend\node_modules\postcss\lib\input.js:135:16)
+      at Parser.unknownWord (C:\Users\LidijaDubovac\OneDrive - Inforce Technologies\Documents\Projects\sendbox-playwright\dashboard\frontend\node_modules\postcss\lib\parser.js:595:22)
+      at Parser.other (C:\Users\LidijaDubovac\OneDrive - Inforce Technologies\Documents\Projects\sendbox-playwright\dashboard\frontend\node_modules\postcss\lib\parser.js:437:12)
+      at Parser.parse (C:\Users\LidijaDubovac\OneDrive - Inforce Technologies\Documents\Projects\sendbox-playwright\dashboard\frontend\node_modules\postcss\lib\parser.js:472:16)
+      at parse (C:\Users\LidijaDubovac\OneDrive - Inforce Technologies\Documents\Projects\sendbox-playwright\dashboard\frontend\node_modules\postcss\lib\parse.js:11:12)
+      at new LazyResult (C:\Users\LidijaDubovac\OneDrive - Inforce Technologies\Documents\Projects\sendbox-playwright\dashboard\frontend\node_modules\postcss\lib\lazy-result.js:165:16)
+      at Processor.process (C:\Users\LidijaDubovac\OneDrive - Inforce Technologies\Documents\Projects\sendbox-playwright\dashboard\frontend\node_modules\postcss\lib\processor.js:53:14)
+      at compileCSS (file:///C:/Users/LidijaDubovac/OneDrive%20-%20Inforce%20Technologies/Documents/Projects/sendbox-playwright/dashboard/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:36898:59)
+      at async TransformPluginContext.transform (file:///C:/Users/LidijaDubovac/OneDrive%20-%20Inforce%20Technologies/Documents/Projects/sendbox-playwright/dashboard/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:36171:11)
+      at async PluginContainer.transform (file:///C:/Users/LidijaDubovac/OneDrive%20-%20Inforce%20Technologies/Documents/Projects/sendbox-playwright/dashboard/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/LidijaDubovac/OneDrive%20-%20Inforce%20Technologies/Documents/Projects/sendbox-playwright/dashboard/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/LidijaDubovac/OneDrive%20-%20Inforce%20Technologies/Documents/Projects/sendbox-playwright/dashboard/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)

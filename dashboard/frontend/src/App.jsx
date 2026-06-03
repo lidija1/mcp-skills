@@ -64,9 +64,29 @@ export default function App() {
     const [showRegister, setShowRegister] = useState(false)
     const [selectedJob, setSelectedJob] = useState(null)
     const [showHelp, setShowHelp] = useState(false)
+    const [navCollapsed, setNavCollapsed] = useState(false)
+    const [navMobileOpen, setNavMobileOpen] = useState(false)
+    const [isNarrowNav, setIsNarrowNav] = useState(false)
     const [chatView, setChatView] = useState(() => localStorage.getItem('chatView') || 'sidebar')
 
     const setChatViewPersist = v => { setChatView(v); localStorage.setItem('chatView', v) }
+
+    useEffect(() => {
+        const media = window.matchMedia('(max-width: 1040px)')
+        const update = () => {
+            setIsNarrowNav(media.matches)
+            if (!media.matches) setNavMobileOpen(false)
+        }
+
+        update()
+        if (media.addEventListener) {
+            media.addEventListener('change', update)
+            return () => media.removeEventListener('change', update)
+        }
+
+        media.addListener(update)
+        return () => media.removeListener(update)
+    }, [])
 
     useEffect(() => {
         if (chatView !== 'full') return
@@ -346,14 +366,39 @@ export default function App() {
         return component
     }
 
+    const togglePrimaryNav = () => {
+        if (isNarrowNav) {
+            setNavMobileOpen(open => !open)
+            return
+        }
+
+        setNavCollapsed(collapsed => !collapsed)
+    }
+
+    const closeMobileNav = () => {
+        if (isNarrowNav) setNavMobileOpen(false)
+    }
+
     return (
         <div className="app-shell">
             <Header backendOk={backendOk} user={dashboardUser} onLogout={logout}/>
 
-            <div className={`workspace${chatView === 'hidden' ? ' workspace--chat-hidden' : ''}`}>
-                <aside className="side-nav" aria-label="Primary navigation">
+            <div
+                className={`workspace${chatView === 'hidden' ? ' workspace--chat-hidden' : ''}${navCollapsed ? ' workspace--nav-collapsed' : ''}${navMobileOpen ? ' workspace--nav-open' : ''}`}
+            >
+                <aside
+                    className="side-nav"
+                    aria-label="Primary navigation"
+                    aria-hidden={isNarrowNav && !navMobileOpen}
+                    inert={isNarrowNav && !navMobileOpen ? '' : undefined}
+                >
                     <nav className="side-nav-main">
-                        <IconButton icon={Menu} label="Menu"/>
+                        <IconButton
+                            icon={Menu}
+                            label={isNarrowNav && navMobileOpen ? 'Close menu' : 'Menu'}
+                            onClick={togglePrimaryNav}
+                            expanded={isNarrowNav ? navMobileOpen : !navCollapsed}
+                        />
                         {/*<NavItem icon={Home} label="Overview" active={tab === 'overview'}*/}
                         {/*         onClick={() => setTab('overview')}/>*/}
                         {/*<NavItem icon={CalendarDays} label="Jobs" active={tab === 'jobs'}*/}
@@ -364,14 +409,20 @@ export default function App() {
                             icon={Home}
                             label="Overview"
                             active={currentPath === '/dashboard'}
-                            onClick={() => navigate('/dashboard')}
+                            onClick={() => {
+                                navigate('/dashboard')
+                                closeMobileNav()
+                            }}
                         />
 
                         <NavItem
                             icon={CalendarDays}
                             label="Jobs"
                             active={currentPath === '/jobs'}
-                            onClick={() => navigate('/jobs')}
+                            onClick={() => {
+                                navigate('/jobs')
+                                closeMobileNav()
+                            }}
                         />
 
                         <NavItem
@@ -381,26 +432,60 @@ export default function App() {
                             onClick={() => {
                                 const savedLob = localStorage.getItem('selectedLob') || 'personal-auto'
                                 navigate(`/policy-flow/${savedLob}`)
+                                closeMobileNav()
                             }}
                         />
                         <NavItem
                             icon={ClipboardCheck}
                             label="UW Tests"
                             active={currentPath.startsWith('/uw-tests') || currentPath.startsWith('/api-tests')}
-                            onClick={() => navigate('/uw-tests')}
+                            onClick={() => {
+                                navigate('/uw-tests')
+                                closeMobileNav()
+                            }}
                         />
                         <NavItem
                             icon={Settings}
                             label="Settings"
                             active={currentPath === '/settings'}
-                            onClick={() => navigate('/settings')}
+                            onClick={() => {
+                                navigate('/settings')
+                                closeMobileNav()
+                            }}
                         />
                     </nav>
                     <nav className="side-nav-footer">
-                        <NavItem icon={CircleHelp} label="Help" onClick={() => setShowHelp(true)}/>
+                        <NavItem
+                            icon={CircleHelp}
+                            label="Help"
+                            onClick={() => {
+                                setShowHelp(true)
+                                closeMobileNav()
+                            }}
+                        />
                         <NavItem icon={UserCircle} label="Account"/>
                     </nav>
                 </aside>
+
+                {navMobileOpen && (
+                    <button
+                        className="side-nav-backdrop"
+                        type="button"
+                        aria-label="Close menu"
+                        onClick={() => setNavMobileOpen(false)}
+                    />
+                )}
+
+                <button
+                    className="nav-mobile-toggle"
+                    type="button"
+                    title="Menu"
+                    aria-label="Menu"
+                    aria-expanded={navMobileOpen}
+                    onClick={togglePrimaryNav}
+                >
+                    <Menu size={22} strokeWidth={2}/>
+                </button>
 
                 <main className={`content-pane content-pane--${pageKey}`}>
                     {backendOk === false && (
@@ -595,9 +680,16 @@ function JobDonePopups({popups, onOpenReport, onDismiss}) {
     )
 }
 
-function IconButton({icon: Icon, label}) {
+function IconButton({icon: Icon, label, onClick, expanded}) {
     return (
-        <button className="nav-icon-button" title={label} aria-label={label}>
+        <button
+            className="nav-icon-button"
+            type="button"
+            title={label}
+            aria-label={label}
+            aria-expanded={expanded}
+            onClick={onClick}
+        >
             <Icon size={22} strokeWidth={2}/>
         </button>
     )
@@ -605,7 +697,13 @@ function IconButton({icon: Icon, label}) {
 
 function NavItem({icon: Icon, label, active, onClick}) {
     return (
-        <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick} type="button">
+        <button
+            className={`nav-item ${active ? 'active' : ''}`}
+            onClick={onClick}
+            type="button"
+            title={label}
+            aria-label={label}
+        >
             <Icon size={22} strokeWidth={2}/>
             <span>{label}</span>
         </button>

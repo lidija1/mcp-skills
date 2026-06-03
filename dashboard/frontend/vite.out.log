@@ -1,0 +1,90 @@
+
+> insurance-dashboard@1.0.2 dev
+> vite --host 127.0.0.1
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1660[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2m10:40:32 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/OverviewPanel.jsx, /src/components/JobsPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m12:18:25 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m12:18:38 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m8:47:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ApiAssertionsPanel.jsx, /src/index.css[22m
+[2m8:47:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m8:47:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ReportModal.jsx, /src/index.css[22m
+[2m8:47:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css, /src/components/LoginPage.jsx, /src/components/RegisterPage.jsx, /src/components/PolicyPanel.jsx, /src/components/JobsPanel.jsx, /src/components/ApiAssertionsPanel.jsx, /src/components/ChatPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m8:47:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m8:47:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ApiAssertionsPanel.jsx, /src/index.css[22m
+[2m8:47:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m8:47:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css, /src/components/LoginPage.jsx, /src/components/RegisterPage.jsx, /src/components/PolicyPanel.jsx, /src/components/JobsPanel.jsx, /src/components/ApiAssertionsPanel.jsx, /src/components/ChatPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m8:51:02 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m8:53:18 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m8:53:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m8:54:25 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m8:55:42 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m9:10:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ApiAssertionsPanel.jsx, /src/index.css[22m
+[2m9:10:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SettingsPanel.jsx, /src/index.css[22m
+[2m9:10:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/OverviewPanel.jsx, /src/components/JobsPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m9:10:45 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/JobsPanel.jsx[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/LoginPage.jsx, /src/components/RegisterPage.jsx, /src/components/PolicyPanel.jsx, /src/components/JobsPanel.jsx, /src/components/ChatPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Header.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/JobsPanel.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OverviewPanel.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/PolicyPanel.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ReportModal.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mvite.config.js changed, restarting server...[39m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/LoginPage.jsx, /src/components/RegisterPage.jsx, /src/components/PolicyPanel.jsx, /src/components/JobsPanel.jsx, /src/components/ChatPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m9:10:57 AM[22m [36m[1m[vite][22m[39m server restarted.
+[2m9:11:29 AM[22m [36m[1m[vite][22m[39m [32mvite.config.js changed, restarting server...[39m
+[2m9:11:30 AM[22m [36m[1m[vite][22m[39m server restarted.
+[2m9:57:06 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/components/DashboardLogin.jsx[22m
+[2m10:49:40 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:53:28 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:54:18 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:54:34 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:54:46 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/auth.css[22m
+[2m10:54:46 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:55:13 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/auth.css[22m
+[2m10:55:20 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/auth.css[22m
+[2m10:55:39 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:56:36 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m10:57:44 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/auth.css[22m
+[2m11:16:17 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/auth.css[22m
+[2m11:52:10 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m11:53:14 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m11:58:00 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m11:58:56 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m12:00:32 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:00:50 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:01:12 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:06:26 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:06:50 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:07:17 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:08:45 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:09:16 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:09:49 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:10:40 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:11:43 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:11:52 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:13:13 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:13:21 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:21:44 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ReportModal.jsx, /src/index.css[22m
+[2m12:23:29 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ReportModal.jsx, /src/index.css[22m
+[2m12:24:44 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ReportModal.jsx, /src/index.css[22m
+[2m12:35:06 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m12:35:24 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:35:38 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:35:57 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:36:03 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:36:28 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:36:35 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m12:36:59 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:39:11 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m12:43:09 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m12:44:30 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m

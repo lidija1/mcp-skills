@@ -67,6 +67,8 @@ export default function App() {
     const [navCollapsed, setNavCollapsed] = useState(false)
     const [navMobileOpen, setNavMobileOpen] = useState(false)
     const [isNarrowNav, setIsNarrowNav] = useState(false)
+    const [validationTab, setValidationTab] = useState('sweep')
+    const [validationHistoryFilter, setValidationHistoryFilter] = useState('all')
     const [chatView, setChatView] = useState(() => localStorage.getItem('chatView') || 'sidebar')
 
     const setChatViewPersist = v => { setChatView(v); localStorage.setItem('chatView', v) }
@@ -437,7 +439,7 @@ export default function App() {
                         />
                         <NavItem
                             icon={ClipboardCheck}
-                            label="UW Tests"
+                            label="Validation Tests"
                             active={currentPath.startsWith('/uw-tests') || currentPath.startsWith('/api-tests')}
                             onClick={() => {
                                 navigate('/uw-tests')
@@ -539,7 +541,13 @@ export default function App() {
                         <Route
                             path="/uw-tests"
                             element={requireAuth(
-                                <ApiAssertionsPanel submitJob={submitJob}/>
+                                <ApiAssertionsPanel
+                                    submitJob={submitJob}
+                                    activeTab={validationTab}
+                                    onActiveTabChange={setValidationTab}
+                                    historyFilter={validationHistoryFilter}
+                                    onHistoryFilterChange={setValidationHistoryFilter}
+                                />
                             )}
                         />
                         <Route path="/api-tests" element={<Navigate to="/uw-tests" replace/>}/>
@@ -743,7 +751,7 @@ function HelpModal({onClose}) {
                             completed job to open its report.</p>
                     </div>
                     <div className="help-section">
-                        <h3>UW Tests</h3>
+                        <h3>Validation Tests</h3>
                         <p>Run underwriting evidence checks without binding a policy. Use <strong>Regression Sweep</strong>
                             {' '}to compare generated rating variants, <strong>Direct Assert</strong> to validate a specific
                             premium or billing value, and <strong>History</strong> to review saved assertion results.</p>

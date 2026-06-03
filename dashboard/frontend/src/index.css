@@ -634,6 +634,8 @@ textarea.field {
     align-items: center;
     gap: 6px;
     margin-bottom: 18px;
+    background: transparent;
+    border: 0;
 }
 
 .api-tab-btn {
@@ -5873,7 +5875,6 @@ code.asr-val-code.fail {
     background: #152033;
 }
 
-:is([data-theme='dark'], [data-theme='black']) .api-tab-row,
 :is([data-theme='dark'], [data-theme='black']) .chat-mode-row,
 :is([data-theme='dark'], [data-theme='black']) .suite-preview,
 :is([data-theme='dark'], [data-theme='black']) .rule-help,
@@ -5900,6 +5901,18 @@ code.asr-val-code.fail {
 :is([data-theme='dark'], [data-theme='black']) .row-remove:hover {
     color: #fca5a5;
     background: rgba(239, 68, 68, 0.14);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .ah-action-btn.danger:hover,
+:is([data-theme='dark'], [data-theme='black']) .ah-confirm-delete:hover {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(248, 113, 113, 0.55);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .ah-delete-confirm {
+    background: var(--surface);
+    border-color: var(--border);
 }
 
 :is([data-theme='dark'], [data-theme='black']) .clear-button,
@@ -7525,6 +7538,7 @@ code.asr-val-code.fail {
 
 .ah-root {
     padding: 4px 0 8px;
+    min-width: 0;
 }
 
 .ah-toolbar {
@@ -7595,15 +7609,54 @@ code.asr-val-code.fail {
 }
 
 .ah-table-wrap {
-    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
     border: 1px solid var(--border-soft);
     border-radius: 10px;
 }
 
 .ah-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
+}
+
+.ah-table th,
+.ah-table td {
+    min-width: 0;
+}
+
+.ah-table th:nth-child(1),
+.ah-col-date {
+    width: 15%;
+}
+
+.ah-table th:nth-child(2),
+.ah-col-persona {
+    width: auto;
+}
+
+.ah-table th:nth-child(3),
+.ah-col-type {
+    width: 13%;
+}
+
+.ah-table th:nth-child(4),
+.ah-table th:nth-child(5),
+.ah-col-money {
+    width: 12%;
+}
+
+.ah-table th:nth-child(6),
+.ah-col-result {
+    width: 76px;
+}
+
+.ah-table th:nth-child(7),
+.ah-col-chevron {
+    width: 32px;
 }
 
 .ah-table thead th {
@@ -7644,28 +7697,32 @@ code.asr-val-code.fail {
 }
 
 .ah-col-date {
-    white-space: nowrap;
+    white-space: normal;
     color: var(--muted);
     font-size: 12px;
+    line-height: 1.35;
 }
 
 .ah-col-persona {
-    max-width: 280px;
     color: var(--text);
     line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .ah-col-type {
-    white-space: nowrap;
+    white-space: normal;
     text-transform: capitalize;
     color: var(--muted);
     font-size: 12px;
+    overflow-wrap: anywhere;
 }
 
 .ah-col-money {
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
     font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .ah-col-result {
@@ -7697,11 +7754,13 @@ code.asr-val-code.fail {
 }
 
 .ah-detail {
+    max-width: 100%;
     padding: 18px 20px 20px;
     background: var(--surface-soft);
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow: hidden;
 }
 
 .ah-detail-label {
@@ -7719,15 +7778,17 @@ code.asr-val-code.fail {
     font-size: 13.5px;
     line-height: 1.6;
     color: var(--text);
+    overflow-wrap: anywhere;
 }
 
 .ah-detail-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
     gap: 8px;
 }
 
 .ah-detail-kv {
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -7754,6 +7815,7 @@ code.asr-val-code.fail {
     font-weight: 700;
     color: var(--text);
     font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
 }
 
 .ah-detail-section {
@@ -7761,6 +7823,7 @@ code.asr-val-code.fail {
 
 .ah-coverage-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
 }
@@ -7770,6 +7833,7 @@ code.asr-val-code.fail {
     border-bottom: 1px solid var(--border-soft);
     color: var(--text);
     font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
 }
 
 .ah-coverage-table td:last-child {
@@ -7809,6 +7873,8 @@ code.asr-val-code.fail {
 
 .ah-detail-actions {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
     padding-top: 4px;
 }
@@ -7838,6 +7904,42 @@ code.asr-val-code.fail {
     border-color: #dc2626;
     color: #dc2626;
     background: #fef2f2;
+}
+
+.ah-delete-confirm {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.ah-delete-confirm span {
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ah-confirm-btn {
+    padding: 6px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.ah-confirm-btn:hover {
+    color: var(--text);
+    background: var(--surface-soft);
+    border-color: var(--border);
 }
 
 .jobs-icon-btn {

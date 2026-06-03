@@ -810,6 +810,24 @@ class OneShieldApiReplay:
             ("VehicleUse", ("Vehicle Use",), test_data.get("VehicleUse")),
             ("Ownership", ("Ownership",), test_data.get("Ownership")),
             ("PolicyCoverage", ("Policy Coverage Option",), test_data.get("PolicyCoverage")),
+            # Discount fields
+            ("FullTimeStudent", ("Full-Time Student?",), test_data.get("FullTimeStudent")),
+            (
+                "VehicleWithStudentAtSchool",
+                ("Vehicle with Student at School?",),
+                test_data.get("VehicleWithStudentAtSchool"),
+            ),
+            (
+                "GoodStudent",
+                ('If Yes, is current grade average "B" or better?',),
+                test_data.get("GoodStudent"),
+            ),
+            (
+                "DefensiveDriver",
+                ("Has a Defensive Driver Course been completed in last 3 years ?",),
+                test_data.get("DefensiveDriver"),
+            ),
+            ("DistanceToWork", ("Distance to Work",), test_data.get("DistanceToWork")),
         ]
         if str(test_data.get("SR22", "")).strip().lower() == "yes":
             layout_fields.append(
@@ -1204,6 +1222,10 @@ class OneShieldApiReplay:
             "Vehicle Year": test_data.get("Year"),
             "Vehicle Make": test_data.get("Make"),
             "Vehicle Model": test_data.get("Model"),
+            "Full-Time Student": test_data.get("FullTimeStudent"),
+            "Good Student": test_data.get("GoodStudent"),
+            "Defensive Driver": test_data.get("DefensiveDriver"),
+            "Distance to Work": test_data.get("DistanceToWork"),
         }
         rating_factors = (
             self.get_rating_detail_factors()

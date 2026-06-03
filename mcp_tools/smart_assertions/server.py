@@ -314,7 +314,7 @@ def snapshot_flow(
 
     client = OneShieldApiReplay()
     try:
-        flow = client.run_captured_auto_flow(persona, stop_after="rating-detail", fast_mode=False)
+        flow = client.run_captured_auto_flow(persona, stop_after="rating-detail", fast_mode=True)
     except Exception as exc:
         return f"❌ API flow error: {exc}"
     finally:
@@ -375,7 +375,7 @@ def assert_flow(
     client = OneShieldApiReplay()
     try:
         flow = client.run_captured_auto_flow(
-            persona, stop_after=STOP_AFTER[assertion_type], fast_mode=False
+            persona, stop_after=STOP_AFTER[assertion_type], fast_mode=True
         )
     except Exception as exc:
         return f"❌ API flow error: {exc}"

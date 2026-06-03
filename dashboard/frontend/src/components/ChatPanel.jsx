@@ -128,6 +128,23 @@ function TypingIndicator() {
   )
 }
 
+const HELP_SUGGESTIONS = [
+  '/help',
+  '/help playwright',
+  '/help bdd',
+  '/help chat',
+  '/help tools',
+  '/help mcp',
+  '/help api',
+  '/help ladder',
+  '/help regression',
+  '/help persona',
+  '/help lob',
+  '/help uw',
+  '/help testdata',
+  '/help dashboard',
+]
+
 const TOOL_SUGGESTIONS = [
   'run a quick auto test for a young male driver',
   'run an auto policy flow for a married couple with two vehicles',
@@ -198,7 +215,18 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
 
   useEffect(() => {
     const trimmed = input.trim()
-    if (mode !== 'tools' || trimmed.length < 2 || !inputFocused) {
+    if (!inputFocused || trimmed.length < 1) {
+      setAcSuggestions([])
+      return
+    }
+    // /help autocomplete in any mode
+    if (trimmed.startsWith('/')) {
+      setAcSuggestions(
+        HELP_SUGGESTIONS.filter(s => s.startsWith(trimmed.toLowerCase())).slice(0, 8)
+      )
+      return
+    }
+    if (mode !== 'tools' || trimmed.length < 2) {
       setAcSuggestions([])
       return
     }
@@ -222,11 +250,115 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
       .slice(-10)
       .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text.slice(0, 800) }))
 
+  // Expand /help [topic] into a structured Ask-mode query.
+  // Returns { query, displayText } or null if not a /help command.
+  const parseHelpCommand = useCallback((text) => {
+    const m = text.trim().match(/^\/help\s*(.*)/i)
+    if (!m) return null
+    const topic = m[1].trim()
+    if (!topic) {
+      return {
+        displayText: '/help',
+        query: (
+          'Give me a structured help overview of this insurance automation dashboard. ' +
+          'Cover: (1) Chat modes — Ask vs Tools and what each can do, ' +
+          '(2) available Tools-mode commands with short examples, ' +
+          '(3) the Playwright/pytest-bdd test framework structure (features, steps, page objects), ' +
+          '(4) MCP servers and their purpose, ' +
+          '(5) how to add a new LOB or test scenario. ' +
+          'Use markdown headings and bullet points.'
+        ),
+      }
+    }
+    const topicMap = {
+      playwright: 'Playwright, pytest-bdd BDD framework, page objects, BasePage smart wrappers, ExtJS patterns, and how tests are structured in this project',
+      bdd: 'BDD feature files, step definitions, pytest-bdd fixtures, conftest.py plugins, and how to write or extend scenarios',
+      chat: 'the dashboard chat panel — Ask mode vs Tools mode, available tools, how to trigger jobs, confirmation flow, and streaming',
+      tools: 'all available Tools-mode chat commands with usage examples and what each one does',
+      mcp: 'the six MCP servers — policy-flow-generator, uw-rules-validator, lob-recorder, form-intelligence, accessibility, auto-scenario-generator — their purpose and how to use them',
+      api: 'the API assertions panel — comparative, ladder, regression sweep, AI assert, and history tabs — and how to use each',
+      ladder: 'the ladder runner — dimensions, how monotonic checks work, how to run a sweep, and what the results mean',
+      regression: 'the regression sweep — variant generation, direction/magnitude assertions, AI pattern analysis, and same-value skip logic',
+      persona: 'persona generation — AI providers, JSON fields, LOB differences, how to create variations, and how personas feed into flows',
+      lob: 'how to add a new Line of Business — page objects, feature file, step definitions, test entry point, test data fields, and fixture registration',
+      uw: 'the UW rules validator — rule registry, positive/negative/boundary cases, how to run audits, and how to write custom boundary tests',
+      testdata: 'test data — JSON structure, TC_ID filtering, required fields per LOB, and the testdata RAG index',
+      dashboard: 'the React dashboard — panels, job tracking, polling, report modal, and how the backend FastAPI connects to the frontend',
+    }
+    const key = Object.keys(topicMap).find(k => topic.toLowerCase().includes(k)) || null
+    const subject = key ? topicMap[key] : `"${topic}" in the context of this insurance automation dashboard`
+    return {
+      displayText: `/help ${topic}`,
+      query: (
+        `Give me a structured explanation of ${subject}. ` +
+        'Include: what it is, how it works in this project, key files or commands, and a practical usage example. ' +
+        'Use markdown headings and bullet points.'
+      ),
+    }
+  }, [])
+
   const send = useCallback(async (userText, confirmedTool = null, confirmedParams = null) => {
     if (loading) return
 
     const trimmed = (userText || '').trim()
     if (!trimmed && !confirmedTool) return
+
+    // /help [topic] — force Ask mode and rewrite to a structured query
+    if (!confirmedTool) {
+      const help = parseHelpCommand(trimmed)
+      if (help) {
+        setMode('guidance')
+        localStorage.setItem('chat_mode', 'guidance')
+        setInput('')
+        setMessages(prev => [...prev, { role: 'user', text: help.displayText }])
+        setPendingConfirm(null)
+        setLoading(true)
+        setStreaming(true)
+        setMessages(prev => [...prev, { role: 'bot', text: '' }])
+        try {
+          const response = await api.chatAskStream(help.query, buildHistory(messages), 4000)
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}))
+            throw new Error(data.detail || data.error || 'Help stream failed')
+          }
+          const reader = response.body.getReader()
+          const decoder = new TextDecoder()
+          let buf = '', acc = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += decoder.decode(value, { stream: true })
+            const parts = buf.split('\n\n')
+            buf = parts.pop() ?? ''
+            for (const part of parts) {
+              if (!part.startsWith('data: ')) continue
+              let evt
+              try { evt = JSON.parse(part.slice(6)) } catch { continue }
+              if (evt.error) throw new Error(evt.error)
+              if (evt.done) return
+              if (evt.t) {
+                acc += evt.t
+                setMessages(prev => {
+                  const next = [...prev]
+                  next[next.length - 1] = { role: 'bot', text: acc }
+                  return next
+                })
+              }
+            }
+          }
+        } catch (err) {
+          setMessages(prev => {
+            const next = [...prev]
+            next[next.length - 1] = { role: 'bot', text: `Error: ${err.message}` }
+            return next
+          })
+        } finally {
+          setStreaming(false)
+          setLoading(false)
+        }
+        return
+      }
+    }
 
     // Snapshot history before the new user turn is appended
     const history = confirmedTool ? [] : buildHistory(messages)
@@ -404,8 +536,8 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
           placeholder={mode === 'guidance'
-            ? 'Ask for explanations, troubleshooting, or implementation guidance...'
-            : 'Ask me to run a policy test, generate a profile, audit UW rules...'}
+            ? 'Ask a question, or type /help [topic] for structured guidance...'
+            : 'Ask me to run a policy test, generate a profile, audit UW rules... (or /help)'}
           rows={1}
           disabled={loading}
         />

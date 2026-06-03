@@ -631,6 +631,19 @@ function UwRulesCarousel({ conditions }) {
 
 /* ─── Assert Flow Report ──────────────────────────────────────── */
 
+function ExplainBullets({ text }) {
+  const lines = (text || '')
+    .split('\n')
+    .map(l => l.replace(/^[-•*]\s*/, '').trim())
+    .filter(Boolean)
+  if (!lines.length) return <p className="af-explain-text">{text}</p>
+  return (
+    <ul className="af-explain-list">
+      {lines.map((line, i) => <li key={i}>{line}</li>)}
+    </ul>
+  )
+}
+
 function AssertFlowReport({ data }) {
   const [showDetails, setShowDetails] = useState(false)
   const [explanation, setExplanation] = useState('')
@@ -724,7 +737,7 @@ function AssertFlowReport({ data }) {
           <div className="af-explain-eyebrow">AI Analysis</div>
           {explainError
             ? <p className="af-explain-error">{explainError}</p>
-            : <p className="af-explain-text">{explanation}</p>
+            : <ExplainBullets text={explanation} />
           }
         </div>
       )}

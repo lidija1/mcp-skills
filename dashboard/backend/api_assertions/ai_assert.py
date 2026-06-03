@@ -185,7 +185,7 @@ def run_ai_assert(
         flow_result = client.run_captured_auto_flow(
             persona,
             stop_after="rating-detail",
-            fast_mode=False,
+            fast_mode=True,
         )
     finally:
         client.close()

@@ -101,7 +101,7 @@ export default function ExplorerPanel({ submitJob, openJob }) {
           <div className="card-copy">
             <h2>Safe Codex Runner</h2>
             <p>
-              Codex runs inside the project folder with the OneShield Explorer skill and workspace sandboxing.
+              Codex runs inside the project folder with the Sandbox Explorer skill and workspace sandboxing.
               Destructive requests and credential access are blocked by the backend.
             </p>
           </div>
@@ -113,7 +113,7 @@ export default function ExplorerPanel({ submitJob, openJob }) {
             <textarea
               id="explorer-prompt"
               className="field explorer-field"
-              placeholder='Example: "use oneshield explorer to add a safe GL smoke test and run targeted validation"'
+              placeholder='Example: "use sandbox explorer to add a safe GL smoke test and run targeted validation"'
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run() }}

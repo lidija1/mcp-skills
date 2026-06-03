@@ -42,6 +42,11 @@ logs/
 .DS_Store
 Thumbs.db
 
+# databases
+*.db
+*.sqlite
+dashboard/backend/data/dashboard.db
+
 *.md
 !api_tests/guide.md
 !docs/ONESHIELD_APP_KNOWLEDGE.md

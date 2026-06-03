@@ -122,7 +122,7 @@ REGISTRY: dict[str, dict] = {
     "run_api_assertion": {
         "description": (
             "Run a plain-English Auto UW test assertion. Generates an Auto persona, "
-            "runs browserless OneShield replay, and returns compact PASS/FAIL "
+            "runs browserless Sandbox replay, and returns compact PASS/FAIL"
             "with expected and actual values."
         ),
         "params": {
@@ -134,7 +134,7 @@ REGISTRY: dict[str, dict] = {
     "run_assert_flow": {
         "description": (
             "Assert that a persona's premium or total cost matches an expected dollar value. "
-            "Generates a persona, replays the OneShield flow, and returns PASS/FAIL with "
+            "Generates a persona, replays the Sandbox flow, and returns PASS/FAIL with"
             "actual vs expected value inline in chat. Use when the user gives a specific dollar amount."
         ),
         "params": {

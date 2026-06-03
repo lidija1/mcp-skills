@@ -168,7 +168,7 @@ export default function ApiAssertionsPanel({submitJob}) {
             UW Evidence
           </span>
           <h1>UW Assertion Tests</h1>
-          <p>Run premium regression sweeps and direct assertions against the OneShield rating flow — no policy is bound.</p>
+          <p>Run premium regression sweeps and direct assertions against the Sandbox rating flow — no policy is bound.</p>
         </div>
       </section>
 

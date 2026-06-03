@@ -369,7 +369,7 @@ class ExplorerReq(BaseModel):
     prompt: str
 
 
-EXPLORER_PROMPT_PREFIX = "use Oneshield explorer skill"
+EXPLORER_PROMPT_PREFIX = "use Sandbox explorer skill"
 CODEX_EXPLORER_MAX_PROMPT_CHARS = int(os.environ.get("CODEX_EXPLORER_MAX_PROMPT_CHARS", "4000"))
 CODEX_EXPLORER_FORBIDDEN_PATTERNS = [
     r"\bdelete\s+all\s+files\b",
@@ -405,7 +405,7 @@ Non-negotiable safety rules:
 - Prefer reading and targeted validation before edits.
 
 Required skill:
-- Use the OneShield Explorer skill for OneShield testing, Playwright, pytest-bdd, selector stabilization, live-app discovery, or framework changes.
+- Use the Sandbox Explorer skill for Sandbox application testing, Playwright, pytest-bdd, selector stabilization, live-app discovery, or framework changes.
 """.strip()
 
 
@@ -450,7 +450,7 @@ def _validate_explorer_prompt(prompt: str) -> str:
 def _format_explorer_prompt_report(raw_prompt: str, explorer_prompt: str) -> str:
     return (
         "# Explorer Prompt\n\n"
-        "Use this generated prompt in Codex to trigger the local OneShield Explorer skill.\n\n"
+        "Use this generated prompt in Codex to trigger the local Sandbox Explorer skill.\n\n"
         "## Ready Prompt\n\n"
         "```text\n"
         f"{explorer_prompt}\n"
@@ -462,7 +462,7 @@ def _format_explorer_prompt_report(raw_prompt: str, explorer_prompt: str) -> str
     )
 
 
-_EXPLORER_SKILL_PREFIX = "use Oneshield explorer skill "
+_EXPLORER_SKILL_PREFIX = "use Sandbox explorer skill "
 
 
 def _find_codex_cli() -> str | None:
@@ -490,7 +490,7 @@ def _format_codex_explorer_report(prompt: str, command: list[str], output: str) 
 
 
 def _run_codex_explorer(prompt: str, job_id: str | None = None) -> tuple[str, list[str]]:
-    """Run Codex non-interactively with the local OneShield Explorer skill trigger."""
+    """Run Codex non-interactively with the local Sandbox Explorer skill trigger."""
     codex_bin = _find_codex_cli()
     if not codex_bin:
         raise RuntimeError(
@@ -1017,7 +1017,7 @@ def ai_assert_ep(req: AiAssertReq, bg: BackgroundTasks, request: Request):
 
 @app.post("/api/api-tests/assert-flow")
 def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
-    """Run a structured UW assertion: persona → OneShield replay → PASS/FAIL against expected value."""
+    """Run a structured UW assertion: persona → Sandbox replay → PASS/FAIL against expected value."""
     from mcp_tools.smart_assertions.server import (
         STOP_AFTER, VALID_OPERATORS, _total_premium, _total_cost,
         _coverage_premiums, _uw_conditions, _build_snapshot, _assert, _fmt_assert,

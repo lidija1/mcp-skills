@@ -386,7 +386,7 @@ function getOutcomeBadge(job, displayStatus) {
     const assertionOutcome = getAssertionOutcome(job)
     if (assertionOutcome) {
         return {
-            label: assertionOutcome === 'pass' ? 'Passed' : 'Failed',
+            label: assertionOutcome === 'pass' ? 'Pass' : 'Fail',
             tone: assertionOutcome === 'pass' ? 'passed' : 'fail',
         }
     }

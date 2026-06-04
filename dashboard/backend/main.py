@@ -411,23 +411,428 @@ def list_jobs(request: Request):
 def get_job(job_id: str, request: Request):
     return _job_store.get_job(job_id, user_from_request(request)) or {"error": "not found"}
 
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job_ep(job_id: str, request: Request):
+    user = user_from_request(request)
+    job = _job_store.get_job(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.get("status") not in {"done", "error", "failed", "canceled", "cancelled"}:
+        raise HTTPException(status_code=400, detail="Only finished jobs can be deleted")
+
+    if job.get("created_by") is not None and job.get("created_by") != (user or {}).get("id"):
+        raise HTTPException(status_code=403, detail="You can delete only jobs you created")
+
+    if not _job_store.delete_job(job_id, user=user):
+        raise HTTPException(status_code=403, detail="You can delete only jobs you created")
+
+    return {"deleted": job_id}
+
+
 @app.post("/api/jobs/{job_id}/cancel")
-def cancel_job_ep(job_id: str):
+def cancel_job_ep(job_id: str, request: Request):
+    user = user_from_request(request)
     job = _job_store.get_job(job_id)
 
     if not job:
         raise HTTPException(status_code=404)
 
-    if job["status"] in ["done", "error", "canceled"]:
-        return {"ok": False}
+    if job.get("created_by") is not None and job.get("created_by") != (user or {}).get("id"):
+        raise HTTPException(status_code=403, detail="You can cancel only jobs you created")
+
+    if job["status"] in ["done", "error", "failed", "canceled", "cancelled"]:
+        return {"ok": False, "job": job}
 
     _job_store.cancel_job(job_id)
     _job_store.mark_canceled(job_id)
 
-    return {"ok": True}
+    return {"ok": True, "job": _job_store.get_job(job_id)}
+
+
+ASSERT_RERUN_TYPES = {
+    "api_assertion",
+    "api_compare",
+    "api_ladder",
+    "api_ai_assert",
+    "api_assert_flow",
+    "regression_sweep",
+}
+
+
+def _extract_markdown_field(content: str | None, label: str) -> str:
+    if not content:
+        return ""
+    match = re.search(rf"\*\*{re.escape(label)}:\*\*\s*(.+)", content)
+    return match.group(1).strip() if match else ""
+
+
+def _infer_assert_rerun_payload(job: dict) -> dict | None:
+    metadata = job.get("metadata") or {}
+    result = job.get("result") or ""
+    execution_type = job.get("execution_type")
+
+    if execution_type == "api_assertion" and metadata.get("prompt"):
+        return {"prompt": metadata["prompt"], "lob": metadata.get("lob") or "auto"}
+
+    if execution_type == "api_ai_assert":
+        persona = metadata.get("persona_description") or _extract_markdown_field(result, "Persona")
+        if persona:
+            return {"persona_description": persona, "lob": metadata.get("lob") or "auto"}
+
+    if execution_type == "api_ladder":
+        base_match = re.search(r"^Base:\s*_(.+?)_\s*$", result, flags=re.MULTILINE)
+        base_description = metadata.get("base_description") or (base_match.group(1).strip() if base_match else "")
+        if base_description and metadata.get("dimension"):
+            return {
+                "base_description": base_description,
+                "dimension": metadata["dimension"],
+                "lob": metadata.get("lob") or "auto",
+                "assert_monotonic": metadata.get("assert_monotonic", True),
+            }
+
+    if execution_type == "api_assert_flow":
+        try:
+            data = json.loads(result)
+        except Exception:
+            data = {}
+        persona_description = metadata.get("persona_description") or data.get("persona_description")
+        expected_value = metadata.get("expected_value") or data.get("expected_value")
+        if persona_description and expected_value is not None:
+            return {
+                "persona_description": persona_description,
+                "assertion_type": metadata.get("assertion_type") or data.get("assertion_type") or "premium",
+                "expected_value": expected_value,
+                "operator": metadata.get("operator") or data.get("operator") or "approx",
+                "tolerance_pct": metadata.get("tolerance_pct") or data.get("tolerance_pct") or 5.0,
+                "lob": metadata.get("lob") or data.get("lob") or "auto",
+            }
+
+    if execution_type == "regression_sweep":
+        baseline = metadata.get("baseline_description") or _extract_markdown_field(result, "Baseline")
+        if baseline:
+            return {
+                "baseline_description": baseline,
+                "lob": metadata.get("lob") or "auto",
+                "focus": metadata.get("focus"),
+            }
+
+    return None
+
+
+def _assert_rerun_metadata(base: dict, rerun_of: str, payload: dict) -> dict:
+    return {
+        **base,
+        "rerun_of": rerun_of,
+        "rerun_payload": payload,
+    }
+
+
+def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: BackgroundTasks, user: dict | None):
+    if execution_type == "api_assertion":
+        prompt = (payload.get("prompt") or "").strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail="This assertion job cannot be rerun")
+        lob = payload.get("lob") or "auto"
+        new_jid = _new_job(
+            f"UW Assertion - {prompt[:60]}",
+            execution_type="api_assertion",
+            created_by=(user or {}).get("id"),
+            metadata=_assert_rerun_metadata({"lob": lob, "lob_display": "Personal Auto", "prompt": prompt}, job_id, payload),
+        )
+
+        def _run():
+            try:
+                _status(new_jid, "Generating persona", "Personal Auto UW assertion")
+                result = run_plain_english_api_assertion(prompt)
+                _status(new_jid, "Evaluating assertions", "Deterministic UW evidence")
+                _done(new_jid, format_api_assertion_report(result))
+            except Exception as e:
+                import traceback
+                _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(e))
+
+        bg.add_task(_run)
+        return {"job_id": new_jid}
+
+    if execution_type == "api_compare":
+        from dashboard.backend.api_assertions.comparative import run_comparative
+
+        description_a = (payload.get("description_a") or "").strip()
+        description_b = (payload.get("description_b") or "").strip()
+        relations = payload.get("relations") or []
+        if not description_a or not description_b or not relations:
+            raise HTTPException(status_code=400, detail="This comparative assertion job cannot be rerun")
+        lob = payload.get("lob") or "auto"
+        label_a = payload.get("label_a") or description_a[:40]
+        label_b = payload.get("label_b") or description_b[:40]
+        new_jid = _new_job(
+            f"Compare: {label_a[:30]} vs {label_b[:30]}",
+            execution_type="api_compare",
+            created_by=(user or {}).get("id"),
+            metadata=_assert_rerun_metadata(
+                {"lob": lob, "lob_display": "Personal Auto", "description_a": description_a, "description_b": description_b, "relations": relations, "label_a": label_a, "label_b": label_b},
+                job_id,
+                payload,
+            ),
+        )
+
+        def _run():
+            try:
+                _status(new_jid, "Running both personas", "UW replay - parallel")
+                result = run_comparative(description_a, description_b, relations=relations, lob=lob, label_a=label_a, label_b=label_b)
+                status_str = "PASS" if result.passed else "FAIL"
+                lines = [
+                    f"## Comparative Assertion - {status_str}",
+                    "",
+                    f"| | A: {result.label_a[:40]} | B: {result.label_b[:40]} |",
+                    "|---|---|---|",
+                    f"| Premium | {'${:,.2f}'.format(result.premium_a) if result.premium_a else 'N/A'} | {'${:,.2f}'.format(result.premium_b) if result.premium_b else 'N/A'} |",
+                    f"| UW conditions | {len(result.uw_conditions_a)} | {len(result.uw_conditions_b)} |",
+                    f"| Blocked | {result.blocked_a} | {result.blocked_b} |",
+                    f"| Snapshot | `{result.run_id_a[:8]}...` | `{result.run_id_b[:8]}...` |",
+                    "",
+                    "### Findings",
+                ]
+                for finding in result.findings:
+                    icon = "PASS" if finding.passed else "FAIL"
+                    msg = f" - {finding.message}" if finding.message else ""
+                    lines.append(f"- {icon} `{finding.relation}`{msg}")
+                _done(new_jid, "\n".join(lines))
+            except Exception as exc:
+                import traceback
+                _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+        bg.add_task(_run)
+        return {"job_id": new_jid}
+
+    if execution_type == "api_ladder":
+        from dashboard.backend.api_assertions.ladder import run_ladder as _run_ladder_fn
+
+        base_description = (payload.get("base_description") or "").strip()
+        dimension = (payload.get("dimension") or "").lower()
+        if not base_description or not dimension:
+            raise HTTPException(status_code=400, detail="This ladder assertion job cannot be rerun")
+        lob = payload.get("lob") or "auto"
+        assert_monotonic = bool(payload.get("assert_monotonic", True))
+        new_jid = _new_job(
+            f"Ladder: {dimension.title()} sweep",
+            execution_type="api_ladder",
+            created_by=(user or {}).get("id"),
+            metadata=_assert_rerun_metadata({"lob": lob, "lob_display": "Personal Auto", "base_description": base_description, "dimension": dimension, "assert_monotonic": assert_monotonic}, job_id, payload),
+        )
+
+        def _run():
+            try:
+                _status(new_jid, f"Running {dimension} sweep", "UW replay - parallel")
+                result = _run_ladder_fn(base_description=base_description, dimension=dimension, lob=lob, assert_monotonic=assert_monotonic)
+                status_str = "PASS" if result.passed else "FAIL"
+                lines = [
+                    f"## Dimension Ladder: {dimension.title()} - {status_str}",
+                    f"Base: _{base_description}_",
+                    "",
+                    "| Value | Premium | UW Conditions | Blocked |",
+                    "|---|---|---|---|",
+                ]
+                for rung in result.rungs:
+                    if rung.error:
+                        lines.append(f"| {rung.value} | ERROR | - | - |")
+                    else:
+                        premium = f"${rung.premium:,.2f}" if rung.premium else "N/A"
+                        lines.append(f"| {rung.value} | {premium} | {len(rung.uw_conditions)} | {rung.blocked} |")
+                _done(new_jid, "\n".join(lines))
+            except Exception as exc:
+                import traceback
+                _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+        bg.add_task(_run)
+        return {"job_id": new_jid}
+
+    if execution_type == "api_ai_assert":
+        from dashboard.backend.api_assertions.ai_assert import run_ai_assert
+
+        persona_description = (payload.get("persona_description") or "").strip()
+        if not persona_description:
+            raise HTTPException(status_code=400, detail="This AI assertion job cannot be rerun")
+        lob = payload.get("lob") or "auto"
+        new_jid = _new_job(
+            f"AI Assert - {persona_description[:55]}",
+            execution_type="api_ai_assert",
+            created_by=(user or {}).get("id"),
+            metadata=_assert_rerun_metadata({"lob": lob, "lob_display": "Personal Auto", "persona_description": persona_description}, job_id, payload),
+        )
+
+        def _run():
+            try:
+                _status(new_jid, "Running UW replay", "Extracting premium & UW data")
+                result = run_ai_assert(persona_description=persona_description, lob=lob)
+                _status(new_jid, "Evaluating AI assertions", f"{len(result['ai_suggestions'])} suggestions")
+                status_str = "PASS" if result["passed"] else "FAIL"
+                lines = [
+                    f"## AI-Decided Assertions - {status_str}",
+                    f"**Persona**: {persona_description}",
+                    f"**Premium**: {'${:,.2f}'.format(result['premium']) if result['premium'] else 'N/A'}",
+                    f"**UW conditions**: {len(result['uw_conditions'])}",
+                    f"**Blocked**: {result['blocked']}",
+                    "",
+                    "### AI Suggestions & Results",
+                ]
+                for finding in result["findings"]:
+                    icon = "PASS" if finding["passed"] else "FAIL"
+                    lines.append(f"- {icon} _{finding.get('suggestion', '')}_")
+                _done(new_jid, "\n".join(lines))
+            except Exception as exc:
+                import traceback
+                _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+        bg.add_task(_run)
+        return {"job_id": new_jid}
+
+    if execution_type == "api_assert_flow":
+        from mcp_tools.smart_assertions.server import STOP_AFTER, VALID_OPERATORS, _build_snapshot, _assert
+        from mcp_tools.policy_flow_generator.persona_generator import generate_persona
+        from api_tests.oneshield_api_replay import OneShieldApiReplay
+        import json as _json
+
+        persona_description = (payload.get("persona_description") or "").strip()
+        assertion_type = payload.get("assertion_type") or "premium"
+        expected_value = float(payload.get("expected_value"))
+        operator = payload.get("operator") or "approx"
+        tolerance_pct = float(payload.get("tolerance_pct") or 5.0)
+        lob = payload.get("lob") or "auto"
+        if not persona_description or assertion_type not in STOP_AFTER or operator not in VALID_OPERATORS:
+            raise HTTPException(status_code=400, detail="This direct assertion job cannot be rerun")
+        op_label = f"approx {tolerance_pct:.0f}%" if operator == "approx" else operator
+        new_jid = _new_job(
+            f"Assert {assertion_type} {op_label} ${expected_value:,.2f} - {persona_description[:40]}",
+            execution_type="api_assert_flow",
+            created_by=(user or {}).get("id"),
+            metadata=_assert_rerun_metadata({"lob": lob, "lob_display": "Personal Auto", "persona_description": persona_description, "assertion_type": assertion_type, "expected_value": expected_value, "operator": operator, "tolerance_pct": tolerance_pct}, job_id, payload),
+        )
+
+        def _run():
+            try:
+                _status(new_jid, "Generating persona", persona_description[:60])
+                persona = _json.loads(generate_persona(lob, persona_description))
+                if "error" in persona:
+                    _fail(new_jid, f"Persona generation failed: {persona['error']}")
+                    return
+                _status(new_jid, "Running UW replay", f"stop_after={STOP_AFTER[assertion_type]}")
+                client = OneShieldApiReplay()
+                try:
+                    flow = client.run_captured_auto_flow(persona, stop_after=STOP_AFTER[assertion_type], fast_mode=True)
+                finally:
+                    client.close()
+                snap = _build_snapshot(persona_description, persona, flow, assertion_type, lob)
+                actual = snap.total_premium if assertion_type == "premium" else snap.total_cost
+                passed, message = _assert(actual, expected_value, operator, tolerance_pct)
+                import dashboard.backend.dashboard_db as _db
+                saved = _db.save_assertion_result(
+                    persona_description=persona_description,
+                    assertion_type=assertion_type,
+                    expected_value=expected_value,
+                    actual_value=actual,
+                    operator=operator,
+                    tolerance_pct=tolerance_pct,
+                    passed=passed,
+                    message=message,
+                    lob=lob,
+                    coverage_premiums=snap.coverage_premiums,
+                    uw_conditions=snap.uw_conditions,
+                    persona=snap.persona,
+                    flow_result=flow,
+                    blocked=snap.blocked,
+                    blocked_reason=snap.blocked_reason,
+                    run_id=snap.run_id,
+                    user_id=(user or {}).get("id"),
+                )
+                result_payload = {
+                    "_type": "assert_flow",
+                    "id": saved["id"],
+                    "created_at": saved["created_at"],
+                    "passed": passed,
+                    "message": message,
+                    "assertion_type": assertion_type,
+                    "expected_value": expected_value,
+                    "actual_value": actual,
+                    "operator": operator,
+                    "tolerance_pct": tolerance_pct,
+                    "persona_description": persona_description,
+                    "lob": lob,
+                    "coverage_premiums": snap.coverage_premiums,
+                    "uw_conditions": snap.uw_conditions,
+                    "blocked": snap.blocked,
+                    "blocked_reason": snap.blocked_reason,
+                    "run_id": snap.run_id,
+                    "persona": snap.persona,
+                }
+                _done(new_jid, _json.dumps(result_payload))
+            except Exception as exc:
+                import traceback
+                _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+        bg.add_task(_run)
+        return {"job_id": new_jid}
+
+    if execution_type == "regression_sweep":
+        from dashboard.backend.api_assertions.regression_sweep import run_sweep
+
+        baseline_description = (payload.get("baseline_description") or "").strip()
+        if not baseline_description:
+            raise HTTPException(status_code=400, detail="This regression sweep job cannot be rerun")
+        lob = payload.get("lob") or "auto"
+        focus = payload.get("focus")
+        focus_label = f" [{focus}]" if focus else ""
+        new_jid = _new_job(
+            f"Regression Sweep{focus_label} - {baseline_description[:50]}",
+            execution_type="regression_sweep",
+            created_by=(user or {}).get("id"),
+            metadata=_assert_rerun_metadata({"lob": lob, "lob_display": "Personal Auto", "baseline_description": baseline_description, "focus": focus}, job_id, payload),
+        )
+
+        def _run():
+            try:
+                _status(new_jid, "Generating variant list", "AI phase 1")
+                sweep = run_sweep(baseline_description, lob=lob, focus=focus)
+                _status(new_jid, "Analyzing results", "AI phase 4")
+                status_str = "ALL PASS" if sweep.passed else f"{sweep.fail_count} FAILED"
+                base_str = f"${sweep.baseline_premium:,.2f}" if sweep.baseline_premium else "N/A"
+                lines = [
+                    f"## Regression Sweep - {status_str}",
+                    f"**Baseline:** {sweep.baseline_description}",
+                    f"**Baseline premium:** {base_str}",
+                    f"**Variants:** {len(sweep.results)} | PASS {sweep.pass_count} FAIL {sweep.fail_count}",
+                    "",
+                ]
+                for category_key, category_label in [("risk_adding", "RISK ADDING"), ("ladder", "LADDER"), ("discount", "DISCOUNTS"), ("hard_stop", "HARD STOPS")]:
+                    category_results = [r for r in sweep.results if r.variant.category == category_key]
+                    if not category_results:
+                        continue
+                    lines.append(f"### {category_label}")
+                    lines += ["| Variant | Premium | Delta | Result |", "|---|---|---|---|"]
+                    for row in category_results:
+                        if row.error:
+                            lines.append(f"| {row.variant.label} | - | - | FAIL `{row.error[:40]}` |")
+                            continue
+                        actual = f"${row.actual_premium:,.2f}" if row.actual_premium else ("blocked" if row.blocked else "N/A")
+                        delta = f"{row.delta_pct:+.1f}%" if row.delta_pct is not None else "-"
+                        ok = "PASS" if row.passed else f"FAIL {row.message[:60]}" if row.message else "FAIL"
+                        lines.append(f"| {row.variant.label} | {actual} | {delta} | {ok} |")
+                    lines.append("")
+                _done(new_jid, "\n".join(lines))
+            except Exception as exc:
+                import traceback
+                _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
+
+        bg.add_task(_run)
+        return {"job_id": new_jid}
+
+    raise HTTPException(status_code=400, detail="This assertion job cannot be rerun")
+
 
 @app.post("/api/jobs/{job_id}/rerun")
-def rerun_job(job_id: str, bg: BackgroundTasks):
+def rerun_job(job_id: str, bg: BackgroundTasks, request: Request):
     job = _job_store.get_job(job_id)
 
     if not job:
@@ -436,6 +841,7 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
     metadata = job.get("metadata") or {}
     payload = metadata.get("rerun_payload")
     execution_type = job.get("execution_type")
+    user = user_from_request(request)
 
     if not payload:
         if execution_type in {"quick_run", "create_persona"} and metadata.get("description"):
@@ -448,12 +854,17 @@ def rerun_job(job_id: str, bg: BackgroundTasks):
                 "lob": metadata.get("requested_lob") or metadata.get("lob") or "personal-auto",
                 "persona_json": metadata.get("persona_json"),
             }
+        else:
+            payload = _infer_assert_rerun_payload(job)
 
     if not payload:
         raise HTTPException(
             status_code=400,
             detail="This job cannot be rerun",
         )
+
+    if execution_type in ASSERT_RERUN_TYPES:
+        return _rerun_assert_job(job_id, execution_type, payload, bg, user)
 
     if execution_type not in {"policy_flow", "quick_run", "create_persona"}:
         raise HTTPException(
@@ -1113,7 +1524,12 @@ def api_plain_assert_ep(req: ApiAssertionReq, bg: BackgroundTasks, request: Requ
         f"UW Assertion - {prompt[:60]}",
         execution_type="api_assertion",
         created_by=(user or {}).get("id"),
-        metadata={"lob": "auto", "lob_display": "Personal Auto", "prompt": prompt},
+        metadata={
+            "lob": "auto",
+            "lob_display": "Personal Auto",
+            "prompt": prompt,
+            "rerun_payload": {"prompt": prompt, "lob": "auto"},
+        },
     )
 
     def _run():
@@ -1183,7 +1599,23 @@ def compare_ep(req: CompareReq, bg: BackgroundTasks, request: Request):
         f"Compare: {label_a[:30]} vs {label_b[:30]}",
         execution_type="api_compare",
         created_by=(user or {}).get("id"),
-        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+        metadata={
+            "lob": req.lob,
+            "lob_display": "Personal Auto",
+            "description_a": req.description_a,
+            "description_b": req.description_b,
+            "relations": req.relations,
+            "label_a": req.label_a,
+            "label_b": req.label_b,
+            "rerun_payload": {
+                "description_a": req.description_a,
+                "description_b": req.description_b,
+                "relations": req.relations,
+                "lob": req.lob,
+                "label_a": req.label_a,
+                "label_b": req.label_b,
+            },
+        },
     )
 
     def _run():
@@ -1243,7 +1675,19 @@ def ladder_ep(req: LadderReq, bg: BackgroundTasks, request: Request):
         f"Ladder: {req.dimension.title()} sweep",
         execution_type="api_ladder",
         created_by=(user or {}).get("id"),
-        metadata={"lob": req.lob, "lob_display": "Personal Auto", "dimension": req.dimension},
+        metadata={
+            "lob": req.lob,
+            "lob_display": "Personal Auto",
+            "base_description": req.base_description,
+            "dimension": req.dimension,
+            "assert_monotonic": req.assert_monotonic,
+            "rerun_payload": {
+                "base_description": req.base_description,
+                "dimension": req.dimension,
+                "lob": req.lob,
+                "assert_monotonic": req.assert_monotonic,
+            },
+        },
     )
 
     def _run():
@@ -1297,7 +1741,15 @@ def ai_assert_ep(req: AiAssertReq, bg: BackgroundTasks, request: Request):
         f"AI Assert - {req.persona_description[:55]}",
         execution_type="api_ai_assert",
         created_by=(user or {}).get("id"),
-        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+        metadata={
+            "lob": req.lob,
+            "lob_display": "Personal Auto",
+            "persona_description": req.persona_description,
+            "rerun_payload": {
+                "persona_description": req.persona_description,
+                "lob": req.lob,
+            },
+        },
     )
 
     def _run():
@@ -1365,7 +1817,23 @@ def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
         f"Assert {req.assertion_type} {op_label} ${req.expected_value:,.2f} — {req.persona_description[:40]}",
         execution_type="api_assert_flow",
         created_by=(user or {}).get("id"),
-        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+        metadata={
+            "lob": req.lob,
+            "lob_display": "Personal Auto",
+            "persona_description": req.persona_description,
+            "assertion_type": req.assertion_type,
+            "expected_value": req.expected_value,
+            "operator": req.operator,
+            "tolerance_pct": req.tolerance_pct,
+            "rerun_payload": {
+                "persona_description": req.persona_description,
+                "assertion_type": req.assertion_type,
+                "expected_value": req.expected_value,
+                "operator": req.operator,
+                "tolerance_pct": req.tolerance_pct,
+                "lob": req.lob,
+            },
+        },
     )
 
     def _run():
@@ -1458,7 +1926,17 @@ def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: R
         f"Regression Sweep{focus_label} — {req.baseline_description[:50]}",
         execution_type="regression_sweep",
         created_by=(user or {}).get("id"),
-        metadata={"lob": req.lob, "lob_display": "Personal Auto"},
+        metadata={
+            "lob": req.lob,
+            "lob_display": "Personal Auto",
+            "baseline_description": req.baseline_description,
+            "focus": req.focus,
+            "rerun_payload": {
+                "baseline_description": req.baseline_description,
+                "lob": req.lob,
+                "focus": req.focus,
+            },
+        },
     )
 
     def _run():

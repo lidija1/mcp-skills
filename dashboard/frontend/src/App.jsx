@@ -31,6 +31,7 @@ import {
     MessageCircle,
     PanelRight,
     Settings,
+    Trash2,
     UserCircle,
     Workflow,
     X,
@@ -70,8 +71,23 @@ export default function App() {
     const [validationTab, setValidationTab] = useState('sweep')
     const [validationHistoryFilter, setValidationHistoryFilter] = useState('all')
     const [chatView, setChatView] = useState(() => localStorage.getItem('chatView') || 'sidebar')
+    const [toast, setToast] = useState(null)
+    const toastTimerRef = useRef(null)
 
     const setChatViewPersist = v => { setChatView(v); localStorage.setItem('chatView', v) }
+
+    const showToast = useCallback((message, options = {}) => {
+        window.clearTimeout(toastTimerRef.current)
+        setToast({
+            id: Date.now(),
+            message,
+            tone: options.tone || 'success',
+            icon: options.icon || 'check',
+        })
+        toastTimerRef.current = window.setTimeout(() => setToast(null), options.duration || 2200)
+    }, [])
+
+    useEffect(() => () => window.clearTimeout(toastTimerRef.current), [])
 
     useEffect(() => {
         const media = window.matchMedia('(max-width: 1040px)')
@@ -128,8 +144,8 @@ export default function App() {
 
     const cancelJob = useCallback(async job => {
         try {
-            await api.cancelJob(job.id)
-            updateJob(job.id, {
+            const data = await api.cancelJob(job.id)
+            updateJob(job.id, data?.job || {
                 status: 'canceled',
                 error: 'Canceled by user',
                 finished: Date.now() / 1000,
@@ -140,6 +156,15 @@ export default function App() {
             console.error(err)
         }
     }, [loadJobs, updateJob])
+
+    const deleteJob = useCallback(async job => {
+        await api.deleteJob(job.id)
+        setJobs(prev => prev.filter(item => item.id !== job.id))
+        setJobPopups(prev => prev.filter(item => item.job?.id !== job.id))
+        setSelectedJob(current => (current?.id === job.id ? null : current))
+        showToast('Deleted', {tone: 'danger', icon: 'trash'})
+        await loadJobs()
+    }, [loadJobs, showToast])
 
     useEffect(() => {
         let cancelled = false
@@ -514,10 +539,12 @@ export default function App() {
                             element={requireAuth(
                                 <JobsPanel
                                     jobs={jobs}
+                                    currentUser={dashboardUser}
                                     onSelect={setSelectedJob}
                                     onClearHistory={() => setJobs([])}
                                     onRefreshJobs={loadJobs}
                                     onUpdateJob={updateJob}
+                                    onDeleteJob={deleteJob}
                                 />
                             )}
                         />
@@ -644,10 +671,31 @@ export default function App() {
                         job={selectedJob}
                         onClose={() => setSelectedJob(null)}
                         onRerun={rerunJobFromReport}
+                        currentUser={dashboardUser}
+                        onDelete={deleteJob}
+                        onNotify={showToast}
                     />
                 )}
                 {showHelp && <HelpModal onClose={() => setShowHelp(false)}/>}
+                <AppToast toast={toast} onDismiss={() => setToast(null)}/>
             </div>
+        </div>
+    )
+}
+
+function AppToast({toast, onDismiss}) {
+    if (!toast) return null
+    const Icon = toast.icon === 'trash' ? Trash2 : CheckCircle2
+
+    return (
+        <div className="app-toast-wrap" aria-live="polite" aria-atomic="true">
+            <section className={`app-toast ${toast.tone || 'success'}`}>
+                <Icon size={17}/>
+                <span>{toast.message}</span>
+                <button className="app-toast-close" type="button" aria-label="Dismiss notification" onClick={onDismiss}>
+                    <X size={14}/>
+                </button>
+            </section>
         </div>
     )
 }

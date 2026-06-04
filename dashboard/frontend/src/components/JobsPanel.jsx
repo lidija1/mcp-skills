@@ -1,10 +1,11 @@
 import {cleanDisplayText} from '../utils/text'
-import {shouldShowRerunAction} from '../utils/jobRerun'
+import {canRerunJob, inferExecutionType, shouldShowRerunAction} from '../utils/jobRerun'
 import {resolveJobLobDisplay, sortLobGroupKeys} from '../utils/jobLob'
 import {useEffect, useState} from 'react'
 import { getDisplayStatus } from '../utils/jobStatus.js'
 import {api} from '../utils/api'
-import {BriefcaseBusiness, CalendarDays, ChevronRight, FileText, RotateCw, X} from 'lucide-react'
+import ConfirmDeleteModal from './ConfirmDeleteModal'
+import {BriefcaseBusiness, CalendarDays, ChevronRight, FileText, RotateCw, Trash2, X} from 'lucide-react'
 
 function elapsed(job) {
     const end = job.finished ?? Date.now() / 1000
@@ -53,7 +54,14 @@ export async function rerunJob(jobId) {
     return api.rerunJob(jobId)
 }
 
-export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs, onUpdateJob}) {
+const DELETABLE_STATUSES = new Set(['done', 'error', 'failed', 'canceled', 'cancelled'])
+
+function canDeleteJob(job, currentUser) {
+    if (!job || !currentUser) return false
+    return DELETABLE_STATUSES.has(getDisplayStatus(job)) && (job.created_by === currentUser.id || job.created_by == null)
+}
+
+export default function JobsPanel({jobs, currentUser, onSelect, onClearHistory, onRefreshJobs, onUpdateJob, onDeleteJob}) {
     const grouped = groupJobs(jobs)
     const total = jobs.length
     // const running = jobs.filter(job => job.status === 'running').length
@@ -112,13 +120,17 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
         )
     }, [collapsedDays])
 
+    const [deleteTarget, setDeleteTarget] = useState(null)
+    const [deleteError, setDeleteError] = useState('')
+    const [deleting, setDeleting] = useState(false)
+
 
     async function handleCancel(job) {
         try {
-            await api.cancelJob(job.id)
+            const data = await api.cancelJob(job.id)
 
             if (onUpdateJob) {
-                onUpdateJob(job.id, {
+                onUpdateJob(job.id, data?.job || {
                     status: 'canceled',
                     error: 'Canceled by user',
                     finished: Date.now() / 1000,
@@ -131,6 +143,20 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
             }
         } catch (err) {
             console.error(err)
+        }
+    }
+
+    async function handleConfirmDelete() {
+        if (!deleteTarget || !onDeleteJob || deleting) return
+        setDeleting(true)
+        setDeleteError('')
+        try {
+            await onDeleteJob(deleteTarget)
+            setDeleteTarget(null)
+        } catch (err) {
+            setDeleteError(err.message || 'Could not delete this job.')
+        } finally {
+            setDeleting(false)
         }
     }
 
@@ -210,6 +236,11 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
                                             onSelect={onSelect}
                                             onRerun={handleRerun}
                                             onCancel={handleCancel}
+                                            canDelete={canDeleteJob(job, currentUser)}
+                                            onRequestDelete={target => {
+                                                setDeleteError('')
+                                                setDeleteTarget(target)
+                                            }}
                                         />
                                     ))}
                                 </div>)
@@ -218,6 +249,15 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
                 })}
             </div>
         </div>)}
+        <ConfirmDeleteModal
+            job={deleteTarget}
+            deleting={deleting}
+            error={deleteError}
+            onCancel={() => {
+                if (!deleting) setDeleteTarget(null)
+            }}
+            onConfirm={handleConfirmDelete}
+        />
     </div>)
 }
 
@@ -228,28 +268,17 @@ function SummaryMetric({label, value}) {
     </div>)
 }
 
-// function getDisplayStatus(job) {
-//     const text = `${job.label || ''} ${job.result || ''} ${job.error || ''}`.toLowerCase()
-//
-//     const isPolicyFailed =
-//         text.includes('policy creation failed') ||
-//         text.includes('| **status** | failed') ||
-//         text.includes('| **outcome** | error')
-//
-//     if (job.status === 'done' && isPolicyFailed) {
-//         return 'error'
-//     }
-//
-//     return job.status
-// }
 
-function HistoryRow({job, onSelect, onRerun, onCancel}) {
+function HistoryRow({job, onSelect, onRerun, onCancel, canDelete, onRequestDelete}) {
     const displayStatus = getDisplayStatus(job)
+    const outcomeBadge = getOutcomeBadge(job, displayStatus)
     const jobLabel = cleanDisplayText(job.label)
     const canOpen =
     displayStatus === 'done' ||
     displayStatus === 'error' ||
     displayStatus === 'failed'
+    const isRunning = displayStatus === 'running' || job.status === 'running'
+    const canRerun = !isRunning && (canRerunJob(job) || shouldShowRerunAction(job))
     const owner = job.created_by_user
     const ownerName = owner?.display_name || owner?.username
 
@@ -259,18 +288,23 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
             <strong title={jobLabel}>{jobLabel}</strong>
             {ownerName && <small className="jobs-owner">Created by {ownerName}</small>}
         </div>
-        <div>
-        <span className={`job-status ${displayStatus}`}>
-          <i/>
-            {statusLabel(displayStatus)}
-        </span>
+        <div className="jobs-status-cell">
+            <span className={`job-status ${displayStatus}`}>
+              <i/>
+                {statusLabel(displayStatus)}
+            </span>
+            {outcomeBadge && (
+                <span className={`job-outcome-badge ${outcomeBadge.tone}`}>
+                    {outcomeBadge.label}
+                </span>
+            )}
         </div>
         <div className="jobs-cell-muted">{startedTime(job)}</div>
         <div className="jobs-cell-muted">{elapsed(job)}</div>
         <div className="jobs-cell-id" title={job.id}>{job.id}</div>
         <div className="jobs-actions">
-            <div className="jobs-action-slot jobs-action-slot-secondary">
-                {canOpen && (
+            {canOpen && (
+                <div className="jobs-action-slot jobs-action-slot-secondary">
                     <button
                         className="jobs-icon-btn expand-on-hover"
                         data-label="view-report"
@@ -282,10 +316,10 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
                         <FileText size={16}/>
                         <span className="label">View report</span>
                     </button>
-                )}
-            </div>
-            <div className="jobs-action-slot jobs-action-slot-primary">
-                {canOpen && (
+                </div>
+            )}
+            {canRerun && (
+                <div className="jobs-action-slot jobs-action-slot-primary">
                     <button
                         className="jobs-icon-btn expand-on-hover"
                         data-label="run-again"
@@ -297,8 +331,10 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
                         <RotateCw size={16}/>
                         <span className="label">Run again</span>
                     </button>
-                )}
-                {job.status === 'running' && (
+                </div>
+            )}
+            {isRunning && (
+                <div className="jobs-action-slot jobs-action-slot-primary jobs-action-slot-wide">
                     <button
                         className="jobs-icon-btn danger always-labeled"
                         type="button"
@@ -307,21 +343,21 @@ function HistoryRow({job, onSelect, onRerun, onCancel}) {
                         <X size={16}/>
                         <span className="label">Cancel</span>
                     </button>
-                )}
-                {!canOpen && shouldShowRerunAction(job) && (
+                </div>
+            )}
+            {canDelete && (
+                <div className="jobs-action-slot jobs-action-slot-danger">
                     <button
-                        className="jobs-icon-btn expand-on-hover"
-                        data-label="run-again"
+                        className="jobs-icon-btn danger icon-only"
                         type="button"
-                        title="Run again"
-                        aria-label="Run again"
-                        onClick={() => onRerun(job)}
+                        title="Delete"
+                        aria-label="Delete"
+                        onClick={() => onRequestDelete(job)}
                     >
-                        <RotateCw size={16}/>
-                        <span className="label">Run again</span>
+                        <Trash2 size={16}/>
                     </button>
-                )}
-            </div>
+                </div>
+            )}
         </div>
         {getDisplayStatus(job) === 'error' && job.error && (<div className="job-error">{job.error}</div>)}
     </article>)
@@ -331,6 +367,111 @@ function statusLabel(status) {
     if (status === 'done') return 'Done'
     if (status === 'error') return 'Error'
     if (status === 'failed') return 'Failed'
-    if (status === 'canceled') return 'Canceled'
+    if (status === 'canceled' || status === 'cancelled') return 'Cancelled'
     return 'Running'
+}
+
+const ASSERTION_EXECUTION_TYPES = new Set([
+    'api_assertion',
+    'api_compare',
+    'api_ladder',
+    'api_ai_assert',
+    'api_assert_flow',
+    'regression_sweep',
+])
+
+function getOutcomeBadge(job, displayStatus) {
+    if (displayStatus !== 'done') return null
+
+    const assertionOutcome = getAssertionOutcome(job)
+    if (assertionOutcome) {
+        return {
+            label: assertionOutcome === 'pass' ? 'Passed' : 'Failed',
+            tone: assertionOutcome === 'pass' ? 'passed' : 'fail',
+        }
+    }
+
+    if (hasUwReferralOutcome(job)) {
+        return {label: 'UW Referral', tone: 'warning'}
+    }
+
+    return null
+}
+
+function getAssertionOutcome(job) {
+    if (!isAssertionJob(job)) return null
+
+    const rawResult = String(job?.result || '').trim()
+    if (!rawResult) return null
+
+    const jsonOutcome = getAssertionJsonOutcome(rawResult)
+    if (jsonOutcome) return jsonOutcome
+
+    if (hasAssertionFailed(rawResult)) return 'fail'
+    if (hasAssertionPassed(rawResult)) return 'pass'
+
+    return null
+}
+
+function isAssertionJob(job) {
+    const type = inferExecutionType(job)
+    if (ASSERTION_EXECUTION_TYPES.has(type)) return true
+
+    const tool = job?.metadata?.tool
+    if (tool === 'run_api_assertion') return true
+
+    const label = String(job?.label || '').toLowerCase()
+    return label.includes('assert') || label.includes('assertion')
+}
+
+function getAssertionJsonOutcome(rawResult) {
+    if (!rawResult.startsWith('{')) return null
+
+    try {
+        const parsed = JSON.parse(rawResult)
+        if (parsed?.passed === true) return 'pass'
+        if (parsed?.passed === false) return 'fail'
+
+        const status = String(parsed?.status || parsed?.result || '').toLowerCase()
+        if (/\bfail(?:ed)?\b/.test(status)) return 'fail'
+        if (/\bpass(?:ed)?\b/.test(status)) return 'pass'
+    } catch {
+        return null
+    }
+
+    return null
+}
+
+function hasAssertionFailed(rawResult) {
+    return (
+        /^#{1,6}\s+.*\b(?:FAIL|FAILED)\b/im.test(rawResult) ||
+        /\*\*Status:\*\*\s*(?:[^A-Za-z\n]*\s*)?FAIL\b/i.test(rawResult)
+    )
+}
+
+function hasAssertionPassed(rawResult) {
+    return (
+        /^#{1,6}\s+.*\b(?:PASS|ALL PASS)\b/im.test(rawResult) ||
+        /\*\*Status:\*\*\s*(?:[^A-Za-z\n]*\s*)?PASS\b/i.test(rawResult)
+    )
+}
+
+function hasUwReferralOutcome(job) {
+    const type = inferExecutionType(job)
+    const label = String(job?.label || '').toLowerCase()
+    const isPolicyJob =
+        type === 'quick_run' ||
+        type === 'policy_flow' ||
+        label.includes('quick policy') ||
+        label.includes('policy journey')
+
+    if (!isPolicyJob) return false
+
+    const result = String(job?.result || '')
+    return (
+        /\|\s*\*\*Outcome\*\*\s*\|\s*[^|\n]*UW Referral/i.test(result) ||
+        /\|\s*\*\*Status\*\*\s*\|\s*[^|\n]*UW REFERRAL/i.test(result) ||
+        /^#{1,6}\s+UW Rules Triggered\b/im.test(result) ||
+        /\bOutcome:\s*UW Referral\b/i.test(result)
+    )
 }

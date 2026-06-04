@@ -76,6 +76,7 @@ export const api = {
   getJob: id => get(`/api/jobs/${id}`),
   cancelJob: id => post(`/api/jobs/${id}/cancel`, {}),
   rerunJob: id => post(`/api/jobs/${id}/rerun`, {}),
+  deleteJob: id => del(`/api/jobs/${id}`),
   explorerPrompt: prompt => post('/api/explorer/prompt', { prompt }),
   explorerRun: prompt => post('/api/explorer/run', { prompt }),
 

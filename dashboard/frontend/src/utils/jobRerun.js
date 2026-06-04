@@ -2,6 +2,7 @@
 export function inferExecutionType(job) {
   const explicit = job?.execution_type
   if (explicit === 'quick_run' || explicit === 'policy_flow' || explicit === 'create_persona') return explicit
+  if (isAssertExecutionType(explicit)) return explicit
 
   if (explicit === 'chat_execution') {
     const tool = job?.metadata?.tool
@@ -15,6 +16,19 @@ export function inferExecutionType(job) {
   if (label.includes('build profile')) return 'create_persona'
 
   return explicit || ''
+}
+
+const ASSERT_EXECUTION_TYPES = new Set([
+  'api_assertion',
+  'api_compare',
+  'api_ladder',
+  'api_ai_assert',
+  'api_assert_flow',
+  'regression_sweep',
+])
+
+function isAssertExecutionType(type) {
+  return ASSERT_EXECUTION_TYPES.has(type)
 }
 
 function extractSourceDescription(result) {
@@ -57,6 +71,44 @@ function personaDescription(job) {
   )
 }
 
+function markdownField(content, label) {
+  if (!content || typeof content !== 'string') return ''
+  const match = content.match(new RegExp(`\\*\\*${label}:\\*\\*\\s*(.+)`))
+  return match?.[1]?.trim() || ''
+}
+
+function ladderBaseDescription(result) {
+  if (!result || typeof result !== 'string') return ''
+  const match = result.match(/^Base:\s*_(.+?)_\s*$/m)
+  return match?.[1]?.trim() || ''
+}
+
+function assertFlowPayloadFromResult(result) {
+  if (!result || typeof result !== 'string' || !result.trimStart().startsWith('{')) return null
+  try {
+    const data = JSON.parse(result)
+    if (data?._type !== 'assert_flow') return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+function canRerunAssertJob(job) {
+  const metadata = job?.metadata || {}
+  const payload = metadata.rerun_payload || {}
+  const type = inferExecutionType(job)
+
+  if (Object.keys(payload).length > 0) return true
+  if (type === 'api_assertion') return Boolean(metadata.prompt)
+  if (type === 'api_ai_assert') return Boolean(metadata.persona_description || markdownField(job?.result, 'Persona'))
+  if (type === 'api_ladder') return Boolean((metadata.base_description || ladderBaseDescription(job?.result)) && metadata.dimension)
+  if (type === 'api_assert_flow') return Boolean(assertFlowPayloadFromResult(job?.result))
+  if (type === 'regression_sweep') return Boolean(metadata.baseline_description || markdownField(job?.result, 'Baseline'))
+
+  return false
+}
+
 /** Whether the backend /api/jobs/:id/rerun endpoint can handle this job. */
 export function canRerunJob(job) {
   if (!job) return false
@@ -65,6 +117,7 @@ export function canRerunJob(job) {
   if (type === 'quick_run') return Boolean(quickRunDescription(job))
   if (type === 'policy_flow') return policyFlowPersona(job) != null
   if (type === 'create_persona') return Boolean(personaDescription(job))
+  if (isAssertExecutionType(type)) return canRerunAssertJob(job)
 
   return false
 }

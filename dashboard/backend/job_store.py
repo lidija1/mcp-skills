@@ -132,3 +132,12 @@ def list_jobs(user: dict | None = None) -> list:
         return persisted
     with _lock:
         return sorted(_jobs.values(), key=lambda j: j["started"], reverse=True)
+
+
+def delete_job(jid: str, user: dict | None = None) -> bool:
+    deleted = dashboard_db.delete_execution(jid, user=user)
+    if deleted:
+        with _lock:
+            _jobs.pop(jid, None)
+            _cancel_flags.pop(jid, None)
+    return deleted

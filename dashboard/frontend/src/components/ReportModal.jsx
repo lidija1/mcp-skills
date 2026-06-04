@@ -11,21 +11,36 @@ import {
     Pencil,
     RefreshCw,
     ShieldAlert,
+    Trash2,
     X,
 } from 'lucide-react'
 import {cleanDisplayText} from '../utils/text'
 import {api} from '../utils/api'
 import {canRerunJob} from '../utils/jobRerun'
+import {getDisplayStatus} from '../utils/jobStatus'
+import ConfirmDeleteModal from './ConfirmDeleteModal'
 
-export default function ReportModal({job, onClose, onRerun}) {
+const DELETABLE_STATUSES = new Set(['done', 'error', 'failed', 'canceled', 'cancelled'])
+
+function canDeleteJob(job, currentUser) {
+    if (!job || !currentUser) return false
+    return DELETABLE_STATUSES.has(getDisplayStatus(job)) && (job.created_by === currentUser.id || job.created_by == null)
+}
+
+export default function ReportModal({job, currentUser, onClose, onRerun, onDelete, onNotify}) {
     const ref = useRef(null)
     const feedbackTimerRef = useRef(null)
     const [activeAction, setActiveAction] = useState('')
     const [rerunning, setRerunning] = useState(false)
+    const [confirmingDelete, setConfirmingDelete] = useState(false)
+    const [deleting, setDeleting] = useState(false)
+    const [deleteError, setDeleteError] = useState('')
     const jobLabel = cleanDisplayText(job.label || '')
     const jobResult = cleanDisplayText(job.result || '')
     const jobError = cleanDisplayText(job.error || '')
-    const canRerun = canRerunJob(job)
+    const displayStatus = getDisplayStatus(job)
+    const canRerun = displayStatus !== 'running' && canRerunJob(job)
+    const canDelete = canDeleteJob(job, currentUser)
     useEffect(() => {
         const handler = e => {
             if (e.key === 'Escape') onClose()
@@ -71,14 +86,21 @@ export default function ReportModal({job, onClose, onRerun}) {
 
     const report = useMemo(() => parsePolicyFlowReport(jobResult), [jobResult])
 
-    const copyReport = () => {
+    const copyReport = async () => {
+        let text = ''
         if (isAssertionSuite || isUwBatch) {
-            navigator.clipboard.writeText(jobResult || '')
+            text = jobResult || ''
         } else if (report.profileJson) {
-            navigator.clipboard.writeText(report.prettyProfileJson || report.profileJson)
+            text = report.prettyProfileJson || report.profileJson
         } else {
-            const text = job.status === 'done' ? jobResult : jobError
-            navigator.clipboard.writeText(text || '')
+            text = job.status === 'done' ? jobResult : jobError
+        }
+
+        try {
+            await navigator.clipboard.writeText(text || '')
+            onNotify?.('Copied', {tone: 'success', icon: 'check'})
+        } catch (err) {
+            console.error(err)
         }
     }
 
@@ -164,6 +186,20 @@ export default function ReportModal({job, onClose, onRerun}) {
             await onRerun(job)
         } finally {
             setRerunning(false)
+        }
+    }
+
+    const handleDelete = async () => {
+        if (!canDelete || !onDelete || deleting) return
+        setDeleting(true)
+        setDeleteError('')
+        try {
+            await onDelete(job)
+            setConfirmingDelete(false)
+        } catch (err) {
+            setDeleteError(err.message || 'Could not delete this job.')
+        } finally {
+            setDeleting(false)
         }
     }
 
@@ -257,6 +293,21 @@ export default function ReportModal({job, onClose, onRerun}) {
                             <Copy size={16}/>
                             Copy
                         </button>
+                        {canDelete && onDelete && (
+                            <button
+                                onClick={() => {
+                                    triggerActionFeedback('delete')
+                                    setDeleteError('')
+                                    setConfirmingDelete(true)
+                                }}
+                                className={`${reportActionClass('delete')} danger`}
+                                type="button"
+                                title="Delete this job"
+                            >
+                                <Trash2 size={16}/>
+                                Delete
+                            </button>
+                        )}
                         <button onClick={onClose} className="modal-close-button" title="Close" aria-label="Close report"
                                 type="button">
                             <X size={20}/>
@@ -290,7 +341,7 @@ export default function ReportModal({job, onClose, onRerun}) {
                     ) : isVariationReport ? (
                         <PersonaVariationsReport job={job} report={report}/>
                     ) : hasStructuredReport ? (
-                        <StructuredPolicyReport job={job} report={report}/>
+                        <StructuredPolicyReport job={job} report={report} policyFailed={isPolicyFailed}/>
                     ) : (
                         <div className="markdown-report report-markdown">
                             <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
@@ -301,6 +352,15 @@ export default function ReportModal({job, onClose, onRerun}) {
                 </div>
                 {!isError && jobResult && <ViolationSummary content={jobResult}/>}
             </section>
+            <ConfirmDeleteModal
+                job={confirmingDelete ? job : null}
+                deleting={deleting}
+                error={deleteError}
+                onCancel={() => {
+                    if (!deleting) setConfirmingDelete(false)
+                }}
+                onConfirm={handleDelete}
+            />
         </div>
     )
 }
@@ -316,12 +376,26 @@ function DocKV({label, value}) {
     )
 }
 
-function StructuredPolicyReport({job, report}) {
+function FailureReasonPanel({reason}) {
+    if (!reason) return null
+    return (
+        <div className="doc-failure-summary">
+            <div className="doc-failure-summary-title">Error details</div>
+            <pre>{reason}</pre>
+        </div>
+    )
+}
+
+function StructuredPolicyReport({job, report, policyFailed = false}) {
     const jobLabel = cleanDisplayText(job.label || '')
     const profile = useMemo(() => extractProfileData(report.profileJson), [report.profileJson])
 
     const statusLabel = job.status === 'done' ? 'Completed' : job.status === 'error' ? 'Failed' : 'Running'
-    const executionStatus = report.summary.status || (isUwReferralReport(report) ? 'UW Referral' : statusLabel)
+    const isPolicyFailed = policyFailed || isFailedPolicyReport(report)
+    const failureReason = getPolicyFailureReason(report, jobLabel)
+    const referralConditions = isPolicyFailed ? [] : report.uwConditions
+    const executionStatus = report.summary.status || (isUwReferralReport({...report, uwConditions: referralConditions}) ? 'UW Referral' : statusLabel)
+    const displayOutcome = isPolicyFailed ? getFailureHeadline(jobLabel) : report.summary.outcome
     const dateStr = job.started
         ? new Date(job.started * 1000).toLocaleString('en-US', {
             month: 'short', day: 'numeric', year: 'numeric',
@@ -371,13 +445,14 @@ function StructuredPolicyReport({job, report}) {
                             <DocKV label="Policy" value={jobLabel}/>
                             <DocKV label="Policy Type" value={report.summary.lob}/>
                             <DocKV label="Execution Status" value={executionStatus}/>
-                            <DocKV label="Outcome" value={report.summary.outcome}/>
-                            <DocKV label="Triggered Rules" value={report.uwConditions.join(', ')}/>
+                            <DocKV label="Outcome" value={displayOutcome}/>
+                            <DocKV label="Triggered Rules" value={referralConditions.join(', ')}/>
                             <DocKV label="Completed In" value={job.finished ? duration : undefined}/>
                             <DocKV label="Generated On" value={job.started ? dateStr : undefined}/>
                             <DocKV label="AI Prompt" value={report.sourceDescription}/>
                         </dl>
-                        <UwSummaryList conditions={report.uwConditions}/>
+                        {isPolicyFailed && <FailureReasonPanel reason={failureReason}/>}
+                        {!isPolicyFailed && <UwSummaryList conditions={referralConditions}/>}
                     </div>
                     {report.summary.premium && (
                         <div className="doc-premium-box">
@@ -403,9 +478,9 @@ function StructuredPolicyReport({job, report}) {
                                         <div className="doc-step-content">
                                             <span className="doc-step-name">{step.label}</span>
                                             {step.detail && <span className="doc-step-detail">{step.detail}</span>}
-                                            {isUwOutcome && report.uwConditions.length > 0 && (
+                                            {isUwOutcome && referralConditions.length > 0 && (
                                                 <span className="doc-step-rules">
-                          {report.uwConditions.join(' · ')}
+                          {referralConditions.join(' · ')}
                         </span>
                                             )}
                                         </div>
@@ -468,12 +543,12 @@ function StructuredPolicyReport({job, report}) {
                 </>
             )}
 
-            {report.uwConditions.length > 0 && (
+            {referralConditions.length > 0 && (
                 <>
                     <div className="doc-rule"/>
                     <div className="doc-section">
                         <div className="doc-section-title">UW RULES TRIGGERED</div>
-                        <UwRulesCarousel conditions={report.uwConditions}/>
+                        <UwRulesCarousel conditions={referralConditions}/>
                     </div>
                 </>
             )}
@@ -1187,6 +1262,52 @@ function isFailedPolicyReport(report, rawContent = '') {
         rawContent,
     ].filter(Boolean).join(' ').toLowerCase()
     return fields.includes('policy creation failed') || fields.includes('outcome | error') || fields.includes('status | failed')
+}
+
+function getPolicyFailureReason(report, jobLabel = '') {
+    const headline = getFailureHeadline(jobLabel)
+    const details = [
+        report?.error,
+        ...(report?.uwConditions || []),
+        ...(report?.steps || [])
+            .filter(step => step.tone === 'error')
+            .map(step => [step.label, step.detail].filter(Boolean).join(': ')),
+    ]
+        .flatMap(splitFailureDetail)
+        .map(value => cleanInline(value).trim())
+        .map(normalizeFailureDetail)
+        .filter(value => !isGenericFailureSummary(value))
+        .filter(Boolean)
+
+    const uniqueDetails = [...new Set(details)]
+    return uniqueDetails.length ? uniqueDetails.join('\n') : headline
+}
+
+function getFailureHeadline(jobLabel = '') {
+    const label = String(jobLabel || '').toLowerCase()
+    if (label.includes('build profile')) return 'Build Profile failed'
+    if (label.includes('policy journey')) return 'Run Policy Journey failed'
+    if (label.includes('quick policy')) return 'Quick Policy Test failed'
+    return 'Policy Journey failed'
+}
+
+function splitFailureDetail(value) {
+    return String(value || '')
+        .split(/\r?\n/)
+        .map(line => line.trim())
+}
+
+function normalizeFailureDetail(value) {
+    return String(value || '')
+        .replace(/^(outcome:\s*)?policy creation failed\s*[:\-]\s*/i, '')
+        .replace(/^(outcome:\s*)?(quick policy test|run policy journey|build profile|policy journey) failed\s*[:\-]\s*/i, '')
+        .trim()
+}
+
+function isGenericFailureSummary(value) {
+    const text = String(value || '').trim()
+    return /^(outcome:\s*)?policy creation failed\.?$/i.test(text) ||
+        /^(outcome:\s*)?(quick policy test|run policy journey|build profile|policy journey) failed\.?$/i.test(text)
 }
 
 function screenshotUrlFromPath(path) {

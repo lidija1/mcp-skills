@@ -125,6 +125,12 @@ def _validate_policy_lob(lob: str) -> str:
     return normalized
 
 
+def _resolve_run_flow_lob(lob: str) -> tuple[str, str]:
+    """Return (policy_lob, engine_lob). Both are the same normalized LOB string."""
+    normalized = _validate_policy_lob(lob)
+    return normalized, normalized
+
+
 def _normalize_policy_tc_id(raw: str) -> str | None:
     """Accept dashboard shorthand like tc0001 and return canonical TC_ID_0001."""
     value = raw.strip().strip('"').strip("'")
@@ -836,6 +842,8 @@ def quick_run_ep(req: PersonaReq, bg: BackgroundTasks):
     lob = _validate_policy_lob(req.lob)
     jid = _new_job(f"Quick Policy Test - {req.lob.upper()}")
 
+    policy_lob, engine_lob = _resolve_run_flow_lob(req.lob)
+
     def _run():
         try:
             _status(jid, "Generating profile", LOB_DISPLAY.get(lob, req.lob.upper()))
@@ -868,6 +876,7 @@ def batch_run_ep(req: BatchReq, bg: BackgroundTasks):
             results = []
             for s in req.scenarios[:25]:
                 lob = _validate_policy_lob(str(s.get("lob", "auto")))
+                _, engine_lob = _resolve_run_flow_lob(lob)
                 try:
                     pjson = generate_persona(lob, s.get("description", ""))
                     p = json.loads(pjson)

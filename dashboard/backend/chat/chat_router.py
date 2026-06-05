@@ -21,6 +21,7 @@ depth — client cannot bypass the registry by skipping the confirm step).
 """
 import json
 import concurrent.futures
+import re
 
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -459,6 +460,27 @@ _DISPATCH = {
 }
 
 
+def _summarize_assert_persona(description: str) -> str:
+    parts = [part.strip() for part in (description or "").split(",") if part.strip()]
+    lowered = [(part, part.lower()) for part in parts]
+
+    driver = next((part for part, low in lowered if "driver" in low), "")
+    driver = re.sub(r"\b(adult\s+)?driver\b", "", driver, flags=re.IGNORECASE).strip()
+    gender = next(
+        ("female" if "female driver" in low else "male" for _, low in lowered if "female driver" in low or "male driver" in low),
+        "",
+    )
+    driver_bits = " ".join(bit for bit in (driver, gender) if bit and bit.lower() not in driver.lower()).strip()
+
+    coverage = next((re.sub(r"\s+coverage\b", "", part, flags=re.IGNORECASE).strip() for part, low in lowered if low.endswith("coverage")), "")
+    license_status = next((re.sub(r"\s+license status\b", "", part, flags=re.IGNORECASE).strip() for part, low in lowered if low.endswith("license status")), "")
+    vehicle_use = next((re.sub(r"\s+vehicle use\b", "", part, flags=re.IGNORECASE).strip().title() for part, low in lowered if low.endswith("vehicle use")), "")
+    sr22 = next(("no SR-22" if "without sr-22" in low else "SR-22" for _, low in lowered if "sr-22" in low), "")
+
+    summary = ", ".join(bit for bit in (driver_bits, coverage, license_status, vehicle_use, sr22) if bit)
+    return summary or (description[:80].strip() + ("..." if len(description) > 80 else ""))
+
+
 def _job_label(tool_name: str, params: dict) -> str:
     labels = {
         "run_quick_policy":          lambda p: f"Chat - Quick Policy - {p.get('lob', '').upper()}",
@@ -473,7 +495,7 @@ def _job_label(tool_name: str, params: dict) -> str:
         "run_assert_flow":           lambda p: (
             f"Chat - Assert {p.get('assertion_type', 'premium')} "
             f"{p.get('operator', 'approx')} ${p.get('expected_value', 0):,.0f} — "
-            f"{p.get('persona_description', '')[:30]}"
+            f"{_summarize_assert_persona(p.get('persona_description', ''))}"
         ),
     }
     fn = labels.get(tool_name)

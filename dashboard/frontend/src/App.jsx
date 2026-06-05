@@ -767,6 +767,71 @@ function NavItem({icon: Icon, label, active, onClick}) {
 }
 
 function HelpModal({onClose}) {
+    const sections = [
+        {
+            title: 'Overview',
+            summary: 'Start here when you want a quick operational view of the dashboard.',
+            items: [
+                'Backend shows whether FastAPI is reachable.',
+                'Saved jobs and running jobs show current automation volume.',
+                'Results separates completed, failed, and canceled runs.',
+                'Live Automation Activity Feed lets you open reports, cancel active runs, or rerun eligible flows.',
+            ],
+        },
+        {
+            title: 'Policy Flow',
+            summary: 'Use this page to generate customer data and run end-to-end policy workflows.',
+            items: [
+                'Line of Business selects the workflow. Current options are Personal Auto and Homeowner.',
+                'Quick Policy Test accepts a plain-English customer or risk description and runs the full journey automatically.',
+                'Build Customer Profile turns a natural-language description into structured test data JSON.',
+                'Run Policy Journey accepts profile JSON from Build Customer Profile, or a saved test case id such as TC_ID_0001.',
+            ],
+            fieldTips: [
+                'For plain-English fields, include the risk details that matter: age, coverage, vehicle use, license status, SR-22, prior losses, roof age, zone, or claims history.',
+                'For JSON fields, paste the generated profile exactly as returned, or enter one TC_ID when you want to replay existing static test data.',
+            ],
+        },
+        {
+            title: 'Validation Tests',
+            summary: 'Use this page when you want evidence checks without binding a policy.',
+            items: [
+                'Regression Sweep starts from a clean baseline and generates rating variants automatically.',
+                'Focus category narrows the sweep to All categories, Risk adding only, Discounts only, Hard stops only, or Ladder only.',
+                'Direct Assert validates a specific premium or total cost against the actual OneShield result.',
+                'History stores prior assertion results and lets you review pass/fail detail, coverage premiums, UW conditions, and persona JSON.',
+            ],
+            fieldTips: [
+                'Driver profile can be preset or Custom age. Exact age is only used when Custom age is selected.',
+                'Coverage, Vehicle use, Gender, Marital status, License, SR-22, and Ownership shape the generated persona.',
+                'Assertion type can check Total premium from Rating Detail or Total cost from Verify Billing.',
+                'Operator controls the comparison: approximate with tolerance, exact match, greater than, or less than.',
+            ],
+        },
+        {
+            title: 'Chat Assistant',
+            summary: 'Use chat when you want to ask questions, learn details, or dispatch supported automation from natural language.',
+            items: [
+                'Ask mode is read-only guidance. Use it for explanations, project structure, field meaning, examples, and how-to questions.',
+                'Tools mode can start approved actions such as quick policy runs, persona generation, persona variations, batch tests, UW audits, rule tests, full audits, and premium or total-cost assertions.',
+                'Use /help for a structured dashboard overview, or /help chat, /help tools, /help api, /help uw, /help persona, /help lob, and related topics for deeper guidance.',
+                'When Tools mode needs confirmation, review the generated parameters and click Confirm before the run starts.',
+            ],
+            fieldTips: [
+                'Good chat prompts include the LOB, the action you want, and the important facts: for example, "run an auto policy flow for a 23-year-old driver with SR-22 and Gold coverage."',
+                'Ask can explain how to fill fields; Tools can execute only the whitelisted automation actions.',
+            ],
+        },
+        {
+            title: 'Account',
+            summary: 'Use the account area for the current signed-in dashboard session.',
+            items: [
+                'Your profile is shown in the top bar.',
+                'Use Logout when you want to end the current browser session.',
+            ],
+        },
+    ]
+
     useEffect(() => {
         const handler = e => {
             if (e.key === 'Escape') onClose()
@@ -785,39 +850,32 @@ function HelpModal({onClose}) {
                     </button>
                 </div>
                 <div className="help-modal-body">
-                    <div className="help-section">
-                        <h3>Policy Flow</h3>
-                        <p>Generate a customer profile and run an end-to-end policy quote from a plain-English
-                            description. Choose a line of business, describe the customer, and click <strong>Run Policy
-                                Test</strong>.</p>
-                        <p>Use <strong>Build Customer Profile</strong> to generate structured JSON, then paste it
-                            into <strong>Run Policy Journey</strong> to replay it.</p>
+                    <p className="help-intro">
+                        This guide follows the main menu order and highlights what each area is for, which options are
+                        available, and how to use the important fields.
+                    </p>
+                    <div className="help-section-grid">
+                        {sections.map(section => (
+                            <section className="help-section" key={section.title}>
+                                <h3>{section.title}</h3>
+                                <p>{section.summary}</p>
+                                <ul>
+                                    {section.items.map(item => <li key={item}>{item}</li>)}
+                                </ul>
+                                {section.fieldTips && (
+                                    <div className="help-field-tips">
+                                        <strong>Field tips</strong>
+                                        <ul>
+                                            {section.fieldTips.map(item => <li key={item}>{item}</li>)}
+                                        </ul>
+                                    </div>
+                                )}
+                            </section>
+                        ))}
                     </div>
-                    <div className="help-section">
-                        <h3>Jobs</h3>
-                        <p>Every dispatched run appears in the Jobs tab. Jobs poll every 2.5 s while running. Click any
-                            completed job to open its report.</p>
-                    </div>
-                    <div className="help-section">
-                        <h3>Validation Tests</h3>
-                        <p>Run underwriting evidence checks without binding a policy. Use <strong>Regression Sweep</strong>
-                            {' '}to compare generated rating variants, <strong>Direct Assert</strong> to validate a specific
-                            premium or billing value, and <strong>History</strong> to review saved assertion results.</p>
-                    </div>
-                    <div className="help-section">
-                        <h3>Settings</h3>
-                        <p>Use Settings to change the dashboard theme for this browser. Light, Dark, and Black modes are
-                            saved locally and apply across navigation, pages, reports, and modal windows.</p>
-                    </div>
-                    <div className="help-section">
-                        <h3>Chat Assistant</h3>
-                        <p>Use the right-hand chat panel to describe a scenario in natural language. The assistant will
-                            dispatch a policy run and track the resulting job for you.</p>
-                    </div>
-                    <div className="help-section">
-                        <h3>Notifications</h3>
-                        <p>When a job finishes, a popup appears in the bottom-right corner. Click <strong>Open
-                            report</strong> to view results, or dismiss to close.</p>
+                    <div className="help-note">
+                        To learn more details, use the chat options. Ask mode is best for explanations and field
+                        guidance; Tools mode is best when you want the assistant to run an approved automation.
                     </div>
                 </div>
             </div>

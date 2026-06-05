@@ -5743,7 +5743,7 @@ code.asr-val-code.fail {
 }
 
 .help-modal {
-    width: min(520px, 100%);
+    width: min(960px, 100%);
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -5799,9 +5799,31 @@ code.asr-val-code.fail {
     padding: 20px 22px 24px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    max-height: 70vh;
+    gap: 16px;
+    max-height: min(76vh, 760px);
     overflow-y: auto;
+}
+
+.help-intro {
+    max-width: 760px;
+    color: #334155;
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0;
+}
+
+.help-section-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.help-section {
+    min-width: 0;
+    padding: 16px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
 }
 
 .help-section h3 {
@@ -5817,11 +5839,75 @@ code.asr-val-code.fail {
     font-size: 14px;
     line-height: 1.55;
     color: #334155;
-    margin: 0 0 4px;
+    margin: 0 0 10px;
 }
 
 .help-section p:last-child {
     margin-bottom: 0;
+}
+
+.help-section ul {
+    display: grid;
+    gap: 7px;
+    padding-left: 18px;
+    margin: 0;
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.help-section li {
+    padding-left: 2px;
+}
+
+.help-field-tips {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.help-field-tips strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.help-note {
+    padding: 14px 16px;
+    color: #1e3a8a;
+    background: var(--blue-soft);
+    border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--border));
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+    .help-backdrop {
+        padding: 14px;
+    }
+
+    .help-modal {
+        width: 100%;
+        max-height: calc(100vh - 28px);
+    }
+
+    .help-modal-body {
+        padding: 16px;
+        max-height: calc(100vh - 92px);
+    }
+
+    .help-section-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .help-section {
+        padding: 14px;
+    }
 }
 
 .settings-panel {
@@ -5964,7 +6050,9 @@ code.asr-val-code.fail {
 :is([data-theme='dark'], [data-theme='black']) .markdown-report td,
 :is([data-theme='dark'], [data-theme='black']) .markdown-report ul,
 :is([data-theme='dark'], [data-theme='black']) .markdown-report ol,
-:is([data-theme='dark'], [data-theme='black']) .help-section p {
+:is([data-theme='dark'], [data-theme='black']) .help-intro,
+:is([data-theme='dark'], [data-theme='black']) .help-section p,
+:is([data-theme='dark'], [data-theme='black']) .help-section ul {
     color: color-mix(in srgb, var(--text) 84%, var(--muted));
 }
 
@@ -8379,6 +8467,7 @@ button.jobs-group-row {
     min-width: 0;
     flex-direction: column;
     gap: 4px;
+    overflow: visible;
     color: #0f172a;
     font-size: 13px;
     line-height: 1.25;
@@ -8386,9 +8475,13 @@ button.jobs-group-row {
 }
 
 .jobs-job-title strong {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: block;
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: break-word;
 }
 
 .jobs-owner {

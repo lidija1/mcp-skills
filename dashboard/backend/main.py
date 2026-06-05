@@ -462,6 +462,31 @@ ASSERT_RERUN_TYPES = {
 }
 
 
+def _summarize_assert_persona(description: str) -> str:
+    parts = [part.strip() for part in (description or "").split(",") if part.strip()]
+    lowered = [(part, part.lower()) for part in parts]
+
+    driver = next((part for part, low in lowered if "driver" in low), "")
+    driver = re.sub(r"\b(adult\s+)?driver\b", "", driver, flags=re.IGNORECASE).strip()
+    gender = next(
+        ("female" if "female driver" in low else "male" for _, low in lowered if "female driver" in low or "male driver" in low),
+        "",
+    )
+    driver_bits = " ".join(bit for bit in (driver, gender) if bit and bit.lower() not in driver.lower()).strip()
+
+    coverage = next((re.sub(r"\s+coverage\b", "", part, flags=re.IGNORECASE).strip() for part, low in lowered if low.endswith("coverage")), "")
+    license_status = next((re.sub(r"\s+license status\b", "", part, flags=re.IGNORECASE).strip() for part, low in lowered if low.endswith("license status")), "")
+    vehicle_use = next((re.sub(r"\s+vehicle use\b", "", part, flags=re.IGNORECASE).strip().title() for part, low in lowered if low.endswith("vehicle use")), "")
+    sr22 = next(("no SR-22" if "without sr-22" in low else "SR-22" for _, low in lowered if "sr-22" in low), "")
+
+    summary = ", ".join(bit for bit in (driver_bits, coverage, license_status, vehicle_use, sr22) if bit)
+    return summary or (description[:80].strip() + ("..." if len(description) > 80 else ""))
+
+
+def _assert_flow_job_label(assertion_type: str, operator_label: str, expected_value: float, persona_description: str) -> str:
+    return f"Assert {assertion_type} {operator_label} ${expected_value:,.2f} - {_summarize_assert_persona(persona_description)}"
+
+
 def _extract_markdown_field(content: str | None, label: str) -> str:
     if not content:
         return ""
@@ -705,7 +730,7 @@ def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: Backg
             raise HTTPException(status_code=400, detail="This direct assertion job cannot be rerun")
         op_label = f"approx {tolerance_pct:.0f}%" if operator == "approx" else operator
         new_jid = _new_job(
-            f"Assert {assertion_type} {op_label} ${expected_value:,.2f} - {persona_description[:40]}",
+            _assert_flow_job_label(assertion_type, op_label, expected_value, persona_description),
             execution_type="api_assert_flow",
             created_by=(user or {}).get("id"),
             metadata=_assert_rerun_metadata({"lob": lob, "lob_display": "Personal Auto", "persona_description": persona_description, "assertion_type": assertion_type, "expected_value": expected_value, "operator": operator, "tolerance_pct": tolerance_pct}, job_id, payload),
@@ -1811,10 +1836,10 @@ def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
     if req.operator not in VALID_OPERATORS:
         raise HTTPException(status_code=400, detail=f"Invalid operator. Valid: {sorted(VALID_OPERATORS)}")
 
-    op_label = f"≈±{req.tolerance_pct:.0f}%" if req.operator == "approx" else req.operator
+    op_label = f"approx {req.tolerance_pct:.0f}%" if req.operator == "approx" else req.operator
     user = user_from_request(request)
     jid = _new_job(
-        f"Assert {req.assertion_type} {op_label} ${req.expected_value:,.2f} — {req.persona_description[:40]}",
+        _assert_flow_job_label(req.assertion_type, op_label, req.expected_value, req.persona_description),
         execution_type="api_assert_flow",
         created_by=(user or {}).get("id"),
         metadata={

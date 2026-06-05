@@ -504,7 +504,7 @@ def update_execution_status(execution_id: str, phase: str, detail: str = "") -> 
         if row:
             current["elapsed_s"] = round(max(0, current["updated"] - float(row["created_at"] or current["updated"])), 1)
         conn.execute(
-            "UPDATE executions SET current_status_json = ?, updated_at = ? WHERE id = ?",
+            "UPDATE executions SET current_status_json = ?, updated_at = ? WHERE id = ? AND status = 'running'",
             (_json(current), current["updated"], execution_id),
         )
 
@@ -525,12 +525,14 @@ def append_execution_log(execution_id: str, message: str) -> None:
 
 def finish_execution(execution_id: str, status: str, result: str | None = None, error: str | None = None) -> None:
     now = time.time()
+    terminal_guard = "" if status in {"canceled", "cancelled"} else "AND status NOT IN ('canceled', 'cancelled')"
     with connect() as conn:
         conn.execute(
-            """
+            f"""
             UPDATE executions
             SET status = ?, result = ?, error = ?, finished_at = ?, updated_at = ?, current_status_json = NULL
             WHERE id = ?
+            {terminal_guard}
             """,
             (status, result, error, now, now, execution_id),
         )

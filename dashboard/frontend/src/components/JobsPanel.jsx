@@ -268,11 +268,52 @@ function SummaryMetric({label, value}) {
     </div>)
 }
 
+function summarizeAssertPersona(description = '') {
+    const parts = String(description).split(',').map(part => part.trim()).filter(Boolean)
+    const lowerParts = parts.map(part => [part, part.toLowerCase()])
+    const driver = (lowerParts.find(([, low]) => low.includes('driver'))?.[0] || '')
+        .replace(/\b(adult\s+)?driver\b/gi, '')
+        .trim()
+    const genderPart = lowerParts.find(([, low]) => low.includes('female driver') || low.includes('male driver'))?.[1] || ''
+    const gender = genderPart.includes('female driver') ? 'female' : genderPart.includes('male driver') ? 'male' : ''
+    const driverBits = [driver, gender].filter(bit => bit && !driver.toLowerCase().includes(bit)).join(' ')
+    const coverage = (lowerParts.find(([, low]) => low.endsWith('coverage'))?.[0] || '').replace(/\s+coverage$/i, '').trim()
+    const license = (lowerParts.find(([, low]) => low.endsWith('license status'))?.[0] || '').replace(/\s+license status$/i, '').trim()
+    const vehicleUse = (lowerParts.find(([, low]) => low.endsWith('vehicle use'))?.[0] || '').replace(/\s+vehicle use$/i, '').trim()
+    const sr22Part = lowerParts.find(([, low]) => low.includes('sr-22'))?.[1] || ''
+    const sr22 = sr22Part.includes('without sr-22') ? 'no SR-22' : sr22Part ? 'SR-22' : ''
+    const summary = [driverBits, coverage, license, vehicleUse, sr22].filter(Boolean).join(', ')
+
+    return summary || String(description).slice(0, 80)
+}
+
+function getJobDisplayLabel(job) {
+    const metadata = job?.metadata || {}
+
+    if (job?.execution_type === 'api_assert_flow' && metadata.persona_description) {
+        const type = metadata.assertion_type || 'assertion'
+        const expected = Number(metadata.expected_value)
+        const expectedText = Number.isFinite(expected)
+            ? `$${expected.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+            : ''
+        const tolerance = Number(metadata.tolerance_pct ?? 5)
+        const operator = metadata.operator === 'approx'
+            ? `approx ${Number.isFinite(tolerance) ? tolerance.toFixed(0) : 5}%`
+            : metadata.operator || ''
+
+        return cleanDisplayText(
+            `Assert ${type} ${operator} ${expectedText} - ${summarizeAssertPersona(metadata.persona_description)}`
+        )
+    }
+
+    return cleanDisplayText(job.label)
+}
+
 
 function HistoryRow({job, onSelect, onRerun, onCancel, canDelete, onRequestDelete}) {
     const displayStatus = getDisplayStatus(job)
     const outcomeBadge = getOutcomeBadge(job, displayStatus)
-    const jobLabel = cleanDisplayText(job.label)
+    const jobLabel = getJobDisplayLabel(job)
     const canOpen =
     displayStatus === 'done' ||
     displayStatus === 'error' ||

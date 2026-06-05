@@ -72,8 +72,13 @@ const DEFAULT_BUILDER = {
   ownership: 'Owned',
 }
 
-export default function ApiAssertionsPanel({submitJob}) {
-  const [activeTab, setActiveTab] = useState('sweep')
+export default function ApiAssertionsPanel({
+  submitJob,
+  activeTab = 'sweep',
+  onActiveTabChange = () => {},
+  historyFilter = 'all',
+  onHistoryFilterChange = () => {},
+}) {
 
   // Regression Sweep tab
   const [sweepBaseline, setSweepBaseline] = useState('')
@@ -84,7 +89,6 @@ export default function ApiAssertionsPanel({submitJob}) {
   // History tab
   const [historyRows, setHistoryRows] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyFilter, setHistoryFilter] = useState('all')
   const [expandedId, setExpandedId] = useState(null)
 
   const fetchHistory = useCallback(async () => {
@@ -167,7 +171,7 @@ export default function ApiAssertionsPanel({submitJob}) {
             <ShieldCheck size={14}/>
             UW Evidence
           </span>
-          <h1>UW Assertion Tests</h1>
+          <h1>Assertion Tests</h1>
           <p>Run premium regression sweeps and direct assertions against the OneShield rating flow — no policy is bound.</p>
         </div>
       </section>
@@ -178,7 +182,7 @@ export default function ApiAssertionsPanel({submitJob}) {
             <button
               className={`api-tab-btn ${activeTab === 'sweep' ? 'active' : ''}`}
               type="button"
-              onClick={() => setActiveTab('sweep')}
+              onClick={() => onActiveTabChange('sweep')}
             >
               <TrendingUp size={13}/>
               Regression Sweep
@@ -186,7 +190,7 @@ export default function ApiAssertionsPanel({submitJob}) {
             <button
               className={`api-tab-btn ${activeTab === 'assert' ? 'active' : ''}`}
               type="button"
-              onClick={() => setActiveTab('assert')}
+              onClick={() => onActiveTabChange('assert')}
             >
               <Target size={13}/>
               Direct Assert
@@ -194,7 +198,7 @@ export default function ApiAssertionsPanel({submitJob}) {
             <button
               className={`api-tab-btn api-tab-btn--history ${activeTab === 'history' ? 'active' : ''}`}
               type="button"
-              onClick={() => setActiveTab('history')}
+              onClick={() => onActiveTabChange('history')}
             >
               <History size={13}/>
               History
@@ -262,7 +266,7 @@ export default function ApiAssertionsPanel({submitJob}) {
               rows={historyRows}
               loading={historyLoading}
               filter={historyFilter}
-              onFilterChange={setHistoryFilter}
+              onFilterChange={onHistoryFilterChange}
               expandedId={expandedId}
               onExpand={id => setExpandedId(prev => prev === id ? null : id)}
               onDelete={handleDeleteResult}
@@ -273,7 +277,7 @@ export default function ApiAssertionsPanel({submitJob}) {
           {activeTab === 'assert' && (
             <>
               <div className="card-copy">
-                <h2>Assert a specific value against the UW test result</h2>
+                <h2>Assert a specific value against the test result</h2>
                 <p>Configure a driver profile, set your expected value and operator, then run — you get a clear PASS or FAIL with per-coverage breakdown.</p>
               </div>
 
@@ -514,9 +518,15 @@ function AssertionHistory({rows, loading, filter, onFilterChange, expandedId, on
 }
 
 function AssertionHistoryRow({row, expanded, onExpand, onDelete}) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const opFn = OP_LABEL[row.operator]
   const opText = opFn ? opFn(row.tolerance_pct) : row.operator
   const coverageEntries = Object.entries(row.coverage_premiums || {})
+  const confirmDelete = async e => {
+    e.stopPropagation()
+    setConfirmingDelete(false)
+    await onDelete()
+  }
 
   return (
     <>
@@ -588,14 +598,35 @@ function AssertionHistoryRow({row, expanded, onExpand, onDelete}) {
                     Download JSON
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="ah-action-btn danger"
-                  onClick={e => { e.stopPropagation(); onDelete() }}
-                >
-                  <Trash2 size={14}/>
-                  Delete
-                </button>
+                {confirmingDelete ? (
+                  <div className="ah-delete-confirm" onClick={e => e.stopPropagation()}>
+                    <span>Are you sure you want to delete?</span>
+                    <button
+                      type="button"
+                      className="ah-confirm-btn"
+                      onClick={e => { e.stopPropagation(); setConfirmingDelete(false) }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="ah-action-btn danger ah-confirm-delete"
+                      onClick={confirmDelete}
+                    >
+                      <Trash2 size={14}/>
+                      Delete
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="ah-action-btn danger"
+                    onClick={e => { e.stopPropagation(); setConfirmingDelete(true) }}
+                  >
+                    <Trash2 size={14}/>
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           </td>

@@ -186,7 +186,7 @@ Return ONLY a JSON array. Each element must have exactly these keys:
 {
   "label": "short human-readable name (e.g. 'coverage Bronze' or 'SR-22 required')",
   "persona_description": "full NL baseline description WITH the mutation applied",
-  "field_mutated": "the OneShield persona JSON field being changed (e.g. 'PolicyCoverage' or 'LicenseStatus')",
+  "field_mutated": "the Sandbox persona JSON field being changed (e.g. 'PolicyCoverage' or 'LicenseStatus')",
   "category": "risk_adding | discount | hard_stop | ladder",
   "expected_direction": "gt | lt | blocked",
   "min_delta_pct": <number or null>,
@@ -271,7 +271,7 @@ def _assert_variant(
     direction = variant.expected_direction
 
     if direction == "blocked":
-        # UW Referral page counts as blocked — OneShield still computes a premium
+        # UW Referral page counts as blocked — Sandbox still computes a premium
         # even for hard-stop profiles, so blocked_reason alone is insufficient.
         direction_passed = blocked or bool(uw_conditions)
         if not direction_passed:

@@ -31,6 +31,7 @@ import {
     MessageCircle,
     PanelRight,
     Settings,
+    Trash2,
     UserCircle,
     Workflow,
     X,
@@ -64,9 +65,46 @@ export default function App() {
     const [showRegister, setShowRegister] = useState(false)
     const [selectedJob, setSelectedJob] = useState(null)
     const [showHelp, setShowHelp] = useState(false)
+    const [navCollapsed, setNavCollapsed] = useState(false)
+    const [navMobileOpen, setNavMobileOpen] = useState(false)
+    const [isNarrowNav, setIsNarrowNav] = useState(false)
+    const [validationTab, setValidationTab] = useState('sweep')
+    const [validationHistoryFilter, setValidationHistoryFilter] = useState('all')
     const [chatView, setChatView] = useState(() => localStorage.getItem('chatView') || 'sidebar')
+    const [toast, setToast] = useState(null)
+    const toastTimerRef = useRef(null)
 
     const setChatViewPersist = v => { setChatView(v); localStorage.setItem('chatView', v) }
+
+    const showToast = useCallback((message, options = {}) => {
+        window.clearTimeout(toastTimerRef.current)
+        setToast({
+            id: Date.now(),
+            message,
+            tone: options.tone || 'success',
+            icon: options.icon || 'check',
+        })
+        toastTimerRef.current = window.setTimeout(() => setToast(null), options.duration || 2200)
+    }, [])
+
+    useEffect(() => () => window.clearTimeout(toastTimerRef.current), [])
+
+    useEffect(() => {
+        const media = window.matchMedia('(max-width: 1040px)')
+        const update = () => {
+            setIsNarrowNav(media.matches)
+            if (!media.matches) setNavMobileOpen(false)
+        }
+
+        update()
+        if (media.addEventListener) {
+            media.addEventListener('change', update)
+            return () => media.removeEventListener('change', update)
+        }
+
+        media.addListener(update)
+        return () => media.removeListener(update)
+    }, [])
 
     useEffect(() => {
         if (chatView !== 'full') return
@@ -106,8 +144,8 @@ export default function App() {
 
     const cancelJob = useCallback(async job => {
         try {
-            await api.cancelJob(job.id)
-            updateJob(job.id, {
+            const data = await api.cancelJob(job.id)
+            updateJob(job.id, data?.job || {
                 status: 'canceled',
                 error: 'Canceled by user',
                 finished: Date.now() / 1000,
@@ -118,6 +156,15 @@ export default function App() {
             console.error(err)
         }
     }, [loadJobs, updateJob])
+
+    const deleteJob = useCallback(async job => {
+        await api.deleteJob(job.id)
+        setJobs(prev => prev.filter(item => item.id !== job.id))
+        setJobPopups(prev => prev.filter(item => item.job?.id !== job.id))
+        setSelectedJob(current => (current?.id === job.id ? null : current))
+        showToast('Deleted', {tone: 'danger', icon: 'trash'})
+        await loadJobs()
+    }, [loadJobs, showToast])
 
     useEffect(() => {
         let cancelled = false
@@ -212,6 +259,7 @@ export default function App() {
         const placeholder = {
             id: data.job_id,
             label,
+            execution_type: options.executionType || options.execution_type || null,
             status: 'running',
             started: Date.now() / 1000,
             result: null,
@@ -227,6 +275,7 @@ export default function App() {
         const placeholder = {
             id: jobId,
             label,
+            execution_type: options.executionType || options.execution_type || null,
             status: 'running',
             started: Date.now() / 1000,
             result: null,
@@ -247,6 +296,18 @@ export default function App() {
         }
         await loadJobs()
         setSelectedJob(null)
+    }, [loadJobs, trackJob])
+
+    const rerunCanceledJob = useCallback(async job => {
+        try {
+            const data = await api.rerunJob(job.id)
+            if (data?.job_id) {
+                trackJob(data.job_id, job.label, {metadata: job.metadata || {}})
+            }
+            await loadJobs()
+        } catch (err) {
+            console.error(err)
+        }
     }, [loadJobs, trackJob])
 
     const dismissJobPopup = useCallback(jobId => {
@@ -315,6 +376,15 @@ export default function App() {
     }
 
     const currentPath = location.pathname
+    const pageKey = currentPath.startsWith('/uw-tests') || currentPath.startsWith('/api-tests')
+        ? 'uw-tests'
+        : currentPath === '/settings'
+            ? 'settings'
+            : currentPath === '/jobs'
+                ? 'jobs'
+                : currentPath === '/dashboard'
+                    ? 'overview'
+                    : 'default'
 
     const requireAuth = component => {
         if (!dashboardUser) {
@@ -323,14 +393,39 @@ export default function App() {
         return component
     }
 
+    const togglePrimaryNav = () => {
+        if (isNarrowNav) {
+            setNavMobileOpen(open => !open)
+            return
+        }
+
+        setNavCollapsed(collapsed => !collapsed)
+    }
+
+    const closeMobileNav = () => {
+        if (isNarrowNav) setNavMobileOpen(false)
+    }
+
     return (
         <div className="app-shell">
             <Header backendOk={backendOk} user={dashboardUser} onLogout={logout}/>
 
-            <div className={`workspace${chatView === 'hidden' ? ' workspace--chat-hidden' : ''}`}>
-                <aside className="side-nav" aria-label="Primary navigation">
+            <div
+                className={`workspace${chatView === 'hidden' ? ' workspace--chat-hidden' : ''}${navCollapsed ? ' workspace--nav-collapsed' : ''}${navMobileOpen ? ' workspace--nav-open' : ''}`}
+            >
+                <aside
+                    className="side-nav"
+                    aria-label="Primary navigation"
+                    aria-hidden={isNarrowNav && !navMobileOpen}
+                    inert={isNarrowNav && !navMobileOpen ? '' : undefined}
+                >
                     <nav className="side-nav-main">
-                        <IconButton icon={Menu} label="Menu"/>
+                        <IconButton
+                            icon={Menu}
+                            label={isNarrowNav && navMobileOpen ? 'Close menu' : 'Menu'}
+                            onClick={togglePrimaryNav}
+                            expanded={isNarrowNav ? navMobileOpen : !navCollapsed}
+                        />
                         {/*<NavItem icon={Home} label="Overview" active={tab === 'overview'}*/}
                         {/*         onClick={() => setTab('overview')}/>*/}
                         {/*<NavItem icon={CalendarDays} label="Jobs" active={tab === 'jobs'}*/}
@@ -341,14 +436,20 @@ export default function App() {
                             icon={Home}
                             label="Overview"
                             active={currentPath === '/dashboard'}
-                            onClick={() => navigate('/dashboard')}
+                            onClick={() => {
+                                navigate('/dashboard')
+                                closeMobileNav()
+                            }}
                         />
 
                         <NavItem
                             icon={CalendarDays}
                             label="Jobs"
                             active={currentPath === '/jobs'}
-                            onClick={() => navigate('/jobs')}
+                            onClick={() => {
+                                navigate('/jobs')
+                                closeMobileNav()
+                            }}
                         />
 
                         <NavItem
@@ -358,28 +459,62 @@ export default function App() {
                             onClick={() => {
                                 const savedLob = localStorage.getItem('selectedLob') || 'personal-auto'
                                 navigate(`/policy-flow/${savedLob}`)
+                                closeMobileNav()
                             }}
                         />
                         <NavItem
                             icon={ClipboardCheck}
-                            label="UW Tests"
+                            label="Validation Tests"
                             active={currentPath.startsWith('/uw-tests') || currentPath.startsWith('/api-tests')}
-                            onClick={() => navigate('/uw-tests')}
+                            onClick={() => {
+                                navigate('/uw-tests')
+                                closeMobileNav()
+                            }}
                         />
                         <NavItem
                             icon={Settings}
                             label="Settings"
                             active={currentPath === '/settings'}
-                            onClick={() => navigate('/settings')}
+                            onClick={() => {
+                                navigate('/settings')
+                                closeMobileNav()
+                            }}
                         />
                     </nav>
                     <nav className="side-nav-footer">
-                        <NavItem icon={CircleHelp} label="Help" onClick={() => setShowHelp(true)}/>
+                        <NavItem
+                            icon={CircleHelp}
+                            label="Help"
+                            onClick={() => {
+                                setShowHelp(true)
+                                closeMobileNav()
+                            }}
+                        />
                         <NavItem icon={UserCircle} label="Account"/>
                     </nav>
                 </aside>
 
-                <main className="content-pane">
+                {navMobileOpen && (
+                    <button
+                        className="side-nav-backdrop"
+                        type="button"
+                        aria-label="Close menu"
+                        onClick={() => setNavMobileOpen(false)}
+                    />
+                )}
+
+                <button
+                    className="nav-mobile-toggle"
+                    type="button"
+                    title="Menu"
+                    aria-label="Menu"
+                    aria-expanded={navMobileOpen}
+                    onClick={togglePrimaryNav}
+                >
+                    <Menu size={22} strokeWidth={2}/>
+                </button>
+
+                <main className={`content-pane content-pane--${pageKey}`}>
                     {backendOk === false && (
                         <div className="status-alert">
                             Backend not reachable. Start it with <code>python dashboard/backend/main.py</code>
@@ -394,6 +529,7 @@ export default function App() {
                                     jobs={jobs}
                                     onOpenReport={setSelectedJob}
                                     onCancelJob={cancelJob}
+                                    onRerunJob={rerunCanceledJob}
                                 />
                             )}
                         />
@@ -403,10 +539,12 @@ export default function App() {
                             element={requireAuth(
                                 <JobsPanel
                                     jobs={jobs}
+                                    currentUser={dashboardUser}
                                     onSelect={setSelectedJob}
                                     onClearHistory={() => setJobs([])}
                                     onRefreshJobs={loadJobs}
                                     onUpdateJob={updateJob}
+                                    onDeleteJob={deleteJob}
                                 />
                             )}
                         />
@@ -430,7 +568,13 @@ export default function App() {
                         <Route
                             path="/uw-tests"
                             element={requireAuth(
-                                <ApiAssertionsPanel submitJob={submitJob}/>
+                                <ApiAssertionsPanel
+                                    submitJob={submitJob}
+                                    activeTab={validationTab}
+                                    onActiveTabChange={setValidationTab}
+                                    historyFilter={validationHistoryFilter}
+                                    onHistoryFilterChange={setValidationHistoryFilter}
+                                />
                             )}
                         />
                         <Route path="/api-tests" element={<Navigate to="/uw-tests" replace/>}/>
@@ -527,10 +671,31 @@ export default function App() {
                         job={selectedJob}
                         onClose={() => setSelectedJob(null)}
                         onRerun={rerunJobFromReport}
+                        currentUser={dashboardUser}
+                        onDelete={deleteJob}
+                        onNotify={showToast}
                     />
                 )}
                 {showHelp && <HelpModal onClose={() => setShowHelp(false)}/>}
+                <AppToast toast={toast} onDismiss={() => setToast(null)}/>
             </div>
+        </div>
+    )
+}
+
+function AppToast({toast, onDismiss}) {
+    if (!toast) return null
+    const Icon = toast.icon === 'trash' ? Trash2 : CheckCircle2
+
+    return (
+        <div className="app-toast-wrap" aria-live="polite" aria-atomic="true">
+            <section className={`app-toast ${toast.tone || 'success'}`}>
+                <Icon size={17}/>
+                <span>{toast.message}</span>
+                <button className="app-toast-close" type="button" aria-label="Dismiss notification" onClick={onDismiss}>
+                    <X size={14}/>
+                </button>
+            </section>
         </div>
     )
 }
@@ -571,9 +736,16 @@ function JobDonePopups({popups, onOpenReport, onDismiss}) {
     )
 }
 
-function IconButton({icon: Icon, label}) {
+function IconButton({icon: Icon, label, onClick, expanded}) {
     return (
-        <button className="nav-icon-button" title={label} aria-label={label}>
+        <button
+            className="nav-icon-button"
+            type="button"
+            title={label}
+            aria-label={label}
+            aria-expanded={expanded}
+            onClick={onClick}
+        >
             <Icon size={22} strokeWidth={2}/>
         </button>
     )
@@ -581,7 +753,13 @@ function IconButton({icon: Icon, label}) {
 
 function NavItem({icon: Icon, label, active, onClick}) {
     return (
-        <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick} type="button">
+        <button
+            className={`nav-item ${active ? 'active' : ''}`}
+            onClick={onClick}
+            type="button"
+            title={label}
+            aria-label={label}
+        >
             <Icon size={22} strokeWidth={2}/>
             <span>{label}</span>
         </button>
@@ -619,6 +797,17 @@ function HelpModal({onClose}) {
                         <h3>Jobs</h3>
                         <p>Every dispatched run appears in the Jobs tab. Jobs poll every 2.5 s while running. Click any
                             completed job to open its report.</p>
+                    </div>
+                    <div className="help-section">
+                        <h3>Validation Tests</h3>
+                        <p>Run underwriting evidence checks without binding a policy. Use <strong>Regression Sweep</strong>
+                            {' '}to compare generated rating variants, <strong>Direct Assert</strong> to validate a specific
+                            premium or billing value, and <strong>History</strong> to review saved assertion results.</p>
+                    </div>
+                    <div className="help-section">
+                        <h3>Settings</h3>
+                        <p>Use Settings to change the dashboard theme for this browser. Light, Dark, and Black modes are
+                            saved locally and apply across navigation, pages, reports, and modal windows.</p>
                     </div>
                     <div className="help-section">
                         <h3>Chat Assistant</h3>

@@ -49,10 +49,16 @@ export default function PolicyPanel({submitJob}) {
         localStorage.setItem('selectedLob', lob)
     }, [lob])
 
-    const run = async (label, apiFn) => {
+    const run = async (label, apiFn, options = {}) => {
         setLoading(label)
         try {
-            await submitJob(apiFn, label, {metadata: metadataForPolicyLob(lob)})
+            await submitJob(apiFn, label, {
+                executionType: options.executionType,
+                metadata: {
+                    ...metadataForPolicyLob(lob),
+                    ...(options.metadata || {}),
+                },
+            })
         } finally {
             setLoading('')
         }
@@ -148,7 +154,13 @@ function QuickTestCard({lob, run, loading}) {
     const handleRun = async () => {
         if (!description.trim()) return
         setSubmitted(false)
-        await run(key, () => api.quickRun(lob, description))
+        await run(key, () => api.quickRun(lob, description), {
+            executionType: 'quick_run',
+            metadata: {
+                description,
+                rerun_payload: {mode: 'quick_run', lob, description},
+            },
+        })
         setSubmitted(true)
         setTimeout(() => setSubmitted(false), 3000)
     }
@@ -232,7 +244,12 @@ function RunJourneyCard({lob, run, loading}) {
     const handleRun = async () => {
         if (!personaJson.trim()) return
         setSubmitted(false)
-        await run(key, () => api.runFlow(lob, personaJson))
+        await run(key, () => api.runFlow(lob, personaJson), {
+            executionType: 'policy_flow',
+            metadata: {
+                rerun_payload: {lob, persona_json: personaJson},
+            },
+        })
         setSubmitted(true)
         setTimeout(() => setSubmitted(false), 3000)
     }

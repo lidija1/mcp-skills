@@ -575,6 +575,25 @@ def list_executions(user: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     return [_row_to_job(row) for row in rows]
 
 
+def delete_execution(execution_id: str, user: dict[str, Any] | None = None) -> bool:
+    init_db()
+    user = user if user is not None else get_current_user()
+    if not user:
+        return False
+    deletable_statuses = {"done", "error", "failed", "canceled", "cancelled"}
+
+    with connect() as conn:
+        row = conn.execute("SELECT created_by, status FROM executions WHERE id = ?", (execution_id,)).fetchone()
+        if not row:
+            return False
+        if row["created_by"] is not None and row["created_by"] != user.get("id"):
+            return False
+        if row["status"] not in deletable_statuses:
+            return False
+        conn.execute("DELETE FROM executions WHERE id = ?", (execution_id,))
+    return True
+
+
 def _row_to_job(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if not row:
         return None

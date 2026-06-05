@@ -1,14 +1,11 @@
 import {cleanDisplayText} from '../utils/text'
+import {canRerunJob, inferExecutionType, shouldShowRerunAction} from '../utils/jobRerun'
 import {resolveJobLobDisplay, sortLobGroupKeys} from '../utils/jobLob'
 import {useEffect, useState} from 'react'
+import { getDisplayStatus } from '../utils/jobStatus.js'
 import {api} from '../utils/api'
-
-const STATUS_CONFIG = {
-    running: {color: '#2563eb', label: 'Running'},
-    done: {color: '#16a34a', label: 'Done'},
-    error: {color: '#dc2626', label: 'Error'},
-    canceled: {color: '#d97706', label: 'Canceled'},
-}
+import ConfirmDeleteModal from './ConfirmDeleteModal'
+import {BriefcaseBusiness, CalendarDays, ChevronRight, FileText, RotateCw, Trash2, X} from 'lucide-react'
 
 function elapsed(job) {
     const end = job.finished ?? Date.now() / 1000
@@ -57,13 +54,26 @@ export async function rerunJob(jobId) {
     return api.rerunJob(jobId)
 }
 
-export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs, onUpdateJob}) {
+const DELETABLE_STATUSES = new Set(['done', 'error', 'failed', 'canceled', 'cancelled'])
+
+function canDeleteJob(job, currentUser) {
+    if (!job || !currentUser) return false
+    return DELETABLE_STATUSES.has(getDisplayStatus(job)) && (job.created_by === currentUser.id || job.created_by == null)
+}
+
+export default function JobsPanel({jobs, currentUser, onSelect, onClearHistory, onRefreshJobs, onUpdateJob, onDeleteJob}) {
     const grouped = groupJobs(jobs)
     const total = jobs.length
-    const running = jobs.filter(job => job.status === 'running').length
-    const completed = jobs.filter(job => job.status === 'done').length
-    const failed = jobs.filter(job => job.status === 'error').length
-    const canceled = jobs.filter(job => job.status === 'canceled').length
+    // const running = jobs.filter(job => job.status === 'running').length
+    // const completed = jobs.filter(job => job.status === 'done').length
+    // const failed = jobs.filter(job => job.status === 'error').length
+    // const canceled = jobs.filter(job => job.status === 'canceled').length
+
+
+    const completed = jobs.filter(j => getDisplayStatus(j) === 'done').length
+    const failed = jobs.filter(j => getDisplayStatus(j) === 'failed' || getDisplayStatus(j) === 'error').length
+    const canceled = jobs.filter(j => getDisplayStatus(j) === 'canceled').length
+    const running = jobs.filter(j => getDisplayStatus(j) === 'running').length
 
 
     async function handleRerun(job) {
@@ -110,13 +120,17 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
         )
     }, [collapsedDays])
 
+    const [deleteTarget, setDeleteTarget] = useState(null)
+    const [deleteError, setDeleteError] = useState('')
+    const [deleting, setDeleting] = useState(false)
+
 
     async function handleCancel(job) {
         try {
-            await api.cancelJob(job.id)
+            const data = await api.cancelJob(job.id)
 
             if (onUpdateJob) {
-                onUpdateJob(job.id, {
+                onUpdateJob(job.id, data?.job || {
                     status: 'canceled',
                     error: 'Canceled by user',
                     finished: Date.now() / 1000,
@@ -129,6 +143,20 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
             }
         } catch (err) {
             console.error(err)
+        }
+    }
+
+    async function handleConfirmDelete() {
+        if (!deleteTarget || !onDeleteJob || deleting) return
+        setDeleting(true)
+        setDeleteError('')
+        try {
+            await onDeleteJob(deleteTarget)
+            setDeleteTarget(null)
+        } catch (err) {
+            setDeleteError(err.message || 'Could not delete this job.')
+        } finally {
+            setDeleting(false)
         }
     }
 
@@ -156,12 +184,12 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
             <p>Run a policy flow and it will be saved here in this browser.</p>
         </div>) : (<div className="jobs-table-card">
             <div className="jobs-table-header" role="row">
-                <span>Group / Job</span>
+                <span>Job</span>
                 <span>Status</span>
                 <span>Started</span>
                 <span>Duration</span>
-                <span>ID</span>
-                <span/>
+                <span>Job ID</span>
+                <span>Actions</span>
             </div>
 
             <div className="jobs-table-body">
@@ -169,21 +197,23 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
                     const dayCount = Object.values(lobs).reduce((sum, lobJobs) => sum + lobJobs.length, 0)
 
                     return (<section className="jobs-day-group" key={day}>
-                        <div
+                        <button
                             className="jobs-group-row jobs-day-row"
                             onClick={() => toggleDay(day)}
-                            role="button"
-                            tabIndex={0}
+                            type="button"
+                            aria-expanded={!collapsedDays[day]}
                         >
                             <div className="jobs-group-title">
+                                <span className="jobs-group-icon">
+                                    <CalendarDays size={16}/>
+                                </span>
                                 <strong>{day}</strong>
-                                <span>{dayCount} {dayCount === 1 ? 'job' : 'jobs'}</span>
+                                <em>{dayCount} {dayCount === 1 ? 'job' : 'jobs'}</em>
                             </div>
-                            <span
-                                className={`jobs-collapse-marker ${collapsedDays[day] ? 'collapsed' : ''}`}>
-                                                ›
-                                        </span>
-                        </div>
+                            <span className={`jobs-collapse-marker ${collapsedDays[day] ? 'collapsed' : ''}`}>
+                                <ChevronRight size={18}/>
+                            </span>
+                        </button>
 
                         {!collapsedDays[day] &&
                             sortLobGroupKeys(Object.keys(lobs)).map(lob => {
@@ -191,8 +221,11 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
                                 return (<div className="jobs-lob-group" key={`${day}-${lob}`}>
                                     <div className="jobs-group-row jobs-lob-row">
                                         <div className="jobs-group-title">
+                                            <span className="jobs-group-icon">
+                                                <BriefcaseBusiness size={15}/>
+                                            </span>
                                             <strong>{lob}</strong>
-                                            <span>{lobJobs.length} {lobJobs.length === 1 ? 'job' : 'jobs'}</span>
+                                            <em>{lobJobs.length} {lobJobs.length === 1 ? 'job' : 'jobs'}</em>
                                         </div>
                                     </div>
 
@@ -203,6 +236,11 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
                                             onSelect={onSelect}
                                             onRerun={handleRerun}
                                             onCancel={handleCancel}
+                                            canDelete={canDeleteJob(job, currentUser)}
+                                            onRequestDelete={target => {
+                                                setDeleteError('')
+                                                setDeleteTarget(target)
+                                            }}
                                         />
                                     ))}
                                 </div>)
@@ -211,6 +249,15 @@ export default function JobsPanel({jobs, onSelect, onClearHistory, onRefreshJobs
                 })}
             </div>
         </div>)}
+        <ConfirmDeleteModal
+            job={deleteTarget}
+            deleting={deleting}
+            error={deleteError}
+            onCancel={() => {
+                if (!deleting) setDeleteTarget(null)
+            }}
+            onConfirm={handleConfirmDelete}
+        />
     </div>)
 }
 
@@ -221,94 +268,210 @@ function SummaryMetric({label, value}) {
     </div>)
 }
 
-function HistoryRow({job, onSelect, onRerun, onCancel}) {
-    const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.running
-    const canOpen = job.status === 'done' || job.status === 'error'
+
+function HistoryRow({job, onSelect, onRerun, onCancel, canDelete, onRequestDelete}) {
+    const displayStatus = getDisplayStatus(job)
+    const outcomeBadge = getOutcomeBadge(job, displayStatus)
+    const jobLabel = cleanDisplayText(job.label)
+    const canOpen =
+    displayStatus === 'done' ||
+    displayStatus === 'error' ||
+    displayStatus === 'failed'
+    const isRunning = displayStatus === 'running' || job.status === 'running'
+    const canRerun = !isRunning && (canRerunJob(job) || shouldShowRerunAction(job))
     const owner = job.created_by_user
     const ownerName = owner?.display_name || owner?.username
 
-    return (<article className={`jobs-table-row ${job.status === 'error' ? 'has-error' : ''} ${job.status === 'canceled' ? 'is-canceled' : ''}`}>
+    return (<article
+        className={`jobs-table-row ${displayStatus === 'error' ? 'has-error' : ''} ${displayStatus === 'canceled' ? 'is-canceled' : ''}`}>
         <div className="jobs-job-title">
-            {cleanDisplayText(job.label)}
+            <strong title={jobLabel}>{jobLabel}</strong>
             {ownerName && <small className="jobs-owner">Created by {ownerName}</small>}
         </div>
-        <div>
-        <span className="job-status" style={{color: cfg.color}}>
-          <i style={{background: cfg.color}}/>
-            {cfg.label}
-        </span>
+        <div className="jobs-status-cell">
+            <span className={`job-status ${displayStatus}`}>
+              <i/>
+                {statusLabel(displayStatus)}
+            </span>
+            {outcomeBadge && (
+                <span className={`job-outcome-badge ${outcomeBadge.tone}`}>
+                    {outcomeBadge.label}
+                </span>
+            )}
         </div>
         <div className="jobs-cell-muted">{startedTime(job)}</div>
         <div className="jobs-cell-muted">{elapsed(job)}</div>
         <div className="jobs-cell-id" title={job.id}>{job.id}</div>
-        {/*<div className="jobs-report-cell">*/}
-        {/*    {canOpen ? (*/}
-        {/*        <>*/}
-        {/*            <button*/}
-        {/*                className="jobs-report-link"*/}
-        {/*                type="button"*/}
-        {/*                onClick={() => onSelect(job)}*/}
-        {/*            >*/}
-        {/*                View Report*/}
-        {/*            </button>*/}
-
-        {/*            <button*/}
-        {/*                className="jobs-report-link"*/}
-        {/*                type="button"*/}
-        {/*                onClick={() => onRerun(job)}*/}
-        {/*            >*/}
-        {/*                Run Again*/}
-        {/*            </button>*/}
-        {/*        </>*/}
-        {/*    ) : (*/}
-        {/*        <span className="job-running-note">Pending</span>*/}
-        {/*    )}*/}
-        {/*</div>*/}
         <div className="jobs-actions">
             {canOpen && (
-                <>
+                <div className="jobs-action-slot jobs-action-slot-secondary">
                     <button
                         className="jobs-icon-btn expand-on-hover"
                         data-label="view-report"
+                        type="button"
+                        title="View report"
+                        aria-label="View report"
                         onClick={() => onSelect(job)}
                     >
-                        <span className="icon">📄</span>
+                        <FileText size={16}/>
                         <span className="label">View report</span>
                     </button>
-
+                </div>
+            )}
+            {canRerun && (
+                <div className="jobs-action-slot jobs-action-slot-primary">
                     <button
                         className="jobs-icon-btn expand-on-hover"
                         data-label="run-again"
+                        type="button"
+                        title="Run again"
+                        aria-label="Run again"
                         onClick={() => onRerun(job)}
                     >
-                        <span className="icon">↻</span>
+                        <RotateCw size={16}/>
                         <span className="label">Run again</span>
                     </button>
-                </>
+                </div>
             )}
-
-            {job.status === 'running' && (
-                <button
-                    className="jobs-icon-btn danger always-labeled"
-                    onClick={() => onCancel(job)}
-                >
-                    <span className="icon">✕</span>
-                    <span className="label">Cancel</span>
-                </button>
-            )}
-            {job.status === 'canceled' && (
-                <>
+            {isRunning && (
+                <div className="jobs-action-slot jobs-action-slot-primary jobs-action-slot-wide">
                     <button
-                        className="jobs-icon-btn expand-on-hover"
-                        data-label="run-again"
-                        onClick={() => onRerun(job)}
+                        className="jobs-icon-btn danger always-labeled"
+                        type="button"
+                        onClick={() => onCancel(job)}
                     >
-                        <span className="icon">↻</span>
-                        <span className="label">Run again</span>
+                        <X size={16}/>
+                        <span className="label">Cancel</span>
                     </button>
-                </>
+                </div>
+            )}
+            {canDelete && (
+                <div className="jobs-action-slot jobs-action-slot-danger">
+                    <button
+                        className="jobs-icon-btn danger icon-only"
+                        type="button"
+                        title="Delete"
+                        aria-label="Delete"
+                        onClick={() => onRequestDelete(job)}
+                    >
+                        <Trash2 size={16}/>
+                    </button>
+                </div>
             )}
         </div>
-        {job.status === 'error' && job.error && (<div className="job-error">{job.error}</div>)}
+        {getDisplayStatus(job) === 'error' && job.error && (<div className="job-error">{job.error}</div>)}
     </article>)
+}
+
+function statusLabel(status) {
+    if (status === 'done') return 'Done'
+    if (status === 'error') return 'Error'
+    if (status === 'failed') return 'Failed'
+    if (status === 'canceled' || status === 'cancelled') return 'Cancelled'
+    return 'Running'
+}
+
+const ASSERTION_EXECUTION_TYPES = new Set([
+    'api_assertion',
+    'api_compare',
+    'api_ladder',
+    'api_ai_assert',
+    'api_assert_flow',
+    'regression_sweep',
+])
+
+function getOutcomeBadge(job, displayStatus) {
+    if (displayStatus !== 'done') return null
+
+    const assertionOutcome = getAssertionOutcome(job)
+    if (assertionOutcome) {
+        return {
+            label: assertionOutcome === 'pass' ? 'Pass' : 'Fail',
+            tone: assertionOutcome === 'pass' ? 'passed' : 'fail',
+        }
+    }
+
+    if (hasUwReferralOutcome(job)) {
+        return {label: 'UW Referral', tone: 'warning'}
+    }
+
+    return null
+}
+
+function getAssertionOutcome(job) {
+    if (!isAssertionJob(job)) return null
+
+    const rawResult = String(job?.result || '').trim()
+    if (!rawResult) return null
+
+    const jsonOutcome = getAssertionJsonOutcome(rawResult)
+    if (jsonOutcome) return jsonOutcome
+
+    if (hasAssertionFailed(rawResult)) return 'fail'
+    if (hasAssertionPassed(rawResult)) return 'pass'
+
+    return null
+}
+
+function isAssertionJob(job) {
+    const type = inferExecutionType(job)
+    if (ASSERTION_EXECUTION_TYPES.has(type)) return true
+
+    const tool = job?.metadata?.tool
+    if (tool === 'run_api_assertion') return true
+
+    const label = String(job?.label || '').toLowerCase()
+    return label.includes('assert') || label.includes('assertion')
+}
+
+function getAssertionJsonOutcome(rawResult) {
+    if (!rawResult.startsWith('{')) return null
+
+    try {
+        const parsed = JSON.parse(rawResult)
+        if (parsed?.passed === true) return 'pass'
+        if (parsed?.passed === false) return 'fail'
+
+        const status = String(parsed?.status || parsed?.result || '').toLowerCase()
+        if (/\bfail(?:ed)?\b/.test(status)) return 'fail'
+        if (/\bpass(?:ed)?\b/.test(status)) return 'pass'
+    } catch {
+        return null
+    }
+
+    return null
+}
+
+function hasAssertionFailed(rawResult) {
+    return (
+        /^#{1,6}\s+.*\b(?:FAIL|FAILED)\b/im.test(rawResult) ||
+        /\*\*Status:\*\*\s*(?:[^A-Za-z\n]*\s*)?FAIL\b/i.test(rawResult)
+    )
+}
+
+function hasAssertionPassed(rawResult) {
+    return (
+        /^#{1,6}\s+.*\b(?:PASS|ALL PASS)\b/im.test(rawResult) ||
+        /\*\*Status:\*\*\s*(?:[^A-Za-z\n]*\s*)?PASS\b/i.test(rawResult)
+    )
+}
+
+function hasUwReferralOutcome(job) {
+    const type = inferExecutionType(job)
+    const label = String(job?.label || '').toLowerCase()
+    const isPolicyJob =
+        type === 'quick_run' ||
+        type === 'policy_flow' ||
+        label.includes('quick policy') ||
+        label.includes('policy journey')
+
+    if (!isPolicyJob) return false
+
+    const result = String(job?.result || '')
+    return (
+        /\|\s*\*\*Outcome\*\*\s*\|\s*[^|\n]*UW Referral/i.test(result) ||
+        /\|\s*\*\*Status\*\*\s*\|\s*[^|\n]*UW REFERRAL/i.test(result) ||
+        /^#{1,6}\s+UW Rules Triggered\b/im.test(result) ||
+        /\bOutcome:\s*UW Referral\b/i.test(result)
+    )
 }

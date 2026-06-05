@@ -10,11 +10,16 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
-import job_store
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+_DASHBOARD_BACKEND = _PROJECT_ROOT / "dashboard" / "backend"
+if str(_DASHBOARD_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_DASHBOARD_BACKEND))
+
+import job_store
 
 from dotenv import load_dotenv  # noqa: E402
 

@@ -5,7 +5,6 @@
       "args": ["-m", "mcp_tools.policy_flow_generator.server"],
       "cwd": "C:/Programming/SandboxPlaywrightMCP",
       "env": {
-        "AI_PROVIDER": "openai",
         "PYTHONUTF8": "1"
       }
     },
@@ -14,7 +13,6 @@
       "args": ["-m", "mcp_tools.uw_rules_validator.server"],
       "cwd": "C:/Programming/SandboxPlaywrightMCP",
       "env": {
-        "AI_PROVIDER": "openai",
         "PYTHONUTF8": "1"
       }
     },

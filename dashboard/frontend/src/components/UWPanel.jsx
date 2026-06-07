@@ -17,13 +17,11 @@ import { metadataForUwLob } from '../utils/jobLob'
 
 const LOBS = [
   { id: 'auto', label: 'Personal Auto' },
-  { id: 'cyber', label: 'Cyber' },
   { id: 'homeowner', label: 'Homeowner' },
 ]
 
 const EDGE_PLACEHOLDERS = {
   auto: 'e.g. "Triple risk: SR-22 + revoked license + age 22"',
-  cyber: 'e.g. "Healthcare company storing PHI, no MFA, recent ransomware incident in prior policy period"',
   homeowner: 'e.g. "30-year-old roof in a wildfire zone with a prior total loss claim within 3 years"',
 }
 
@@ -226,8 +224,6 @@ function explainRule(id, name) {
     AUTO_COMBINED_SR22_LEASED: 'Checks SR-22 drivers with leased vehicles and loss payee requirements.',
     AUTO_TRIPLE_RISK: 'Checks the highest-risk auto profile: SR-22, revoked license, and under-25 driver.',
     AUTO_CLEAN_BASELINE: 'Checks that a clean auto profile can proceed without active UW conditions.',
-    CYBER_HIGH_RISK: 'Checks cyber profiles with poor controls, no training, and prior incidents.',
-    CYBER_CLEAN_BASELINE: 'Checks that a compliant low-risk cyber profile can proceed cleanly.',
     HO_PRIOR_LOSSES: 'Checks homeowner profiles with losses in the last three years.',
     HO_REFUSED_DECLINED: 'Checks homeowner profiles with prior refused, declined, or non-renewed coverage.',
     HO_ALL_FLAGS: 'Checks the highest-risk homeowner profile with all major risk flags active.',
@@ -239,7 +235,7 @@ function explainRule(id, name) {
 
 function DepartmentAuditCard({ lob, run, loading }) {
   const key = `Department Audit - ${lob.toUpperCase()}`
-  const est = { auto: '~15-30 min', cyber: '~10-20 min', homeowner: '~10-20 min' }[lob] || ''
+  const est = { auto: '~15-30 min', homeowner: '~10-20 min' }[lob] || ''
 
   return (
     <ToolCard icon={ClipboardCheck} tone="green">
@@ -403,7 +399,7 @@ function FullAuditCard({ run, loading }) {
       <div className="batch-header">
         <div className="card-copy">
           <h2>Full System Audit</h2>
-          <p>Runs every test case across Auto, Cyber, and Homeowner. Expected runtime: 30-45 minutes.</p>
+          <p>Runs every test case across Auto and Homeowner. Expected runtime: 25-40 minutes.</p>
         </div>
         <ActionBtn
           tone="purple"

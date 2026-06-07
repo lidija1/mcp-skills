@@ -219,6 +219,11 @@ export default function ReportModal({job, currentUser, onClose, onRerun, onDelet
                   <span className="report-badge-dot"/>
                     {isError ? 'Error' : isPolicyFailed ? 'Failed' : isUwReferral ? 'UW Referral' : job.status === 'done' ? 'Completed' : 'Running'}
                 </span>
+                                {job.metadata?.environment && (
+                                    <span className="report-badge neutral report-env-badge">
+                                        {job.metadata.environment.toUpperCase()}
+                                    </span>
+                                )}
                                 <span className="report-badge neutral report-id-badge">
                   ID {job.id}
                 </span>

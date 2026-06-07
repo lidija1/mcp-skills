@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from mcp_tools.uw_rules_validator.validator import summarise_findings, severity_sort_key
 
-_LOB_LABEL = {"auto": "Personal Auto", "cyber": "Cyber", "homeowner": "Homeowner"}
+_LOB_LABEL = {"auto": "Personal Auto", "homeowner": "Homeowner"}
 
 _SEVERITY_ICON = {
     "critical": "🔴",
@@ -85,7 +85,7 @@ def format_audit_report(
     Produce a Markdown audit report from a list of findings.
 
     Args:
-        lob:          "auto", "cyber", "homeowner", or "all"
+        lob:          "auto", "homeowner", or "all"
         all_findings: Flat list of finding dicts from validate_case()
         rule_filter:  Optional rule_id — shown when auditing a single rule
         custom_label: Optional label override for the report heading

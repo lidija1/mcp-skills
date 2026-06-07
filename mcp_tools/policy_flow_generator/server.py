@@ -497,8 +497,7 @@ def summarize_policy(
 
     Args:
         policy_number: Exact policy number when known.
-        lob: Optional LOB filter: "auto", "cyber", "homeowner", or
-            "general liability".
+        lob: Optional LOB filter: "auto" or "homeowner".
         customer_name: Optional customer/insured name filter.
         query: Optional plain-English query; policy number and simple customer
             names are extracted when possible.

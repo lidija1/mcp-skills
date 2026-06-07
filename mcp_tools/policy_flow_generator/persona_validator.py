@@ -99,32 +99,9 @@ class HomeownerPersona(_PersonaBase):
     Declined: Literal["Yes", "No"]
 
 
-class CyberPersona(_PersonaBase):
-    Program: Literal["Cyber"]
-    BusinessStartDate: str
-    TotalEmployees: str
-    NatureOfBusiness: Literal[
-        "Office",
-        "Retail",
-        "Healthcare",
-        "Technology",
-        "Education",
-        "Financial Services",
-        "Manufacturing",
-    ]
-    PctOnlineSales: str
-    AggregateLimit: Literal["500,000", "1,000,000", "2,000,000"]
-    PerClaimLimit: Literal["500,000", "1,000,000", "2,000,000"]
-    PerClaimDeductible: Literal["500", "1,000", "2,500", "5,000"]
-    CyberTraining: Literal["Yes", "No"]
-    SituationsLast3Years: Literal["None", "Data Breach", "Ransomware Attack", "Phishing Attack"]
-    CyberRegulations: Literal["Yes", "No"]
-
-
 _MODELS: dict[str, type[BaseModel]] = {
     "auto": AutoPersona,
     "homeowner": HomeownerPersona,
-    "cyber": CyberPersona,
 }
 
 

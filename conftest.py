@@ -1,3 +1,5 @@
+import os
+import datetime
 import pytest
 import allure
 from pathlib import Path
@@ -10,14 +12,50 @@ from utils.api_flow_recorder import ApiFlowRecorder
 load_dotenv()
 
 
+def _resolve_env(config) -> str:
+    """CLI --env wins; falls back to ENV in .env; defaults to 'sandbox'."""
+    cli = config.getoption("--env", default=None)
+    if cli:
+        return cli.lower()
+    return os.getenv("ENV", "sandbox").lower()
+
+
+def _write_allure_environment(env: str, browser: str):
+    """Write allure-results/environment.properties so Allure shows an Environment tab."""
+    props_dir = Path("allure-results")
+    props_dir.mkdir(exist_ok=True)
+    base_url = os.getenv("BASE_URL", os.getenv("PROBE_ALLOWED_ORIGINS", ""))
+    lines = [
+        f"Environment={env}",
+        f"Browser={browser}",
+        f"Base.URL={base_url}",
+        f"Run.Date={datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+    ]
+    (props_dir / "environment.properties").write_text("\n".join(lines), encoding="utf-8")
+
+
 # -------------------------
 # Session configuration for parallel test support
 # -------------------------
 def pytest_configure(config):
     """Initialize session storage for test results (supports parallel execution)."""
-    # Use config object to store results - this survives parallel worker processes
     config.test_results = []
     config.addinivalue_line("markers", "parallel: mark test as able to run in parallel")
+
+    # Resolve env early so it's available to all hooks
+    env = _resolve_env(config)
+    browser = config.getoption("--browser", default="chromium")
+    config._env_label = env
+
+    # pytest-html metadata table
+    if not hasattr(config, "_metadata"):
+        config._metadata = {}
+    config._metadata["Environment"] = env
+    config._metadata["Browser"] = browser
+    config._metadata["Base URL"] = os.getenv("BASE_URL", os.getenv("PROBE_ALLOWED_ORIGINS", ""))
+    config._metadata["Run date"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    _write_allure_environment(env, browser)
 
 
 def pytest_collection_finish(session):
@@ -38,10 +76,8 @@ pytest_plugins = [
     "ui.steps.common.field_steps",
     "ui.steps.auto.auto_workflow_steps",
     "ui.steps.homeowner_steps",
-    "ui.steps.common.customer_validation_steps",
     "ui.steps.cyber_steps",
-    "ui.steps.wc_steps",
-    "ui.steps.general_liability_steps",
+    "ui.steps.common.customer_validation_steps",
 ]
 
 
@@ -49,6 +85,12 @@ pytest_plugins = [
 # Register custom command-line options
 # -------------------------# -------------------------
 def pytest_addoption(parser):
+    parser.addoption(
+        "--env",
+        action="store",
+        default=None,
+        help="Target environment: sandbox, test, prod (overrides ENV in .env)"
+    )
     parser.addoption(
         "--browser",
         action="store",

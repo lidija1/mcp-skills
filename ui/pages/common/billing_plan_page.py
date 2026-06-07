@@ -78,7 +78,7 @@ class BillingPlanPage(BasePage):
         self.wait_for_app_ready()
 
     # -------------------------------------------------------------------------
-    # Private helper — same ExtJS tooltip workaround as CyberQuotePage
+    # Private helper for ExtJS dropdowns whose tooltips intercept pointer events.
     # -------------------------------------------------------------------------
 
     def _open_and_select(self, locator, value):

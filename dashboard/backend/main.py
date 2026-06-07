@@ -74,13 +74,22 @@ from mcp_tools.uw_rules_validator.validator import validate_case
 # â”€â”€ Job Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import job_store as _job_store
 
-_new_job = _job_store.new_job
+_APP_ENV = os.getenv("ENV", "sandbox")
+
+_raw_new_job = _job_store.new_job
+
+
+def _new_job(label: str, execution_type: str = "job", created_by: int | None = None, metadata: dict | None = None) -> str:
+    meta = {"environment": _APP_ENV, **(metadata or {})}
+    return _raw_new_job(label, execution_type=execution_type, created_by=created_by, metadata=meta)
+
+
 _log = _job_store.log_job
 _status = _job_store.update_job_status
 _done = _job_store.complete_job
 _fail = _job_store.fail_job
 
-POLICY_LOBS = {"personal-auto", "cyber", "homeowner"}
+POLICY_LOBS = {"personal-auto", "homeowner"}
 POLICY_LOB_ALIASES = {
     "personal-auto": "auto",
     "personal_auto": "auto",
@@ -89,12 +98,10 @@ POLICY_LOB_ALIASES = {
 LOB_DISPLAY = {
     "personal-auto": "Personal Auto",
     "auto": "Personal Auto",
-    "cyber": "Cyber",
     "homeowner": "Homeowner",
 }
 POLICY_DATA_FILES = {
     "auto": _PROJECT_ROOT / "testdata" / "static" / "auto" / "AutoData.json",
-    "cyber": _PROJECT_ROOT / "testdata" / "static" / "cyber" / "CyberData.json",
     "homeowner": _PROJECT_ROOT / "testdata" / "static" / "homeowner" / "HomeData.json",
 }
 
@@ -120,8 +127,6 @@ def _canonical_policy_lob(raw: str, *, unknown_fallback: str | None = None) -> s
     key = re.sub(r"[\s_]+", "-", (raw or "").strip().lower())
     if key in ("personal-auto", "personalauto", "auto", "car", "vehicle"):
         return "personal-auto"
-    if key == "cyber":
-        return "cyber"
     if key in ("homeowner", "home"):
         return "homeowner"
     if unknown_fallback is not None:
@@ -276,6 +281,7 @@ import dashboard_db
 
 _PUBLIC_API_PATHS = {
     "/api/health",
+    "/api/config",
     "/api/login",
     "/api/register",
     "/api/auth/login",
@@ -331,6 +337,11 @@ app.include_router(_chat_router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+def get_config():
+    return {"environment": _APP_ENV}
 
 
 # â”€â”€ Allure report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2202,7 +2213,6 @@ def list_rules(lob: str = ""):
     lob_display = {
         "auto": "Personal Auto",
         "personal-auto": "Personal Auto",
-        "cyber": "Cyber",
         "homeowner": "Homeowner",
     }
     sev_icon = {"critical": "ðŸ”´", "high": "ðŸŸ ", "warning": "ðŸŸ¡"}
@@ -2214,7 +2224,7 @@ def list_rules(lob: str = ""):
         lob_groups.setdefault(rule["lob"], []).append(rule)
 
     lines = ["# Registered UW Rules\n"]
-    for lob_key in ["auto", "cyber", "homeowner"]:
+    for lob_key in ["auto", "homeowner"]:
         rules = lob_groups.get(lob_key, [])
         if not rules:
             continue

@@ -31,26 +31,10 @@ from ui.pages.homeowner.homeowner_billing_plan_page import HomeownerBillingPlanP
 from ui.pages.homeowner.homeowner_verify_billing_page import HomeownerVerifyBillingPage
 
 # Cyber insurance page fixtures
-from ui.pages.cyber.cyber_quote_page import CyberQuotePage
+from ui.pages.cyber.cyber_policy_information_page import CyberPolicyInformationPage
 from ui.pages.cyber.cyber_premium_summary_page import CyberPremiumSummaryPage
-
-# Workers Compensation page fixtures
-from ui.pages.wc.wc_quote_page import WCQuotePage
-
-# General Liability page fixtures
-from ui.pages.general_liability.general_liability_risk_address_page import GeneralLiabilityRiskAddressPage
-from ui.pages.general_liability.general_liability_basic_policy_information_page import (
-    GeneralLiabilityBasicPolicyInformationPage,
-)
-from ui.pages.general_liability.general_liability_coverage_and_limits_page import (
-    GeneralLiabilityCoverageAndLimitsPage,
-)
-from ui.pages.general_liability.general_liability_liability_location_list_page import (
-    GeneralLiabilityLiabilityLocationListPage,
-)
-from ui.pages.general_liability.general_liability_rating_basis_and_classification_page import (
-    GeneralLiabilityRatingBasisAndClassificationPage,
-)
+from ui.pages.cyber.cyber_reinsurance_page import CyberReinsurancePage
+from ui.pages.cyber.cyber_inspection_page import CyberInspectionPage
 
 # Common workflow pages (shared across LOBs)
 from ui.pages.common.delivery_preferences_page import DeliveryPreferencesPage
@@ -208,19 +192,25 @@ def homeowner_verify_billing_page(page):
     return HomeownerVerifyBillingPage(page)
 
 
-# ============================================================================
-# Cyber Insurance Page Fixtures
-# ============================================================================
-
 @pytest.fixture
-def cyber_quote_page(page):
-    """Cyber quote details page — business info, coverages, eligibility."""
-    return CyberQuotePage(page)
+def cyber_policy_information_page(page):
+    return CyberPolicyInformationPage(page)
+
 
 @pytest.fixture
 def cyber_premium_summary_page(page):
-    """Cyber premium summary page — read-only rated premium details."""
     return CyberPremiumSummaryPage(page)
+
+
+@pytest.fixture
+def cyber_reinsurance_page(page):
+    return CyberReinsurancePage(page)
+
+
+@pytest.fixture
+def cyber_inspection_page(page):
+    return CyberInspectionPage(page)
+
 
 @pytest.fixture
 def delivery_preferences_page(page):
@@ -236,43 +226,3 @@ def billing_plan_page(page):
 def verify_billing_page(page):
     """Verify billing choices page — final bind confirmation (common)."""
     return VerifyBillingPage(page)
-
-
-# ============================================================================
-# Workers Compensation Page Fixtures
-# ============================================================================
-
-@pytest.fixture
-def wc_quote_page(page):
-    """WC quote details page — LOB-specific fields (to be filled after UI inspection)."""
-    return WCQuotePage(page)
-
-
-@pytest.fixture
-def general_liability_risk_address_page(page):
-    """General Liability risk-address page."""
-    return GeneralLiabilityRiskAddressPage(page)
-
-
-@pytest.fixture
-def general_liability_basic_policy_information_page(page):
-    """General Liability basic policy information page."""
-    return GeneralLiabilityBasicPolicyInformationPage(page)
-
-
-@pytest.fixture
-def general_liability_coverage_and_limits_page(page):
-    """General Liability coverage and limits page."""
-    return GeneralLiabilityCoverageAndLimitsPage(page)
-
-
-@pytest.fixture
-def general_liability_liability_location_list_page(page):
-    """General Liability liability location list page."""
-    return GeneralLiabilityLiabilityLocationListPage(page)
-
-
-@pytest.fixture
-def general_liability_rating_basis_and_classification_page(page):
-    """General Liability rating basis and classification page."""
-    return GeneralLiabilityRatingBasisAndClassificationPage(page)

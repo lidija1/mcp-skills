@@ -3,10 +3,8 @@ import {
   BriefcaseBusiness,
   Building2,
   Check,
-  HeartPulse,
   Home,
   ShieldAlert,
-  ShoppingCart,
   UserRound,
   UsersRound,
   Waves,
@@ -14,7 +12,6 @@ import {
 
 const LOBS = [
   { id: 'auto', label: 'Personal Auto' },
-  { id: 'cyber', label: 'Cyber' },
   { id: 'homeowner', label: 'Homeowner' },
 ]
 
@@ -91,64 +88,6 @@ const CUSTOMER_TYPES = {
       summary: 'Prior damage and claim history profile for loss-related validation.',
       details: ['Pre-existing damage', 'Prior claims', 'UW review likely'],
       risk: 'High',
-    },
-  ],
-  cyber: [
-    {
-      id: 'small_office',
-      title: 'Small Office',
-      icon: Building2,
-      summary: 'Low-risk professional office with reasonable cyber hygiene.',
-      details: ['Small employee count', 'Good controls', 'Low online exposure'],
-      risk: 'Low',
-    },
-    {
-      id: 'high_risk_startup',
-      title: 'High Risk Startup',
-      icon: ShieldAlert,
-      summary: 'Technology startup with weak controls and prior incident history.',
-      details: ['High online sales', 'Past breach', 'Limited training'],
-      risk: 'High',
-    },
-    {
-      id: 'established_retail',
-      title: 'Established Retail',
-      icon: ShoppingCart,
-      summary: 'Retail business with moderate online activity and common cyber exposure.',
-      details: ['Brick-and-mortar base', 'Some e-commerce', 'Moderate controls'],
-      risk: 'Medium',
-    },
-    {
-      id: 'healthcare_provider',
-      title: 'Healthcare Provider',
-      icon: HeartPulse,
-      summary: 'Healthcare organization handling sensitive regulated data.',
-      details: ['PHI exposure', 'Regulatory pressure', 'Medium-to-high control expectations'],
-      risk: 'Medium',
-    },
-    {
-      id: 'e_commerce',
-      title: 'E-Commerce',
-      icon: ShoppingCart,
-      summary: 'Online-sales-heavy company for revenue and transaction exposure testing.',
-      details: ['High online revenue', 'Payment flow exposure', 'Tech-dependent operations'],
-      risk: 'Medium',
-    },
-    {
-      id: 'financial_services',
-      title: 'Financial Services',
-      icon: BriefcaseBusiness,
-      summary: 'Financial firm profile with stronger compliance and control posture.',
-      details: ['Regulated business', 'Sensitive records', 'Stronger cyber controls'],
-      risk: 'Medium',
-    },
-    {
-      id: 'no_training_no_regs',
-      title: 'No Training / No Regs',
-      icon: ShieldAlert,
-      summary: 'Poor cyber posture profile intended to find referral and control gaps.',
-      details: ['No security training', 'Past incidents', 'UW referral likely'],
-      risk: 'Critical',
     },
   ],
   homeowner: [

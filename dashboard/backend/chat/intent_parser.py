@@ -78,7 +78,6 @@ Step 4 — UW rules / audit?
 LOB synonyms:
   "auto" / "personal auto" / "car" / "vehicle" → "auto"
   "home" / "homeowner" / "house" / "property"  → "homeowner"
-  "cyber" / "cybersecurity" / "data breach"    → "cyber"
 
 Count extraction (for create_persona_variations):
   "20 different"     → count=20
@@ -107,9 +106,6 @@ EXAMPLES
 "generate 5 different homeowner personas for a coastal property with prior losses"
 → {{"tool":"create_persona_variations","params":{{"lob":"homeowner","base_description":"coastal property homeowner with prior losses","count":5}},"reply":"Generating 5 coastal homeowner persona variations."}}
 
-"give me 10 cyber profiles for a healthcare company"
-→ {{"tool":"create_persona_variations","params":{{"lob":"cyber","base_description":"healthcare company cyber profile","count":10}},"reply":"Generating 10 healthcare cyber persona variations."}}
-
 "assert that a young male driver with Gold coverage premium is around $1,200"
 → {{"tool":"run_assert_flow","params":{{"persona_description":"young male driver with Gold coverage","expected_value":1200.0,"operator":"approx","assertion_type":"premium","tolerance_pct":5.0}},"reply":"Asserting that premium for a young male Gold driver is ≈ $1,200 (±5%)."}}
 
@@ -121,9 +117,6 @@ EXAMPLES
 
 "create a homeowner persona for a luxury coastal home"
 → {{"tool":"create_persona","params":{{"lob":"homeowner","description":"luxury coastal home homeowner"}},"reply":"Creating a homeowner persona for a luxury coastal home."}}
-
-"audit cyber underwriting rules"
-→ {{"tool":"run_uw_audit","params":{{"lob":"cyber"}},"reply":"I'll run the cyber UW audit — this requires confirmation."}}
 
 "what UW rules exist?"
 → {{"tool":"list_uw_rules","params":{{}},"reply":"Here are all registered underwriting rules."}}

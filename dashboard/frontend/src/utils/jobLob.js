@@ -2,7 +2,6 @@
 export const JOB_LOB_DISPLAY = {
   'personal-auto': 'Personal Auto',
   auto: 'Personal Auto',
-  cyber: 'Cyber',
   homeowner: 'Homeowner',
   multi: 'Multi-LOB',
   all: 'All LOBs',
@@ -11,7 +10,6 @@ export const JOB_LOB_DISPLAY = {
 export const JOB_LOB_GROUP_ORDER = [
   'Personal Auto',
   'Homeowner',
-  'Cyber',
   'Multi-LOB',
   'All LOBs',
   'General',
@@ -47,7 +45,6 @@ function inferLobFromLabel(label) {
   if (text.includes('all lob')) return 'All LOBs'
   if (text.includes('batch test')) return 'Multi-LOB'
   if (text.includes('homeowner')) return 'Homeowner'
-  if (text.includes('cyber')) return 'Cyber'
   if (
     text.includes('personal auto') ||
     text.includes('personal-auto') ||

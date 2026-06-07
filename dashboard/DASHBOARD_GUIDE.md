@@ -51,7 +51,7 @@ Generates realistic insurance customer profiles and drives full end-to-end polic
 
 ### Line of Business selector
 
-All cards respect the active LOB. Switch between **Personal Auto**, **Cyber**, and **Homeowner** before running.
+All cards respect the active LOB. Switch between **Personal Auto** and **Homeowner** before running.
 
 ---
 
@@ -67,7 +67,6 @@ The fastest path. Describe a customer in plain English — the system calls the 
 
 **Example inputs:**
 - Auto: *"A 23-year-old driver with an SR-22 on a leased BMW, two at-fault accidents in the past 3 years"*
-- Cyber: *"A fintech startup with 80 employees handling card data, no prior cyber coverage, remote workforce"*
 - Homeowner: *"A homeowner with a 22-year-old roof in a flood zone, prior water damage claim two years ago"*
 
 **Runtime:** ~2–3 minutes (AI call + browser flow)
@@ -138,7 +137,6 @@ Runs every pre-defined test case for one LOB. This is the main validation sweep.
 
 **Runtimes:**
 - Auto: ~15–30 min
-- Cyber: ~10–20 min
 - Homeowner: ~10–20 min
 
 The report groups results by rule and highlights any mismatches.
@@ -171,7 +169,7 @@ The report tells you whether the outcome matched and which expected conditions w
 
 ### Full System Audit
 
-Runs every test case across Auto, Cyber, and Homeowner in one sweep.
+Runs every test case across Auto and Homeowner in one sweep.
 
 **Runtime:** 30–45 minutes. Best started and left running — check the Jobs sidebar for completion.
 

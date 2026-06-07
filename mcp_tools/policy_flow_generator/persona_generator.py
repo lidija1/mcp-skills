@@ -380,89 +380,6 @@ PERSONA ARCHETYPE GUIDE
 Return ONLY a valid JSON object. No explanation, markdown, or extra text.
 """
 
-_CYBER_SYSTEM_PROMPT = f"""
-You are a test data generator for a Cyber insurance policy automation framework.
-Today is {_TODAY.strftime('%Y-%m-%d')}.
-
-Translate the natural-language persona description into a single valid JSON object.
-
-════════════════════════════════════════════════
-FIELD SCHEMA — use ONLY the listed values (case-sensitive)
-════════════════════════════════════════════════
-
-{{
-  "TC_ID":                  "AI_XXXXXX",
-  "CustomerType":           "Individual",
-  "FirstName":              string,
-  "LastName":               string,
-  "DOB":                    "MM/DD/YYYY",          // business owner DOB, age 25-70
-  "PhoneNum":               "413-555-XXXX",
-  "Email":                  "firstname_{{timestamp}}@cybertest.com",
-  "Address":                string,
-  "ZIP":                    "01101",
-  "City":                   "Springfield",
-  "Producer":               "Janis Irey",
-  "Program":                "Cyber",
-  "EffectiveDate":          "MM/DD/YYYY",         // policy start date; default: {_EFF_DATE.strftime('%m/%d/%Y')}; use a past date for backdated/historical scenarios, future date for renewals
-  "BillingMethod":          "Direct Billed",
-  "BusinessStartDate":      "YYYY",               // 4-digit year only; realistic business founding year
-  "TotalEmployees":         string,               // integer as string, e.g. "10"
-  "NatureOfBusiness":       "Office" | "Retail" | "Healthcare" | "Technology" | "Education" | "Financial Services" | "Manufacturing",
-  "PctOnlineSales":         string,               // 0-100 as string, e.g. "20"
-  "AggregateLimit":         "500,000" | "1,000,000" | "2,000,000",
-  "PerClaimLimit":          "500,000" | "1,000,000" | "2,000,000",
-  "PerClaimDeductible":     "500" | "1,000" | "2,500" | "5,000",
-  "CyberTraining":          "Yes" | "No",
-  "SituationsLast3Years":   "None" | "Data Breach" | "Ransomware Attack" | "Phishing Attack",
-  "CyberRegulations":       "Yes" | "No",
-  "PaymentPlan":            "Pay In Full"
-}}
-
-════════════════════════════════════════════════
-UW TRIGGER RULES (Cyber)
-════════════════════════════════════════════════
-
-  - CyberTraining = "No"                    → likely triggers UW review
-  - SituationsLast3Years != "None"          → likely triggers UW review
-  - CyberRegulations = "No"                 → likely triggers UW review
-  - PctOnlineSales > 80%                    → elevated risk flag
-
-════════════════════════════════════════════════
-PERSONA ARCHETYPE GUIDE
-════════════════════════════════════════════════
-
-  "small_office"          → NatureOfBusiness="Office", TotalEmployees="5-15",
-                            PctOnlineSales="5-15", CyberTraining="Yes",
-                            SituationsLast3Years="None", CyberRegulations="Yes",
-                            AggregateLimit="500,000"
-
-  "high_risk_startup"     → NatureOfBusiness="Technology", TotalEmployees="50+",
-                            PctOnlineSales="70-90", CyberTraining="No",
-                            SituationsLast3Years="Data Breach" | "Ransomware Attack",
-                            CyberRegulations="No", AggregateLimit="2,000,000"
-
-  "established_retail"    → NatureOfBusiness="Retail", TotalEmployees="20-50",
-                            PctOnlineSales="30-50", CyberTraining="Yes",
-                            SituationsLast3Years="None", CyberRegulations="Yes"
-
-  "healthcare_provider"   → NatureOfBusiness="Healthcare", TotalEmployees="10-30",
-                            PctOnlineSales="10", CyberTraining="Yes",
-                            CyberRegulations="Yes", AggregateLimit="1,000,000"
-
-  "e_commerce"            → NatureOfBusiness="Retail" | "Technology",
-                            PctOnlineSales="80-95", TotalEmployees="10-25",
-                            AggregateLimit="2,000,000"
-
-  "financial_services"    → NatureOfBusiness="Financial Services",
-                            CyberTraining="Yes", CyberRegulations="Yes",
-                            AggregateLimit="2,000,000", PerClaimDeductible="2,500"
-
-  "no_training_no_regs"   → CyberTraining="No", CyberRegulations="No",
-                            SituationsLast3Years picks any incident type
-
-Return ONLY a valid JSON object. No explanation, markdown, or extra text.
-"""
-
 _HOMEOWNER_SYSTEM_PROMPT = f"""
 You are a test data generator for a Homeowner insurance policy automation framework.
 Today is {_TODAY.strftime('%Y-%m-%d')}.
@@ -562,7 +479,6 @@ Return ONLY a valid JSON object. No explanation, markdown, or extra text.
 
 _LOB_PROMPTS = {
     "auto": _AUTO_SYSTEM_PROMPT,
-    "cyber": _CYBER_SYSTEM_PROMPT,
     "homeowner": _HOMEOWNER_SYSTEM_PROMPT,
 }
 _VALID_LOBS = ", ".join(_LOB_PROMPTS)
@@ -573,7 +489,6 @@ _EMAIL_SEQUENCE = 0
 def _email_domain_for_lob(lob: str) -> str:
     return {
         "auto": "uwtest.com",
-        "cyber": "cybertest.com",
         "homeowner": "hometest.com",
     }.get(lob, "uwtest.com")
 
@@ -677,15 +592,6 @@ def _ensure_persona_type(lob: str, persona: dict, description: str = "") -> None
             persona["_persona_type"] = "risky_property"
         else:
             persona["_persona_type"] = "standard_homeowner"
-        return
-
-    if lob == "cyber":
-        if str(persona.get("CyberTraining")) == "No" or str(persona.get("CyberRegulations")) == "No" or str(persona.get("SituationsLast3Years")) != "None":
-            persona["_persona_type"] = "high_risk_startup"
-        elif str(persona.get("NatureOfBusiness")) == "Healthcare":
-            persona["_persona_type"] = "healthcare_provider"
-        else:
-            persona["_persona_type"] = "small_office"
         return
 
     persona["_persona_type"] = "custom"
@@ -993,68 +899,11 @@ def _fast_homeowner_persona(description: str) -> dict:
     return persona
 
 
-def _fast_cyber_persona(description: str) -> dict:
-    text = description.lower()
-    persona = _base_customer("cyber", description, 38)
-    healthcare = _contains_any(text, "healthcare", "clinic", "medical", "hospital")
-    technology = _contains_any(text, "technology", "software", "startup", "saas")
-    financial = _contains_any(text, "financial", "bank", "fintech")
-    retail = _contains_any(text, "retail", "ecommerce", "e-commerce", "online sales")
-    education = _contains_any(text, "school", "education", "university")
-    manufacturing = "manufacturing" in text
-    prior_incident = "ransomware" in text or "phishing" in text or "breach" in text
-    no_training = _contains_any(text, "no training", "poor controls", "poor control")
-    no_regs = _contains_any(text, "no regulation", "no regulations", "non-compliant", "non compliant")
-
-    if healthcare:
-        nature = "Healthcare"
-    elif technology:
-        nature = "Technology"
-    elif financial:
-        nature = "Financial Services"
-    elif retail:
-        nature = "Retail"
-    elif education:
-        nature = "Education"
-    elif manufacturing:
-        nature = "Manufacturing"
-    else:
-        nature = "Office"
-
-    incident = "None"
-    if "ransomware" in text:
-        incident = "Ransomware Attack"
-    elif "phishing" in text:
-        incident = "Phishing Attack"
-    elif "breach" in text or prior_incident:
-        incident = "Data Breach"
-
-    high_risk = prior_incident or no_training or no_regs
-    high_limit = technology or financial or high_risk
-    persona.update({
-        "Program": "Cyber",
-        "BusinessStartDate": "2018" if technology else "2012",
-        "TotalEmployees": "55" if high_limit else "12",
-        "NatureOfBusiness": nature,
-        "PctOnlineSales": "85" if retail or technology else "20",
-        "AggregateLimit": "2,000,000" if high_limit else "1,000,000",
-        "PerClaimLimit": "1,000,000" if high_limit else "500,000",
-        "PerClaimDeductible": "2,500" if high_limit else "1,000",
-        "CyberTraining": "No" if no_training else "Yes",
-        "SituationsLast3Years": incident,
-        "CyberRegulations": "No" if no_regs else "Yes",
-        "_persona_type": "high_risk_startup" if high_risk else "healthcare_provider" if healthcare else "small_office",
-    })
-    return persona
-
-
 def _build_fast_persona(lob: str, description: str, vehicle: dict | None = None) -> dict:
     if lob == "auto":
         persona = _fast_auto_persona(description, vehicle)
     elif lob == "homeowner":
         persona = _fast_homeowner_persona(description)
-    elif lob == "cyber":
-        persona = _fast_cyber_persona(description)
     else:
         raise ValueError(f"Unknown LOB '{lob}'. Valid options: {_VALID_LOBS}")
     persona["_lob"] = lob
@@ -1083,16 +932,6 @@ _FAST_VARIATION_THEMES = {
         ("luxury high-value home with high liability limits", "High-value luxury home"),
         ("standard frame construction, clean history, Basic coverage", "Standard homeowner profile"),
         ("historic older property with underground oil tank", "Historic property with older-home risk"),
-    ],
-    "cyber": [
-        ("healthcare business with ransomware incident and no training", "Healthcare business with ransomware exposure"),
-        ("technology startup, high online sales, weak controls", "Technology startup with weak controls"),
-        ("financial services firm with compliance exposure", "Financial services compliance exposure"),
-        ("retail ecommerce business with phishing incident", "Retail ecommerce phishing exposure"),
-        ("education organization with clean controls and training", "Education organization with clean controls"),
-        ("manufacturing business with data breach history", "Manufacturing business with breach history"),
-        ("small office with training, no prior incidents", "Small office clean cyber risk"),
-        ("SaaS company with no cyber regulations and high limits", "SaaS company with high-limit exposure"),
     ],
 }
 
@@ -1171,13 +1010,6 @@ PERSONA_ARCHETYPES = {
         "risk_flagged — refused + declined + losses, multiple UW triggers",
         "coastal_exposure — windstorm focus, masonry construction, tile roof",
         "investment_property — rented residence, animals, standard coverage",
-    ],
-    "cyber": [
-        "small_office - low-risk office with training, controls, and no incidents",
-        "healthcare_provider - healthcare business with compliance-sensitive exposure",
-        "high_risk_startup - poor controls, no training, or prior cyber incident",
-        "e_commerce - high online sales and elevated transaction exposure",
-        "financial_services - regulated financial profile with higher limits",
     ],
 }
 

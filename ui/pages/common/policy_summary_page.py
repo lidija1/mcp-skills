@@ -72,36 +72,5 @@ class PolicySummary(BasePolicySummary):
             from ui.pages.cyber.cyber_policy_summary_page import CyberPolicySummaryPage
             return CyberPolicySummaryPage(self.page)
 
-        if program_name == "workers compensation":
-            from ui.pages.wc.wc_policy_summary_page import WCPolicySummaryPage
-            return WCPolicySummaryPage(self.page)
-
-        if program_name == "general liability":
-            return GeneralLiabilityPolicySummaryPage(self.page)
-
         from ui.pages.auto.auto_policy_summary_page import AutoPolicySummaryPage
         return AutoPolicySummaryPage(self.page)
-
-
-class GeneralLiabilityPolicySummaryPage(BasePolicySummary):
-    """Extracts General Liability policy summary report fields."""
-
-    def extract_details(self, test_data, common_details=None):
-        details = dict(common_details or self.extract_common_details())
-        details.update({
-            "Billing Method": test_data.get("BillingMethod"),
-            "Audit Frequency": test_data.get("AuditFrequency"),
-            "Loss History": test_data.get("LossHistory"),
-            "Coverage Type": test_data.get("CoverageType"),
-            "Policy Type": test_data.get("PolicyType"),
-            "Form Type": test_data.get("FormType"),
-            "Each Occurrence Limit": test_data.get("EachOccurrenceLimit"),
-            "General Aggregate Limit": test_data.get("GeneralAggregateLimit"),
-            "General Liability Deductible": test_data.get("GeneralLiabilityDeductible"),
-            "Deductible Type": test_data.get("DeductibleType"),
-            "Deductible Applies": test_data.get("DeductibleApplies"),
-        })
-        return details
-
-    def report_file_name(self):
-        return "policy_reports_general_liability.csv"

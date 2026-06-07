@@ -32,6 +32,14 @@
       "env": {
         "PYTHONUTF8": "1"
       }
+    },
+    "openspace": {
+      "command": "openspace-mcp",
+      "toolTimeout": 600,
+      "env": {
+        "OPENSPACE_HOST_SKILL_DIRS": "C:/Users/GoranMilosavljevic/.claude/skills",
+        "OPENSPACE_WORKSPACE": "C:/Programming/OpenSpace"
+      }
     }
   }
 }

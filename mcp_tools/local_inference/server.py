@@ -40,9 +40,9 @@ _FRAMEWORK_CONTEXT = """\
 You are an expert assistant for an insurance policy automation test framework.
 The framework uses Python, pytest-bdd, Playwright, and ExtJS against the
 OneShield insurance platform. Lines of business: Personal Auto, Homeowner,
-Cyber. Tests are BDD scenarios in Gherkin. Page objects inherit BasePage.
+Tests are BDD scenarios in Gherkin. Page objects inherit BasePage.
 UW rules trigger referrals for SR-22, suspended/revoked licence, driver
-under 25, prior losses, prior refusal/non-renewal, and cyber risk flags.
+under 25, prior losses, and prior refusal/non-renewal.
 """
 
 
@@ -162,7 +162,7 @@ def suggest_scenarios(description: str, lob: str = "", existing: str = "") -> st
                      a workflow step, or an open-ended area like
                      "leased vehicle with loss payee" or
                      "homeowner with prior losses and renovation".
-        lob:         Optional LOB filter — "auto", "homeowner", or "cyber".
+        lob:         Optional LOB filter — "auto" or "homeowner".
                      Omit for framework-wide suggestions.
         existing:    Optional — paste your current Gherkin scenarios or test
                      case IDs so the model skips them.
@@ -174,7 +174,7 @@ def suggest_scenarios(description: str, lob: str = "", existing: str = "") -> st
 
     Examples:
         suggest_scenarios("SR-22 edge cases", lob="auto")
-        suggest_scenarios("cyber high-risk profiles", lob="cyber", existing="<paste feature file>")
+        suggest_scenarios("homeowner high-risk profiles", lob="homeowner", existing="<paste feature file>")
         suggest_scenarios("homeowner boundary conditions for prior refusal rule")
     """
     lob_hint = f" for the {lob.upper()} line of business" if lob.strip() else ""

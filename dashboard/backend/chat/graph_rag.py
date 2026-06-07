@@ -57,7 +57,6 @@ _SYNONYMS = {
     "workflow": {"workflow", "flow", "journey", "scenario", "feature", "steps"},
     "auto": {"auto", "personal", "driver", "vehicle"},
     "homeowner": {"homeowner", "home", "property"},
-    "cyber": {"cyber", "security", "breach"},
     "uw": {"uw", "underwriting", "rule", "rules", "audit", "referral"},
     "page": {"page", "pages", "pom", "object", "basepage", "selector"},
     "fixture": {"fixture", "fixtures", "conftest", "pytest"},

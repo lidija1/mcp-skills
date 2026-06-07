@@ -1,2 +1,0 @@
-"""General Liability page objects."""
-

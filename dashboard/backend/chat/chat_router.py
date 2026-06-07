@@ -123,7 +123,6 @@ class ChatAskResp(BaseModel):
 
 LOB_DISPLAY = {
     "auto": "Personal Auto",
-    "cyber": "Cyber",
     "homeowner": "Homeowner",
 }
 
@@ -505,7 +504,7 @@ def _job_label(tool_name: str, params: dict) -> str:
 def _list_uw_rules_inline(lob: str) -> str:
     """Return the UW rules markdown table. Mirrors /api/uw/rules logic."""
     target = lob.lower().strip() if lob else None
-    lob_display = {"auto": "Personal Auto", "cyber": "Cyber", "homeowner": "Homeowner"}
+    lob_display = {"auto": "Personal Auto", "homeowner": "Homeowner"}
     sev_icon = {"critical": "🔴", "high": "🟠", "warning": "🟡"}
     lob_groups: dict = {}
     for rule in RULE_METADATA.values():
@@ -513,7 +512,7 @@ def _list_uw_rules_inline(lob: str) -> str:
             continue
         lob_groups.setdefault(rule["lob"], []).append(rule)
     lines = ["# Registered UW Rules\n"]
-    for lob_key in ["auto", "cyber", "homeowner"]:
+    for lob_key in ["auto", "homeowner"]:
         rules = lob_groups.get(lob_key, [])
         if not rules:
             continue

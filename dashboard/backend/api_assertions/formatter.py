@@ -63,10 +63,14 @@ def _check_label(finding) -> str:
         "flow_blocked": "Flow blocked",
         "premium_factor": "Rating factor",
     }
-    operator = "" if finding.operator in ("exists", "equals") else f" {finding.operator}"
+    operator_is_implied = (
+        finding.operator in ("exists", "equals")
+        or finding.type in ("page_contains", "uw_condition_contains")
+        and finding.operator == "contains"
+    )
+    operator = "" if operator_is_implied else f" {finding.operator}"
     return f"{labels.get(finding.type, finding.type)}{operator}"
 
 
 def _plain(value) -> str:
-    text = "" if value is None else str(value)
-    return text.replace("|", "\\|")
+    return "" if value is None else str(value)

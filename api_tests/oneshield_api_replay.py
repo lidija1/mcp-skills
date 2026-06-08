@@ -490,7 +490,7 @@ class OneShieldApiReplay:
         test_data: dict[str, Any],
         stop_after: str = "rate",
         allow_bind: bool = False,
-        fast_mode: bool = False,
+        fast_mode: bool = True,
     ) -> dict[str, Any]:
         """Run the captured Personal Auto API flow with current session state.
 

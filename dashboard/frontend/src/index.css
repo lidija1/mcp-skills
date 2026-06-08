@@ -17,6 +17,7 @@
     --green-soft: #eaf8ef;
     --purple: #7c3aed;
     --purple-soft: #f3edff;
+    --jobs-row-hover: #eef5ff;
     --shadow: 0 14px 38px rgba(15, 23, 42, 0.08);
 }
 
@@ -35,6 +36,7 @@
     --green-soft: rgba(74, 222, 128, 0.14);
     --purple: #a78bfa;
     --purple-soft: rgba(167, 139, 250, 0.15);
+    --jobs-row-hover: color-mix(in srgb, var(--surface) 82%, #60a5fa 18%);
     --shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
 }
 
@@ -53,6 +55,7 @@
     --green-soft: rgba(134, 239, 172, 0.14);
     --purple: #c4b5fd;
     --purple-soft: rgba(196, 181, 253, 0.16);
+    --jobs-row-hover: color-mix(in srgb, var(--surface) 78%, #93c5fd 22%);
     --shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
 }
 
@@ -2559,6 +2562,49 @@ textarea.field {
 }
 
 /* ── Expanded overlay state ─────────────────────────────────────────────── */
+.chat-resize-handle {
+    position: absolute;
+    z-index: 6;
+    top: 0;
+    bottom: 0;
+    left: -5px;
+    width: 10px;
+    display: none;
+    padding: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.chat-resize-handle::before {
+    content: "";
+    position: absolute;
+    top: 12px;
+    bottom: 12px;
+    left: 5px;
+    width: 2px;
+    border-radius: 999px;
+    background: transparent;
+    transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.chat-sidebar:not(.chat-sidebar--expanded):not(.chat-sidebar--hidden) .chat-resize-handle {
+    display: block;
+}
+
+.chat-resize-handle:hover::before,
+.chat-resize-handle:focus-visible::before,
+.is-resizing-chat .chat-resize-handle::before {
+    background: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.is-resizing-chat,
+.is-resizing-chat * {
+    cursor: col-resize !important;
+    user-select: none;
+}
+
 .chat-sidebar--expanded {
     position: static;
 }
@@ -9880,5 +9926,30 @@ button.jobs-group-row {
             minmax(78px, 0.44fr)
             minmax(104px, 0.58fr)
             minmax(212px, 0.9fr);
+    }
+}
+
+/* Final interactive layout overrides */
+.jobs-table-row {
+    transition: background-color 140ms ease;
+}
+
+.jobs-table-row:hover {
+    background: var(--jobs-row-hover);
+}
+
+@media (min-width: 1041px) {
+    .workspace:not(.workspace--chat-hidden) {
+        grid-template-columns: 260px minmax(0, 1fr) var(--chat-sidebar-width, clamp(380px, 28vw, 560px));
+    }
+
+    .workspace--nav-collapsed:not(.workspace--chat-hidden) {
+        grid-template-columns: 80px minmax(0, 1fr) var(--chat-sidebar-width, clamp(380px, 28vw, 560px));
+    }
+}
+
+@media (max-width: 1040px) {
+    .chat-resize-handle {
+        display: none !important;
     }
 }

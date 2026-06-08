@@ -70,11 +70,79 @@ export default function App() {
     const [isNarrowNav, setIsNarrowNav] = useState(false)
     const [validationTab, setValidationTab] = useState('sweep')
     const [validationHistoryFilter, setValidationHistoryFilter] = useState('all')
+    const [validationExpandedReportId, setValidationExpandedReportId] = useState(null)
     const [chatView, setChatView] = useState(() => localStorage.getItem('chatView') || 'sidebar')
+    const [chatSidebarWidth, setChatSidebarWidth] = useState(() => {
+        const saved = Number(localStorage.getItem('chatSidebarWidth'))
+        return Number.isFinite(saved) && saved > 0 ? saved : null
+    })
     const [toast, setToast] = useState(null)
     const toastTimerRef = useRef(null)
 
     const setChatViewPersist = v => { setChatView(v); localStorage.setItem('chatView', v) }
+
+    const clampChatSidebarWidth = useCallback(width => {
+        const navWidth = isNarrowNav ? 0 : navCollapsed ? 80 : 260
+        const maxAvailable = Math.max(380, window.innerWidth - navWidth - 520)
+        const maxWidth = Math.min(760, maxAvailable)
+
+        return Math.round(Math.min(Math.max(width, 320), maxWidth))
+    }, [isNarrowNav, navCollapsed])
+
+    const persistChatSidebarWidth = useCallback(width => {
+        const next = clampChatSidebarWidth(width)
+        setChatSidebarWidth(next)
+        localStorage.setItem('chatSidebarWidth', String(next))
+    }, [clampChatSidebarWidth])
+
+    const adjustChatSidebarWidth = useCallback(delta => {
+        const measuredWidth = document.querySelector('.chat-sidebar')?.getBoundingClientRect().width
+        const currentWidth = chatSidebarWidth || measuredWidth || 420
+        persistChatSidebarWidth(currentWidth + delta)
+    }, [chatSidebarWidth, persistChatSidebarWidth])
+
+    const startChatResize = useCallback(e => {
+        if (chatView !== 'sidebar' || isNarrowNav) return
+
+        e.preventDefault()
+        document.body.classList.add('is-resizing-chat')
+        persistChatSidebarWidth(window.innerWidth - e.clientX)
+
+        const handlePointerMove = event => {
+            persistChatSidebarWidth(window.innerWidth - event.clientX)
+        }
+        const stopResize = () => {
+            document.body.classList.remove('is-resizing-chat')
+            window.removeEventListener('pointermove', handlePointerMove)
+            window.removeEventListener('pointerup', stopResize)
+            window.removeEventListener('pointercancel', stopResize)
+        }
+
+        window.addEventListener('pointermove', handlePointerMove)
+        window.addEventListener('pointerup', stopResize)
+        window.addEventListener('pointercancel', stopResize)
+    }, [chatView, isNarrowNav, persistChatSidebarWidth])
+
+    const handleChatResizeKeyDown = useCallback(e => {
+        if (chatView !== 'sidebar' || isNarrowNav) return
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault()
+            adjustChatSidebarWidth(24)
+        }
+        if (e.key === 'ArrowRight') {
+            e.preventDefault()
+            adjustChatSidebarWidth(-24)
+        }
+    }, [adjustChatSidebarWidth, chatView, isNarrowNav])
+
+    useEffect(() => {
+        if (!chatSidebarWidth || chatView !== 'sidebar') return
+        const next = clampChatSidebarWidth(chatSidebarWidth)
+        if (next !== chatSidebarWidth) {
+            setChatSidebarWidth(next)
+            localStorage.setItem('chatSidebarWidth', String(next))
+        }
+    }, [chatSidebarWidth, chatView, clampChatSidebarWidth])
 
     const showToast = useCallback((message, options = {}) => {
         window.clearTimeout(toastTimerRef.current)
@@ -406,12 +474,17 @@ export default function App() {
         if (isNarrowNav) setNavMobileOpen(false)
     }
 
+    const workspaceStyle = chatView === 'sidebar' && chatSidebarWidth
+        ? {'--chat-sidebar-width': `${chatSidebarWidth}px`}
+        : undefined
+
     return (
         <div className="app-shell">
             <Header backendOk={backendOk} user={dashboardUser} onLogout={logout}/>
 
             <div
                 className={`workspace${chatView === 'hidden' ? ' workspace--chat-hidden' : ''}${navCollapsed ? ' workspace--nav-collapsed' : ''}${navMobileOpen ? ' workspace--nav-open' : ''}`}
+                style={workspaceStyle}
             >
                 <aside
                     className="side-nav"
@@ -574,6 +647,8 @@ export default function App() {
                                     onActiveTabChange={setValidationTab}
                                     historyFilter={validationHistoryFilter}
                                     onHistoryFilterChange={setValidationHistoryFilter}
+                                    expandedId={validationExpandedReportId}
+                                    onExpandedIdChange={setValidationExpandedReportId}
                                 />
                             )}
                         />
@@ -594,6 +669,17 @@ export default function App() {
                 >
                     {chatView === 'full' && (
                         <div className="chat-sidebar-backdrop" onClick={() => setChatViewPersist('sidebar')} />
+                    )}
+                    {chatView === 'sidebar' && (
+                        <div
+                            className="chat-resize-handle"
+                            role="separator"
+                            aria-label="Resize chat"
+                            aria-orientation="vertical"
+                            tabIndex={0}
+                            onPointerDown={startChatResize}
+                            onKeyDown={handleChatResizeKeyDown}
+                        />
                     )}
                     <div className="chat-sidebar-inner">
                         <div className="chat-sidebar-header">

@@ -78,6 +78,8 @@ export default function ApiAssertionsPanel({
   onActiveTabChange = () => {},
   historyFilter = 'all',
   onHistoryFilterChange = () => {},
+  expandedId = null,
+  onExpandedIdChange = () => {},
 }) {
 
   // Regression Sweep tab
@@ -89,7 +91,6 @@ export default function ApiAssertionsPanel({
   // History tab
   const [historyRows, setHistoryRows] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [expandedId, setExpandedId] = useState(null)
 
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -112,7 +113,7 @@ export default function ApiAssertionsPanel({
     try {
       await api.deleteAssertionResult(id)
       setHistoryRows(prev => prev.filter(r => r.id !== id))
-      if (expandedId === id) setExpandedId(null)
+      if (expandedId === id) onExpandedIdChange(null)
     } catch { /* ignore */ }
   }
 
@@ -268,7 +269,7 @@ export default function ApiAssertionsPanel({
               filter={historyFilter}
               onFilterChange={onHistoryFilterChange}
               expandedId={expandedId}
-              onExpand={id => setExpandedId(prev => prev === id ? null : id)}
+              onExpand={id => onExpandedIdChange(prev => prev === id ? null : id)}
               onDelete={handleDeleteResult}
               onRefresh={fetchHistory}
             />

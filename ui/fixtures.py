@@ -32,6 +32,14 @@ from ui.pages.homeowner.homeowner_verify_billing_page import HomeownerVerifyBill
 
 # Cyber insurance page fixtures
 from ui.pages.cyber.cyber_policy_information_page import CyberPolicyInformationPage
+
+# General Liability page fixtures
+from ui.pages.gl.gl_policy_information_page import GeneralLiabilityBasicPolicyInformationPage
+from ui.pages.gl.gl_coverages_and_limits_page import GeneralLiabilityCoverageAndLimitsPage
+from ui.pages.gl.gl_optional_coverages_page import GeneralLiabilityOptionalCoveragesPage
+from ui.pages.gl.gl_liability_location_list_page import GeneralLiabilityLiabilityLocationListPage
+from ui.pages.gl.gl_rating_page import GeneralLiabilityRatingBasisAndClassificationPage
+from ui.pages.gl.gl_risk_address_page import GeneralLiabilityRiskAddressPage
 from ui.pages.cyber.cyber_premium_summary_page import CyberPremiumSummaryPage
 from ui.pages.cyber.cyber_reinsurance_page import CyberReinsurancePage
 from ui.pages.cyber.cyber_inspection_page import CyberInspectionPage
@@ -210,6 +218,36 @@ def cyber_reinsurance_page(page):
 @pytest.fixture
 def cyber_inspection_page(page):
     return CyberInspectionPage(page)
+
+
+@pytest.fixture
+def general_liability_risk_address_page(page):
+    return GeneralLiabilityRiskAddressPage(page)
+
+
+@pytest.fixture
+def general_liability_basic_policy_information_page(page):
+    return GeneralLiabilityBasicPolicyInformationPage(page)
+
+
+@pytest.fixture
+def general_liability_coverage_and_limits_page(page):
+    return GeneralLiabilityCoverageAndLimitsPage(page)
+
+
+@pytest.fixture
+def general_liability_optional_coverages_page(page):
+    return GeneralLiabilityOptionalCoveragesPage(page)
+
+
+@pytest.fixture
+def general_liability_liability_location_list_page(page):
+    return GeneralLiabilityLiabilityLocationListPage(page)
+
+
+@pytest.fixture
+def general_liability_rating_basis_and_classification_page(page):
+    return GeneralLiabilityRatingBasisAndClassificationPage(page)
 
 
 @pytest.fixture

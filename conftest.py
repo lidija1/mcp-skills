@@ -77,6 +77,7 @@ pytest_plugins = [
     "ui.steps.auto.auto_workflow_steps",
     "ui.steps.homeowner_steps",
     "ui.steps.cyber_steps",
+    "ui.steps.gl_steps",
     "ui.steps.common.customer_validation_steps",
 ]
 

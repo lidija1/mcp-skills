@@ -109,7 +109,6 @@ dashboard/start-frontend.bat
 Policy Flow supports these lines of business:
 
 - Personal Auto
-- Cyber
 - Homeowner
 
 Available actions:
@@ -130,7 +129,6 @@ The backend routes into these runners:
 
 ```text
 mcp_tools/policy_flow_generator/runners/auto_runner.py
-mcp_tools/policy_flow_generator/runners/cyber_runner.py
 mcp_tools/policy_flow_generator/runners/homeowner_runner.py
 ```
 
@@ -203,7 +201,7 @@ GET  /api/jobs/{job_id}
 Policy flow:
 
 ```text
-GET  /api/policy/archetypes?lob=auto|cyber|homeowner
+GET  /api/policy/archetypes?lob=auto|homeowner
 POST /api/policy/create-persona
 POST /api/policy/run-flow
 POST /api/policy/quick-run
@@ -213,7 +211,7 @@ POST /api/policy/batch-run
 UW validator:
 
 ```text
-GET  /api/uw/rules?lob=auto|cyber|homeowner
+GET  /api/uw/rules?lob=auto|homeowner
 POST /api/uw/audit
 POST /api/uw/rule-cases
 POST /api/uw/custom-boundary
@@ -398,7 +396,6 @@ npm run build
 
 # Targeted automation validation
 pytest ui/tests/test_auto_workflow.py -v
-pytest -m cyber -v
 pytest -m homeowner -v
 pytest -m uw -v
 ```

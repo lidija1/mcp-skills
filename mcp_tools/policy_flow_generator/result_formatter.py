@@ -84,7 +84,6 @@ _OUTCOME_LABEL = {
 
 _LOB_LABEL = {
     "auto": "Personal Auto",
-    "cyber": "Cyber",
     "homeowner": "Homeowner",
 }
 

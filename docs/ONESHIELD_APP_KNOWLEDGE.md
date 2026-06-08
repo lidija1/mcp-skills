@@ -24,6 +24,58 @@ This is the living memory for OneShield app exploration. Update it after every u
 - The GL class-description dropdown expects the full visible option text, for example `10015: Amusement Centers`, not the shorthand `: Amusement Centers`.
 - Live validation of `ui/tests/test_general_liability.py::test_general_liability_creation[TC_ID_0001]` passed end to end after those data and selector fixes.
 
+### 2026-06-07 - GL LOB Discovery (probe_gl_elements.py)
+
+**Unmapped fields confirmed by live probe — not yet in any page object:**
+
+**Policy Information screen (all screens show these in the header area):**
+- `Quote Name*` — textbox, osviewid `...CI_17661246`. Currently defaults to system value; rarely needs explicit setting.
+- `Effective Date*` / `Expiration Date*` — quote-level comboboxes; already set by `QuoteRegistrationPage`.
+- `Add` / `Search` / `Delete` buttons — for the Additional Insureds/Interests grid on the Policy Information screen.
+
+**Coverage and Limits screen — 9 optional endorsement checkboxes (none mapped):**
+- General Liability Manual Coverages — osviewid `...CI_17673746_EC_1`
+- Employee Benefits Coverage — osviewid `...CI_17673846_EC_1`
+- General Liability Enhancement Endorsement — osviewid `...CI_17673546_EC_1`
+- Hired Auto Coverage — osviewid `...CI_17673246_EC_1`
+- Non-Owned Auto Coverage — osviewid `...CI_17673346_EC_1`
+- Liquor Liability Coverage — osviewid `...CI_17673646_EC_1`
+- Contractual Liability Exclusion — osviewid `...CI_17676046_EC_1`
+- Exclude Employees as Additional Insureds — osviewid `...CI_17676146_EC_1`
+- Hazards in Connection with Designated Premises — osviewid `...CI_17675646_EC_1`
+
+**Coverage and Limits screen — 4 rating modifier textboxes (none mapped):**
+- `Schedule Mod` — osviewid `...CI_17675146`
+- `Judgment` — osviewid `...CI_17674846`
+- `Commission` — osviewid `...CI_17675046`
+- `Experience Mod` — osviewid `...CI_17674946`
+
+**Coverage and Limits screen — other:**
+- `Location Selection` input — osviewid `...CI_17660646_EC_1` — filters the screen to a specific location. Only relevant for multi-location scenarios.
+- `General Liability Coverage Type*` combobox — osviewid `...CI_17669846` — second selector that appears after the initial listbox selection; may be auto-populated from the listbox choice. Needs further investigation.
+- Coverage-level `Effective Date` / `Expiration Date` comboboxes — distinct from quote-level dates.
+
+**Conditional behavior confirmed:**
+- `Deductible Type*` and `Deductible Applies*` are hidden until `General Liability Deductible` is set to any non-default value. Both are already mapped in `GeneralLiabilityCoverageAndLimitsPage`.
+- No new fields appeared when ForeignSales was toggled from No → Yes.
+- Selecting `Hired Auto Coverage` creates the `GL Optional Coverages` tree node. Open it before rating, complete `Auto Territory Code*`, `Hired Auto Limit*`, and `Estimated Cost of Hire*`, then save.
+- `Hired Auto Premium` is read-only and `Flat Charge Indicator` is optional.
+- Confirmed runnable Hired Auto values for `GL_023` are territory `501`, limit `300,000`, and estimated cost `If Any`.
+- Other endorsements render different mandatory controls on `GL Optional Coverages`; each requires a coverage-specific handler rather than the Hired Auto field set.
+- `Non-Owned Auto Coverage` requires `Auto Territory Code*`, `Non-Owned Auto Limit*`, and `Number of Employees Covered*`. Confirmed values are `501`, `300,000`, and `10`.
+- `Employee Benefits Coverage` requires `Amount of Insurance*`, `Deductible Per Claim*`, and `Number of Employees Covered*`. Confirmed values are `25,000/75,000`, `250`, and `10`.
+- `Liquor Liability Coverage` requires `Liquor Classification*`, `Liquor Occurrence Limit*`, `Liquor Gross Sales*`, `Liquor Liability "A" Rate*`, and `Liquor Aggregate Limit*`. Confirmed values are `58168-Temporary Licensees`, `100,000`, `999999`, `10.00`, and `100,000`.
+- `General Liability Enhancement Endorsement`, `Contractual Liability Exclusion`, `Exclude Employees as Additional Insureds`, `Hazards in Connection with Designated Premises`, and `General Liability Manual Coverages` do not create the optional-coverages tree node in the tested scenarios; continue directly to rating.
+- Combined Hired Auto and Non-Owned Auto renders two `Auto Territory Code*` controls. Use the confirmed Non-Owned Auto `osviewid` ending `17672246` instead of a positional locator.
+- Live focused validation passed for every optional GL case `GL_023` through `GL_035`, including combined Hired/Non-Owned and Hospitality packages.
+
+**Rating Basis and Classification screen:**
+- `Territory - General Liability*` — combobox, osviewid `PAI_338715_OT_2184605_OI_1_BI_1358146_CI_17665346`. **Present in original Java source but not migrated to Python.** Currently the flow passes because the field auto-populates from ZIP/state data, but it should be explicitly set. Data key: `Territory` (from Excel: `"501"`).
+- `Products Incl` — read-only textbox, auto-populated `N`/`Y`. No action needed.
+- `GL Class` Add/delete buttons — allow adding multiple classification rows for multi-class scenarios.
+
+**Left-tree sections with no page objects:** Additional Insured/Interests, Additional Insured, Reinsurance, Inspection, Commission, Manuscripts.
+
 ## Known Interaction Patterns
 
 ### ExtJS Dropdowns
@@ -51,6 +103,108 @@ Record failed approaches here. Do not retry them unchanged.
 ## Confirmed Pages And Flows
 
 Add confirmed behavior below as exploration progresses.
+
+### 2026-06-07 - Cyber Reinsurance And Inspection Discovery
+
+**Context**
+- LOB: Cyber
+- Probe: `tools/probe_cyber_elements.py`
+- Scenario: `test_cyber_reinsurance_inspection_discovery`
+
+**Confirmed Behavior**
+- Reinsurance list has one Add button. Add creates a `New Reinsurance` tree node; selecting it reveals Gross Premium (Risk), Gross Limit, and required Type.
+- Reinsurance Type options are `Facultative` and `Treaty`.
+- Inspection list has two distinct initial Add buttons plus `order inspection`.
+- The first Inspection Add opens the request form: Inspection Type, Request Date, Inspection Company, Inspection Date, Inspector, Inspection Completed, Request Details, and Inspector Comments.
+- The second Inspection Add opens an assignment row: Inspection Company, Inspector, and Inspection Comments.
+- Inspection Type options are `Comprehensive`, `Liability`, and `Property`; Inspection Completed options are `Yes` and `No`.
+- No save, order inspection, rating, request issue, or bind action was executed.
+
+**Stable Selectors / Methods**
+- Reinsurance and Inspection tree nodes use exact link names.
+- Reinsurance detail fields have confirmed `osviewid` fallbacks ending `14148146`, `14084946`, and `8548805`.
+- Inspection request fields have confirmed fallbacks ending `11648776`, `11649276`, `11648476`, `11664376`, `11648576`, `11649376`, `11648976`, and `11648676`.
+- Inspection assignment fields have confirmed fallbacks ending `11522746`, `11522946`, and `11521346`.
+- The two initial Inspection Add buttons have no distinct accessible names before rows exist. `CyberInspectionPage` verifies there are exactly two and maps index 0 to request, index 1 to assignment.
+
+**Required Waits**
+- Wait for OneShield GatewayServlet responses and application masks after tree navigation and Add actions.
+
+**Known Failed Approaches**
+- Attempt: Find the Add buttons using lowercase exact accessible name `add`.
+- Symptom: The visible controls were captured, but Playwright returned zero exact matches.
+- Replacement: Use exact rendered name `Add`.
+- Attempt: Expect Reinsurance fields immediately after Add.
+- Symptom: Add only created a `New Reinsurance` tree child.
+- Replacement: Open the new child node before locating detail fields.
+
+**Open Questions**
+- Inspector option values depend on selecting an Inspection Company and were not expanded because the discovery did not save or order an inspection.
+
+### 2026-06-07 - Cyber Policy Information Element Discovery
+
+**Context**
+- LOB: Cyber
+- Probe: `tools/probe_cyber_elements.py`
+- Test data: `testdata/static/cyber/CyberData.json`, `TC_ID_0001`
+
+**Confirmed Behavior**
+- Two fresh live quotes confirmed previously unmapped optional text inputs: `Business Interruption` and `Cyber Extortion`.
+- The controls are always visible in the Optional Coverages section on the default Policy Information screen.
+- One-field changes across all Common Eligibility options did not reveal additional conditional controls before save or rating.
+- The probe did not rate, request issue, or bind; zero policies were bound.
+- Exact dropdown options are recorded in `reports/lob-discovery/cyber/latest.json`.
+
+**Stable Selectors / Methods**
+- Use `get_by_role("textbox", name="Business Interruption")` with `osviewid` ending `17480548` as fallback.
+- Use `get_by_role("textbox", name="Cyber Extortion")` with `osviewid` ending `17480648` as fallback.
+- Treat both fields as optional and fill only when the corresponding JSON value is non-empty.
+
+**Required Waits**
+- Wait for the application masks after eligibility dropdown changes that emit `FieldProcessorServlet`.
+
+**Known Failed Approaches**
+- Attempt: Always click `#employeePortal` after navigating to the direct OneShield URL.
+- Symptom: Timeout because the direct URL can already display the login form.
+- Replacement: Click the splash control only when visible.
+- Attempt: Collect options from all visible `.x-boundlist-item` nodes.
+- Symptom: Aggregate Limit initially returned stale Billing Method options.
+- Replacement: Scope option collection to the last visible `.x-boundlist` and confirm in a second quote.
+- Attempt: Use only the accessible combobox name for `Expiration Date*`.
+- Symptom: The control was visible in the DOM inventory but the pytest browser did not expose that role/name consistently.
+- Replacement: Add the confirmed `osviewid` fallback ending `17477248`; use the same pattern for Effective Date.
+
+**Open Questions**
+- Save/rating-dependent UW behavior for adverse eligibility choices was intentionally not explored in this non-binding inventory.
+
+### 2026-06-07 - Cyber Workflow Migration For TC_ID_0001
+
+**Context**
+- LOB: Cyber
+- Scenario: `ui/tests/test_cyber.py::test_cyber_workflow[TC_ID_0001]`
+- Legacy sources: `CyberPolicyInformation.java` and `Cyber.xlsx`
+
+**Confirmed Behavior**
+- Live validation passed end to end for `TC_ID_0001`.
+- The flow produced active policy `CY10276980457-00` with total policy premium `$ 2,576.08`.
+- Static validation passes: the selected Excel row converts to JSON, Cyber Python modules compile, and pytest-bdd collects exactly one scenario.
+- The destination flow uses the shared quote registration, delivery preferences, billing plan, verify billing, and policy summary components.
+- ZIP `02766` and address `230 Old Taunton Ave` require `City=Norton` in the current customer-page schema; the legacy workbook has no City column.
+- The legacy effective date `01/30/2024` is preserved as `SourceEffectiveDate`; omitting `EffectiveDate` lets the shared quote-registration page use tomorrow's date for a runnable quote.
+- The live policy summary reports `Massachusetts`, payment method `Bill Me`, and payment plan `Pay In Full`.
+
+**Selector Status**
+- Accessible Cyber field locator names and the legacy field `osviewid` fallbacks completed the live flow.
+- Use the accessible role buttons for `>>> rate quote` and `>>> request issue`.
+- Do not combine those role buttons with the legacy action `osviewid` using `Locator.or_`; the `osviewid` is on a child span, so the combined locator resolves both the button and its child.
+
+**Known Failed Approaches**
+- Attempt: Run the traced Cyber scenario against `https://inforcedev.oneshield.com/oneshield/`, both in the default sandbox and with approved external execution.
+- Symptom: Navigation failed before login with `net::ERR_NAME_NOT_RESOLVED`.
+- Replacement: Connect through the AWS/VPN environment, then rerun the targeted traced scenario.
+- Attempt: Combine the Rate Quote accessible button and its child-span `osviewid` with `Locator.or_`.
+- Symptom: Playwright strict-mode violation because the locator resolved two nodes.
+- Replacement: Use `get_by_role("button", name=">>> rate quote")` directly; the same rule applies to Request Issue.
 
 ### 2026-05-26 - Auto Policy Journey Stops At UW Referral
 

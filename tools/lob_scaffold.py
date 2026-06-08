@@ -496,7 +496,7 @@ class AppNavigator:
                     self._click_next()
                     return True
 
-            # Request Issue button (Cyber pattern)
+            # Request Issue button
             issue = self.page.get_by_role("button").filter(
                 has_text=re.compile(r"request issue", re.I)
             )
@@ -560,10 +560,10 @@ class LOBCodeGenerator:
 
     def _reference_files(self) -> tuple[str, str]:
         """Load short snippets from existing LOBs as reference."""
-        cyber_steps = ""
+        workflow_steps = ""
         homeowner_page = ""
         try:
-            cyber_steps = (_ROOT / "ui/steps/cyber_steps.py").read_text()[:900]
+            workflow_steps = (_ROOT / "ui/steps/homeowner_steps.py").read_text()[:900]
         except Exception:
             pass
         try:
@@ -572,10 +572,10 @@ class LOBCodeGenerator:
             ).read_text()[:1_200]
         except Exception:
             pass
-        return cyber_steps, homeowner_page
+        return workflow_steps, homeowner_page
 
     def _build_prompt(self) -> str:
-        cyber_steps, homeowner_page = self._reference_files()
+        workflow_steps, homeowner_page = self._reference_files()
         flow = self._flow_summary()
         lob_class = "".join(w.title() for w in self.lob_slug.split())
 
@@ -630,9 +630,9 @@ class LOBCodeGenerator:
 - Uses `@scenario` decorator from pytest_bdd
 - Marker: `@pytest.mark.{self.lob_slug}`
 
-## REFERENCE: existing step file (cyber_steps.py)
+## REFERENCE: existing step file (homeowner_steps.py)
 ```python
-{cyber_steps}
+{workflow_steps}
 ```
 
 ## REFERENCE: existing page object (homeowner_quote_summary_page.py)

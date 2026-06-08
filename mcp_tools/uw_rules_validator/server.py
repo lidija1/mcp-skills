@@ -130,7 +130,7 @@ def list_uw_rules(lob: str = "") -> str:
     or boundary (edge-case precision test).
 
     Args:
-        lob: Optional filter — "auto", "cyber", or "homeowner".
+        lob: Optional filter — "auto" or "homeowner".
              Omit to see all LOBs.
 
     Returns:
@@ -145,9 +145,9 @@ def list_uw_rules(lob: str = "") -> str:
             continue
         lob_groups.setdefault(rule["lob"], []).append(rule)
 
-    lob_display = {"auto": "Personal Auto", "cyber": "Cyber", "homeowner": "Homeowner"}
+    lob_display = {"auto": "Personal Auto", "homeowner": "Homeowner"}
 
-    for lob_key in ["auto", "cyber", "homeowner"]:
+    for lob_key in ["auto", "homeowner"]:
         rules = lob_groups.get(lob_key, [])
         if not rules:
             continue
@@ -202,7 +202,7 @@ def run_uw_audit(lob: str) -> str:
       🔴 FLOW_ERROR        — Browser flow failed (critical)
 
     Args:
-        lob: "auto", "cyber", or "homeowner"
+        lob: "auto" or "homeowner"
 
     Returns:
         Markdown audit report — verdict, summary, all findings, pass table.
@@ -214,7 +214,7 @@ def run_uw_audit(lob: str) -> str:
     cases = CASES_BY_LOB.get(lob, [])
 
     if not cases:
-        return f"**ERROR** — No rule cases registered for LOB '{lob}'. Valid: auto, cyber, homeowner"
+        return f"**ERROR** — No rule cases registered for LOB '{lob}'. Valid: auto, homeowner"
 
     if len(cases) > MAX_AUDIT_CASES:
         return (
@@ -236,8 +236,8 @@ def run_rule_cases(lob: str, rule_id: str) -> str:
     This is faster than run_uw_audit() when you want to test one rule in isolation.
 
     Args:
-        lob:     "auto", "cyber", or "homeowner"
-        rule_id: e.g. "AUTO_SR22", "AUTO_TRIPLE_RISK", "CYBER_HIGH_RISK"
+        lob:     "auto" or "homeowner"
+        rule_id: e.g. "AUTO_SR22", "AUTO_TRIPLE_RISK", "HO_PRIOR_LOSSES"
 
     Returns:
         Markdown audit report scoped to the specified rule.
@@ -247,7 +247,7 @@ def run_rule_cases(lob: str, rule_id: str) -> str:
         run_rule_cases("auto", "AUTO_TRIPLE_RISK")
         run_rule_cases("auto", "AUTO_UNDER25")
         run_rule_cases("auto", "AUTO_CLEAN_BASELINE")
-        run_rule_cases("cyber", "CYBER_HIGH_RISK")
+        run_rule_cases("homeowner", "HO_PRIOR_LOSSES")
         run_rule_cases("homeowner", "HO_ALL_FLAGS")
     """
     lob = lob.lower().strip()
@@ -285,7 +285,7 @@ def test_custom_boundary(
     - Regression-test a fixed rule after a system change
 
     Args:
-        lob: "auto", "cyber", or "homeowner"
+        lob: "auto" or "homeowner"
         description: Natural-language edge-case persona, e.g.
             "SR-22 driver aged 24, revoked licence, leased vehicle, business use"
             "Healthcare business, 50 employees, no training, past phishing attack"
@@ -372,7 +372,7 @@ def run_full_audit() -> str:
     """
     Run every pre-defined rule case across all LOBs and produce a combined audit report.
 
-    This is the most comprehensive validation — it sweeps Auto, Cyber, and Homeowner
+    This is the most comprehensive validation — it sweeps Auto and Homeowner
     in a single call and surfaces any inconsistencies across the entire rule engine.
 
     ⚠️  This will take a long time. Expect 15-45 minutes depending on the number

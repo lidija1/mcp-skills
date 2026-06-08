@@ -188,52 +188,6 @@ def noop_billing_plan(): pass
 def noop_bind(): pass
 
 
-# ── Cyber Quote Details ────────────────────────────────────────────────────────
-
-@step("I set cyber billing method")
-def noop_cyber_billing(): pass
-
-
-@step("I enter business start date")
-def noop_biz_start(): pass
-
-
-@step("I enter total employees")
-def noop_employees(): pass
-
-
-@step("I select nature of business")
-def noop_nature(): pass
-
-
-@step("I enter percentage of online sales")
-def noop_online_sales(): pass
-
-
-@step("I select aggregate limit")
-def noop_agg_limit(): pass
-
-
-@step("I select per claim limit")
-def noop_per_claim(): pass
-
-
-@step("I select per claim deductible")
-def noop_deductible(): pass
-
-
-@step("I answer cyber training question")
-def noop_cyber_training(): pass
-
-
-@step("I answer prior cyber situations question")
-def noop_prior_situations(): pass
-
-
-@step("I answer cyber regulations question")
-def noop_cyber_regs(): pass
-
-
 # ── HO Quote Summary ───────────────────────────────────────────────────────────
 
 @step("I select program type")

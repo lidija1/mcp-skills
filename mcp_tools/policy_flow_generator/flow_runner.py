@@ -28,12 +28,10 @@ load_dotenv(_PROJECT_ROOT / "..env")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 from mcp_tools.policy_flow_generator.runners.auto_runner import run_auto_flow  # noqa: E402
-from mcp_tools.policy_flow_generator.runners.cyber_runner import run_cyber_flow  # noqa: E402
 from mcp_tools.policy_flow_generator.runners.homeowner_runner import run_homeowner_flow  # noqa: E402
 
 _LOB_RUNNERS = {
     "auto": run_auto_flow,
-    "cyber": run_cyber_flow,
     "homeowner": run_homeowner_flow,
 }
 _VALID_LOBS = ", ".join(_LOB_RUNNERS)

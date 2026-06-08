@@ -5,7 +5,7 @@ Each entry in RULE_CASES defines:
   - case_id          : unique identifier
   - rule_id          : groups cases under one rule (for validate_rule filtering)
   - rule_name        : human-readable rule label
-  - lob              : "auto" | "cyber" | "homeowner"
+  - lob              : "auto" | "homeowner"
   - case_type        : "positive" (should trigger UW) | "negative" (should bind) | "boundary"
   - severity         : "critical" | "high" | "warning"
   - description      : what this case is testing
@@ -65,17 +65,6 @@ _AUTO_BASE = {
     "PaymentPlan": "Pay In Full",
 }
 
-_CYBER_BASE = {
-    "CustomerType": "Individual",
-    "ZIP": "01101",
-    "City": "Springfield",
-    "Producer": "Janis Irey",
-    "Program": "Cyber",
-    "EffectiveDate": _EFF_DATE.strftime("%m/%d/%Y"),
-    "BillingMethod": "Direct Billed",
-    "PaymentPlan": "Pay In Full",
-}
-
 _HOMEOWNER_BASE = {
     "CustomerType": "Individual",
     "ZIP": "01101",
@@ -104,24 +93,6 @@ def _auto(case_id, rule_id, rule_name, case_type, severity, description,
         "rule_id": rule_id,
         "rule_name": rule_name,
         "lob": "auto",
-        "case_type": case_type,
-        "severity": severity,
-        "description": description,
-        "persona": persona,
-        "expected_outcome": expected_outcome,
-        "expected_conditions": expected_conditions,
-        "min_conditions": min_conditions,
-    }
-
-
-def _cyber(case_id, rule_id, rule_name, case_type, severity, description,
-           expected_outcome, expected_conditions, min_conditions=None, **fields):
-    persona = {**_CYBER_BASE, "TC_ID": case_id, **fields}
-    return {
-        "case_id": case_id,
-        "rule_id": rule_id,
-        "rule_name": rule_name,
-        "lob": "cyber",
         "case_type": case_type,
         "severity": severity,
         "description": description,
@@ -479,81 +450,6 @@ RULE_CASES = [
         Gender="Male", MaritalStatus="Married", EmploymentCategory="Employed",
         SR22="No", LicenseStatus="Active License",
         VehicleUse="Commute", Ownership="Owned", PolicyCoverage="Gold",
-    ),
-
-    # ===========================================================================
-    # CYBER RULE CASES
-    # ===========================================================================
-
-    _cyber(
-        case_id="CY_UW_001",
-        rule_id="CYBER_HIGH_RISK",
-        rule_name="No Training + Past Incident (Cyber High-Risk)",
-        case_type="positive",
-        severity="high",
-        description=(
-            "No employee cyber training, past ransomware attack, no regulations — "
-            "maximum cyber risk profile. Expect UW referral."
-        ),
-        expected_outcome="uw_referral",
-        expected_conditions=[],   # Exact condition text not confirmed for Cyber
-        min_conditions=None,
-        FirstName="Steve", LastName="Ramos", DOB="03/14/1980",
-        PhoneNum="413-555-3001", Email="sramos_{timestamp}@uwtest.com",
-        Address="18 Commerce Blvd",
-        BusinessStartDate="2022", TotalEmployees="45",
-        NatureOfBusiness="Technology", PctOnlineSales="85",
-        AggregateLimit="2,000,000", PerClaimLimit="2,000,000",
-        PerClaimDeductible="5,000",
-        CyberTraining="No", SituationsLast3Years="Ransomware Attack",
-        CyberRegulations="No",
-    ),
-
-    _cyber(
-        case_id="CY_UW_002",
-        rule_id="CYBER_HIGH_RISK",
-        rule_name="No Training + Past Incident (Cyber High-Risk)",
-        case_type="positive",
-        severity="high",
-        description=(
-            "Past data breach, no training, no regulations — second high-risk variant."
-        ),
-        expected_outcome="uw_referral",
-        expected_conditions=[],
-        min_conditions=None,
-        FirstName="Dana", LastName="Fischer", DOB="08/22/1978",
-        PhoneNum="413-555-3002", Email="dfischer_{timestamp}@uwtest.com",
-        Address="200 Retail Row",
-        BusinessStartDate="2020", TotalEmployees="30",
-        NatureOfBusiness="Retail", PctOnlineSales="75",
-        AggregateLimit="1,000,000", PerClaimLimit="1,000,000",
-        PerClaimDeductible="2,500",
-        CyberTraining="No", SituationsLast3Years="Data Breach",
-        CyberRegulations="No",
-    ),
-
-    _cyber(
-        case_id="CY_NEGATIVE_CLEAN",
-        rule_id="CYBER_CLEAN_BASELINE",
-        rule_name="Full Compliance — Low Risk (Cyber Clean)",
-        case_type="negative",
-        severity="high",
-        description=(
-            "Established office, full training, no incidents, compliant with regulations. "
-            "Should bind without UW referral."
-        ),
-        expected_outcome="policy_bound",
-        expected_conditions=[],
-        min_conditions=None,
-        FirstName="James", LastName="Smith", DOB="05/15/1985",
-        PhoneNum="413-555-3010", Email="jsmith_{timestamp}@uwtest.com",
-        Address="123 Main St",
-        BusinessStartDate="2010", TotalEmployees="25",
-        NatureOfBusiness="Office", PctOnlineSales="20",
-        AggregateLimit="1,000,000", PerClaimLimit="1,000,000",
-        PerClaimDeductible="500",
-        CyberTraining="Yes", SituationsLast3Years="None",
-        CyberRegulations="Yes",
     ),
 
     # ===========================================================================

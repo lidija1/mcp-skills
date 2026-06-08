@@ -40,13 +40,6 @@ LOB_ALIASES = {
     "ho": "homeowner",
     "home": "homeowner",
     "homeowner": "homeowner",
-    "cyber": "cyber",
-    "gl": "general_liability",
-    "general liability": "general_liability",
-    "general_liability": "general_liability",
-    "wc": "wc",
-    "workers comp": "wc",
-    "workers compensation": "wc",
 }
 
 LOB_FILES = {
@@ -59,16 +52,6 @@ LOB_FILES = {
         "testdata/static/homeowner/HomeUWData.json",
         "testdata/static/homeowner/HomeownerUWRulesData.json",
         "testdata/static/homeowner/HomeownerDropdownOptionsData.json",
-    ],
-    "cyber": [
-        "testdata/static/cyber/CyberData.json",
-    ],
-    "general_liability": [
-        "testdata/static/general_liability/GeneralLiabilityData.json",
-        "testdata/static/general_liability/GeneralLiabilityDropdownOptionsData.json",
-    ],
-    "wc": [
-        "testdata/static/wc/WCData.json",
     ],
 }
 
@@ -244,7 +227,7 @@ def generate_test_case(
 
     validation_error = None
     try:
-        if normalized_lob in {"auto", "homeowner", "cyber"}:
+        if normalized_lob in {"auto", "homeowner"}:
             generated = validate_persona(normalized_lob, generated)
     except PersonaValidationError as exc:
         validation_error = exc.errors
@@ -276,9 +259,6 @@ def append_test_case(lob: str, test_case: dict[str, Any]) -> Path:
     rel_path = {
         "auto": "testdata/static/auto/AutoData.json",
         "homeowner": "testdata/static/homeowner/HomeData.json",
-        "cyber": "testdata/static/cyber/CyberData.json",
-        "general_liability": "testdata/static/general_liability/GeneralLiabilityData.json",
-        "wc": "testdata/static/wc/WCData.json",
     }.get(normalized_lob)
     if not rel_path:
         raise ValueError(f"Unsupported LOB for append: {normalized_lob}")

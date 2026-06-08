@@ -1,0 +1,22 @@
+{
+  "testCases": [
+    {
+      "TC_ID": "TC_ID_CYBER_DISCOVERY_001",
+      "TestName": "Cyber optional coverage control inventory",
+      "Description": "Verifies unmapped Policy Information controls without rating or binding.",
+      "CustomerType": "Individual",
+      "FirstName": "Cyber",
+      "LastName": "Discovery",
+      "DOB": "11/10/1992",
+      "PhoneNum": "921-549-5577",
+      "Email": "cyber_discovery_{timestamp}@cyber.com",
+      "Address": "230 Old Taunton Ave",
+      "City": "Norton",
+      "ZIP": "02766",
+      "Producer": "Janis Irey",
+      "Program": "Cyber",
+      "BusinessInterruption": "",
+      "CyberExtortion": ""
+    }
+  ]
+}

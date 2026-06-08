@@ -12,8 +12,8 @@ validates parameters before any dispatch.
 from __future__ import annotations
 from typing import Any
 
-POLICY_LOBS = ["auto", "cyber", "homeowner"]
-UW_LOBS = ["auto", "cyber", "homeowner"]
+POLICY_LOBS = ["auto", "homeowner"]
+UW_LOBS = ["auto", "homeowner"]
 
 REGISTRY: dict[str, dict] = {
     "run_quick_policy": {

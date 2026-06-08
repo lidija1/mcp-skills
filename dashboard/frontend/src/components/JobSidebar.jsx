@@ -71,6 +71,9 @@ function JobCard({ job, onSelect, isSelected }) {
         <span>{elapsed(job)}</span>
       </div>
       <div className="job-label">{cleanDisplayText(job.label)}</div>
+      {job.metadata?.environment && (
+        <div className="job-env-tag">{job.metadata.environment.toUpperCase()}</div>
+      )}
       {job.status === 'error' && job.error && (
         <div className="job-error">{job.error}</div>
       )}

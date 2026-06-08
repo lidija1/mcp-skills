@@ -122,7 +122,6 @@ Use the narrowest useful validation first:
 
 ```powershell
 pytest ui/tests/test_auto_workflow.py -v
-pytest -m cyber -v
 pytest -m homeowner -v
 pytest -m wc -v
 ```

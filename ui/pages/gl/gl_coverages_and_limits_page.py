@@ -26,6 +26,23 @@ class GeneralLiabilityCoverageAndLimitsPage(BasePage):
         self.deductible_applies = page.get_by_role("combobox", name="Deductible Applies*")
         self.coverage_save_button = page.get_by_role("button", name="save changes")
 
+        # Optional endorsement checkboxes
+        self.hired_auto_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673246_EC_1"]')
+        self.non_owned_auto_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673346_EC_1"]')
+        self.employee_benefits_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673846_EC_1"]')
+        self.liquor_liability_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673646_EC_1"]')
+        self.gl_enhancement_endorsement = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673546_EC_1"]')
+        self.gl_manual_coverages = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673746_EC_1"]')
+        self.contractual_liability_exclusion = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361946_CI_17676046_EC_1"]')
+        self.exclude_employees_additional_insureds = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361946_CI_17676146_EC_1"]')
+        self.hazards_designated_premises = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361946_CI_17675646_EC_1"]')
+
+        # Optional rating modifier textboxes
+        self.schedule_mod = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17675146"]')
+        self.judgment = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17674846"]')
+        self.commission_mod = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17675046"]')
+        self.experience_mod = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17674946"]')
+
     def coverage_and_limits_steps(self, data):
         self.open_coverage_and_limits()
         self.select_coverage_type(data)
@@ -43,6 +60,8 @@ class GeneralLiabilityCoverageAndLimitsPage(BasePage):
         self.set_general_liability_deductible(data)
         self.set_deductible_type(data)
         self.set_deductible_applies(data)
+        self.set_rating_modifiers(data)
+        self.set_optional_endorsements(data)
         self.click_coverage_save()
 
     def inventory_dropdown_options(self):
@@ -177,6 +196,39 @@ class GeneralLiabilityCoverageAndLimitsPage(BasePage):
     def set_deductible_applies(self, data):
         self.select_extjs_option(self.deductible_applies, data["DeductibleApplies"])
         self.wait_for_loader_to_disappear()
+
+    def set_optional_endorsements(self, data):
+        _ENDORSEMENTS = [
+            ("HiredAutoCoverage",                    self.hired_auto_coverage),
+            ("NonOwnedAutoCoverage",                 self.non_owned_auto_coverage),
+            ("EmployeeBenefitsCoverage",             self.employee_benefits_coverage),
+            ("LiquorLiabilityCoverage",              self.liquor_liability_coverage),
+            ("GLEnhancementEndorsement",             self.gl_enhancement_endorsement),
+            ("GLManualCoverages",                    self.gl_manual_coverages),
+            ("ContractualLiabilityExclusion",        self.contractual_liability_exclusion),
+            ("ExcludeEmployeesAsAdditionalInsureds", self.exclude_employees_additional_insureds),
+            ("HazardsDesignatedPremises",            self.hazards_designated_premises),
+        ]
+        active = [(k, loc) for k, loc in _ENDORSEMENTS if data.get(k) is True]
+        if not active:
+            return
+        for key, locator in active:
+            locator.scroll_into_view_if_needed()
+            locator.dispatch_event("click")
+            self.wait_for_loader_to_disappear()
+
+    def set_rating_modifiers(self, data):
+        _MODIFIERS = [
+            ("ScheduleMod",    self.schedule_mod),
+            ("Judgment",       self.judgment),
+            ("CommissionMod",  self.commission_mod),
+            ("ExperienceMod",  self.experience_mod),
+        ]
+        for key, locator in _MODIFIERS:
+            value = data.get(key)
+            if value is not None and str(value).strip():
+                self.smart_fill(locator, str(value))
+                self.wait_for_loader_to_disappear()
 
     def click_coverage_save(self):
         self._click_and_wait(self.coverage_save_button, wait_for_response=True)

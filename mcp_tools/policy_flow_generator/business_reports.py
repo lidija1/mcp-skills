@@ -13,11 +13,8 @@ POLICY_SUMMARY_DIR = PROJECT_ROOT / "policy_summary"
 LOB_REPORT_FILES = {
     "auto": "policy_reports_personal_auto.csv",
     "personal auto": "policy_reports_personal_auto.csv",
-    "cyber": "policy_reports_cyber.csv",
     "homeowner": "policy_reports_homeowner.csv",
     "homeowners": "policy_reports_homeowner.csv",
-    "general liability": "policy_reports_general_liability.csv",
-    "gl": "policy_reports_general_liability.csv",
 }
 
 IMPORTANT_FIELDS = [

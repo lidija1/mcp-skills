@@ -538,8 +538,13 @@ def _age_from_dob(dob: object) -> int | None:
 
 
 def _ensure_persona_type(lob: str, persona: dict, description: str = "") -> None:
-    if not isinstance(persona, dict) or persona.get("_persona_type"):
+    if not isinstance(persona, dict):
         return
+
+    # Always recompute persona type from data so AI-provided values cannot
+    # override the deterministic classifier.  The AI is instructed not to
+    # emit _persona_type, but some models (e.g. DeepSeek) still do.
+    persona.pop("_persona_type", None)
 
     text = str(description or "").lower()
     if lob == "auto":
@@ -548,13 +553,19 @@ def _ensure_persona_type(lob: str, persona: dict, description: str = "") -> None
         license_status = str(persona.get("LicenseStatus") or "")
         ownership = str(persona.get("Ownership") or "")
         vehicle_use = str(persona.get("VehicleUse") or "")
+        bad_license = license_status in {"Revoked", "Suspended"}
 
-        if sr22 and license_status in {"Revoked", "Suspended"} and age is not None and age < 25:
+        if sr22 and bad_license and age is not None and age < 25:
             persona["_persona_type"] = "triple_risk"
-        elif sr22 or license_status in {"Revoked", "Suspended"}:
+        elif sr22 and bad_license and age is not None and age >= 25:
             persona["_persona_type"] = "high_risk_driver"
+        elif sr22 and not bad_license and age is not None and age < 25:
+            # SR-22 with active license and under 25 → young_driver (not high_risk)
+            persona["_persona_type"] = "young_driver"
         elif age is not None and age < 25:
             persona["_persona_type"] = "young_driver"
+        elif sr22 or bad_license:
+            persona["_persona_type"] = "high_risk_driver"
         elif vehicle_use == "Business" or "business" in text:
             persona["_persona_type"] = "business_driver"
         elif ownership == "Leased" and _contains_any(text, "bmw", "luxury", "leased"):
@@ -580,10 +591,17 @@ def _ensure_persona_type(lob: str, persona: dict, description: str = "") -> None
 
         if refused and declined and loses:
             persona["_persona_type"] = "risk_flagged"
+        elif coastal and not high_value:
+            # Coastal takes priority over high_value when replacement < $800K
+            # and coverage is not Platinum (pure coastal signal)
+            persona["_persona_type"] = "coastal_exposure"
+        elif coastal and high_value:
+            # Both coastal and high-value signals present — use coastal when
+            # the user explicitly mentioned coastal keywords in the prompt
+            coastal_keyword = _contains_any(text, "coastal", "wind", "shore", "beach")
+            persona["_persona_type"] = "coastal_exposure" if coastal_keyword else "high_value_home"
         elif high_value:
             persona["_persona_type"] = "high_value_home"
-        elif coastal:
-            persona["_persona_type"] = "coastal_exposure"
         elif rented:
             persona["_persona_type"] = "investment_property"
         elif year_built.isdigit() and int(year_built) >= 2018:

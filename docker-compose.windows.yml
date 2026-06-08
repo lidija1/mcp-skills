@@ -1,0 +1,72 @@
+#
+# docker-compose.windows.yml — Windows Docker Desktop compatible
+#
+# Differences from docker-compose.yml:
+#   - Removes `network_mode: host` (not supported on Docker Desktop for Windows)
+#   - Builds the image locally from source instead of pulling nousresearch/hermes-agent:latest
+#   - Uses explicit port mappings with 127.0.0.1 binding (localhost-only, safe default)
+#   - Uses %USERPROFILE% Windows path for the ~/.hermes data volume
+#   - Drops --insecure flag — dashboard stores API keys, keep it off LAN
+#
+# Prerequisites:
+#   1. Clone the hermes-agent repo alongside this file (or adjust `build.context` below)
+#   2. Run `hermes setup` once on the host to initialise %USERPROFILE%\.hermes
+#
+# Usage:
+#   docker compose -f docker-compose.windows.yml up -d --build
+#
+# Dashboard: http://localhost:9119
+# For remote access use an SSH tunnel — do NOT expose 9119 directly:
+#   ssh -L 9119:localhost:9119 user@your-server
+#
+services:
+  gateway:
+    build:
+      context: .
+    image: hermes-agent
+    container_name: hermes
+    restart: unless-stopped
+    volumes:
+      - ${USERPROFILE}/.hermes:/opt/data
+    environment:
+      - HERMES_UID=10000
+      - HERMES_GID=10000
+      # Uncomment BOTH lines to enable the OpenAI-compatible API server.
+      # API_SERVER_KEY is mandatory — never leave the server open without it.
+      # - API_SERVER_HOST=0.0.0.0
+      # - API_SERVER_KEY=${API_SERVER_KEY}
+      #
+      # Microsoft Teams gateway — fill in after registering at https://dev.botframework.com/
+      # - TEAMS_CLIENT_ID=${TEAMS_CLIENT_ID}
+      # - TEAMS_CLIENT_SECRET=${TEAMS_CLIENT_SECRET}
+      # - TEAMS_TENANT_ID=${TEAMS_TENANT_ID}
+      # - TEAMS_ALLOWED_USERS=${TEAMS_ALLOWED_USERS}
+      # - TEAMS_PORT=${TEAMS_PORT:-3978}
+      #
+      # Google Chat gateway — see docs/user-guide/messaging/google_chat.md
+      # Mount the service-account JSON and set the path here:
+      # - GOOGLE_CHAT_PROJECT_ID=${GOOGLE_CHAT_PROJECT_ID}
+      # - GOOGLE_CHAT_SUBSCRIPTION_NAME=${GOOGLE_CHAT_SUBSCRIPTION_NAME}
+      # - GOOGLE_CHAT_SERVICE_ACCOUNT_JSON=/secrets/google-chat-sa.json
+      # - GOOGLE_CHAT_ALLOWED_USERS=${GOOGLE_CHAT_ALLOWED_USERS}
+      # volumes entry needed alongside the above:
+      #   - ${USERPROFILE}/.hermes/google-chat-sa.json:/secrets/google-chat-sa.json:ro
+    command: ["gateway", "run"]
+
+  dashboard:
+    image: hermes-agent
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    volumes:
+      - ${USERPROFILE}/.hermes:/opt/data
+    environment:
+      - HERMES_UID=10000
+      - HERMES_GID=10000
+    ports:
+      # Bound to 127.0.0.1 — localhost only. See SSH tunnel note above.
+      - "127.0.0.1:9119:9119"
+    # --insecure is safe here because the port is bound to 127.0.0.1 only (see ports above).
+    # Hermes refuses to bind to 0.0.0.0 without a registered auth provider, so this flag is required.
+    command: ["dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open", "--insecure"]

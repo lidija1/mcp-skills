@@ -24,6 +24,58 @@ This is the living memory for OneShield app exploration. Update it after every u
 - The GL class-description dropdown expects the full visible option text, for example `10015: Amusement Centers`, not the shorthand `: Amusement Centers`.
 - Live validation of `ui/tests/test_general_liability.py::test_general_liability_creation[TC_ID_0001]` passed end to end after those data and selector fixes.
 
+### 2026-06-07 - GL LOB Discovery (probe_gl_elements.py)
+
+**Unmapped fields confirmed by live probe — not yet in any page object:**
+
+**Policy Information screen (all screens show these in the header area):**
+- `Quote Name*` — textbox, osviewid `...CI_17661246`. Currently defaults to system value; rarely needs explicit setting.
+- `Effective Date*` / `Expiration Date*` — quote-level comboboxes; already set by `QuoteRegistrationPage`.
+- `Add` / `Search` / `Delete` buttons — for the Additional Insureds/Interests grid on the Policy Information screen.
+
+**Coverage and Limits screen — 9 optional endorsement checkboxes (none mapped):**
+- General Liability Manual Coverages — osviewid `...CI_17673746_EC_1`
+- Employee Benefits Coverage — osviewid `...CI_17673846_EC_1`
+- General Liability Enhancement Endorsement — osviewid `...CI_17673546_EC_1`
+- Hired Auto Coverage — osviewid `...CI_17673246_EC_1`
+- Non-Owned Auto Coverage — osviewid `...CI_17673346_EC_1`
+- Liquor Liability Coverage — osviewid `...CI_17673646_EC_1`
+- Contractual Liability Exclusion — osviewid `...CI_17676046_EC_1`
+- Exclude Employees as Additional Insureds — osviewid `...CI_17676146_EC_1`
+- Hazards in Connection with Designated Premises — osviewid `...CI_17675646_EC_1`
+
+**Coverage and Limits screen — 4 rating modifier textboxes (none mapped):**
+- `Schedule Mod` — osviewid `...CI_17675146`
+- `Judgment` — osviewid `...CI_17674846`
+- `Commission` — osviewid `...CI_17675046`
+- `Experience Mod` — osviewid `...CI_17674946`
+
+**Coverage and Limits screen — other:**
+- `Location Selection` input — osviewid `...CI_17660646_EC_1` — filters the screen to a specific location. Only relevant for multi-location scenarios.
+- `General Liability Coverage Type*` combobox — osviewid `...CI_17669846` — second selector that appears after the initial listbox selection; may be auto-populated from the listbox choice. Needs further investigation.
+- Coverage-level `Effective Date` / `Expiration Date` comboboxes — distinct from quote-level dates.
+
+**Conditional behavior confirmed:**
+- `Deductible Type*` and `Deductible Applies*` are hidden until `General Liability Deductible` is set to any non-default value. Both are already mapped in `GeneralLiabilityCoverageAndLimitsPage`.
+- No new fields appeared when ForeignSales was toggled from No → Yes.
+- Selecting `Hired Auto Coverage` creates the `GL Optional Coverages` tree node. Open it before rating, complete `Auto Territory Code*`, `Hired Auto Limit*`, and `Estimated Cost of Hire*`, then save.
+- `Hired Auto Premium` is read-only and `Flat Charge Indicator` is optional.
+- Confirmed runnable Hired Auto values for `GL_023` are territory `501`, limit `300,000`, and estimated cost `If Any`.
+- Other endorsements render different mandatory controls on `GL Optional Coverages`; each requires a coverage-specific handler rather than the Hired Auto field set.
+- `Non-Owned Auto Coverage` requires `Auto Territory Code*`, `Non-Owned Auto Limit*`, and `Number of Employees Covered*`. Confirmed values are `501`, `300,000`, and `10`.
+- `Employee Benefits Coverage` requires `Amount of Insurance*`, `Deductible Per Claim*`, and `Number of Employees Covered*`. Confirmed values are `25,000/75,000`, `250`, and `10`.
+- `Liquor Liability Coverage` requires `Liquor Classification*`, `Liquor Occurrence Limit*`, `Liquor Gross Sales*`, `Liquor Liability "A" Rate*`, and `Liquor Aggregate Limit*`. Confirmed values are `58168-Temporary Licensees`, `100,000`, `999999`, `10.00`, and `100,000`.
+- `General Liability Enhancement Endorsement`, `Contractual Liability Exclusion`, `Exclude Employees as Additional Insureds`, `Hazards in Connection with Designated Premises`, and `General Liability Manual Coverages` do not create the optional-coverages tree node in the tested scenarios; continue directly to rating.
+- Combined Hired Auto and Non-Owned Auto renders two `Auto Territory Code*` controls. Use the confirmed Non-Owned Auto `osviewid` ending `17672246` instead of a positional locator.
+- Live focused validation passed for every optional GL case `GL_023` through `GL_035`, including combined Hired/Non-Owned and Hospitality packages.
+
+**Rating Basis and Classification screen:**
+- `Territory - General Liability*` — combobox, osviewid `PAI_338715_OT_2184605_OI_1_BI_1358146_CI_17665346`. **Present in original Java source but not migrated to Python.** Currently the flow passes because the field auto-populates from ZIP/state data, but it should be explicitly set. Data key: `Territory` (from Excel: `"501"`).
+- `Products Incl` — read-only textbox, auto-populated `N`/`Y`. No action needed.
+- `GL Class` Add/delete buttons — allow adding multiple classification rows for multi-class scenarios.
+
+**Left-tree sections with no page objects:** Additional Insured/Interests, Additional Insured, Reinsurance, Inspection, Commission, Manuscripts.
+
 ## Known Interaction Patterns
 
 ### ExtJS Dropdowns

@@ -72,5 +72,9 @@ class PolicySummary(BasePolicySummary):
             from ui.pages.cyber.cyber_policy_summary_page import CyberPolicySummaryPage
             return CyberPolicySummaryPage(self.page)
 
+        if program_name == "general liability":
+            from ui.pages.gl.gl_policy_summary_page import GeneralLiabilityPolicySummaryPage
+            return GeneralLiabilityPolicySummaryPage(self.page)
+
         from ui.pages.auto.auto_policy_summary_page import AutoPolicySummaryPage
         return AutoPolicySummaryPage(self.page)

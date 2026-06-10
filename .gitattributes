@@ -1,0 +1,21 @@
+# Keep repository text files consistent across Windows, macOS, and Linux.
+* text=auto eol=lf
+
+# Windows command scripts require Windows-style line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Do not attempt line-ending conversion for binary files.
+*.db binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.pyc binary
+*.trace binary
+*.webp binary
+*.xls binary
+*.xlsx binary
+*.zip binary

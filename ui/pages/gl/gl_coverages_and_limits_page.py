@@ -21,6 +21,7 @@ class GeneralLiabilityCoverageAndLimitsPage(BasePage):
         self.products_and_completed_operations = page.get_by_role("combobox", name="Products & Completed")
         self.fire_damage_legal_liability = page.get_by_role("combobox", name="Fire Damage Legal Liability")
         self.medical_expense_limit = page.get_by_role("combobox", name="Medical Expense Limit - Any")
+        self.excess_attachment_point = page.get_by_role("combobox", name="GL Excess Attachment Point*")
         self.general_liability_deductible = page.get_by_role("combobox", name="General Liability Deductible")
         self.deductible_type = page.get_by_role("combobox", name="Deductible Type*")
         self.deductible_applies = page.get_by_role("combobox", name="Deductible Applies*")
@@ -79,6 +80,7 @@ class GeneralLiabilityCoverageAndLimitsPage(BasePage):
         self.set_products_and_completed_operations(data)
         self.set_fire_damage_legal_liability(data)
         self.set_medical_expense_limit(data)
+        self.set_excess_attachment_point(data)
         self.set_general_liability_deductible(data)
         self.set_deductible_type(data)
         self.set_deductible_applies(data)
@@ -205,6 +207,14 @@ class GeneralLiabilityCoverageAndLimitsPage(BasePage):
 
     def set_medical_expense_limit(self, data):
         self.select_extjs_option(self.medical_expense_limit, data["MedicalExpenseLimitAnyOnePerson"])
+        self.wait_for_loader_to_disappear()
+
+    def set_excess_attachment_point(self, data):
+        attachment_point = data.get("ExcessAttachmentPoint")
+        if not attachment_point:
+            return
+
+        self.select_extjs_option(self.excess_attachment_point, str(attachment_point))
         self.wait_for_loader_to_disappear()
 
     def set_general_liability_deductible(self, data):

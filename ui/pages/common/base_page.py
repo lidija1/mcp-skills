@@ -499,6 +499,10 @@ class BasePage:
                     )
                 else:
                     click_option()
+
+                # ExtJS combo lists can keep their overlay around after a JS click.
+                # Nudge the control closed so the next interaction does not get intercepted.
+                self.page.keyboard.press("Escape")
                 return
             except Exception as error:
                 last_error = error

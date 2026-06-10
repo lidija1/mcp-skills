@@ -395,6 +395,7 @@
       "DefenseTreatment": "Inside",
       "ForeignSales": "No",
       "LimitVentilationRequired": "No",
+      "ExcessAttachmentPoint": "1,000,000",
       "EachOccurrenceLimit": "2,000,000",
       "GeneralAggregateLimit": "3,000,000",
       "PersonalAndAdvertisingInjuryLimit": "2,000,000",

@@ -46,7 +46,7 @@ const MARITAL_STATUSES = ['Single', 'Married', 'Divorced', 'Widowed']
 const GENDERS = ['Male', 'Female']
 
 const DIRECT_ASSERT_TYPES = [
-  {value: 'premium', label: 'Total premium (Rating Detail)'},
+  {value: 'premium', label: 'Total premium (Summary page)'},
   {value: 'total_cost', label: 'Total cost (Verify Billing)'},
 ]
 

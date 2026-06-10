@@ -27,21 +27,43 @@ class GeneralLiabilityCoverageAndLimitsPage(BasePage):
         self.coverage_save_button = page.get_by_role("button", name="save changes")
 
         # Optional endorsement checkboxes
-        self.hired_auto_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673246_EC_1"]')
-        self.non_owned_auto_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673346_EC_1"]')
-        self.employee_benefits_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673846_EC_1"]')
-        self.liquor_liability_coverage = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673646_EC_1"]')
-        self.gl_enhancement_endorsement = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673546_EC_1"]')
-        self.gl_manual_coverages = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361546_CI_17673746_EC_1"]')
-        self.contractual_liability_exclusion = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361946_CI_17676046_EC_1"]')
-        self.exclude_employees_additional_insureds = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361946_CI_17676146_EC_1"]')
-        self.hazards_designated_premises = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361946_CI_17675646_EC_1"]')
+        self.hired_auto_coverage = page.get_by_role(
+            "checkbox", name="Hired Auto Coverage", exact=True
+        )
+        self.non_owned_auto_coverage = page.get_by_role(
+            "checkbox", name="Non-Owned Auto Coverage", exact=True
+        )
+        self.employee_benefits_coverage = page.get_by_role(
+            "checkbox", name="Employee Benefits Coverage", exact=True
+        )
+        self.liquor_liability_coverage = page.get_by_role(
+            "checkbox", name="Liquor Liability Coverage", exact=True
+        )
+        self.gl_enhancement_endorsement = page.get_by_role(
+            "checkbox", name="General Liability Enhancement Endorsement", exact=True
+        )
+        self.gl_manual_coverages = page.get_by_role(
+            "checkbox", name="General Liability Manual Coverages", exact=True
+        )
+        self.contractual_liability_exclusion = page.get_by_role(
+            "checkbox", name="Contractual Liability Exclusion", exact=True
+        )
+        self.exclude_employees_additional_insureds = page.get_by_role(
+            "checkbox", name="Exclude Employees as Additional Insureds", exact=True
+        )
+        self.hazards_designated_premises = page.get_by_role(
+            "checkbox",
+            name="Hazards in Connection with Designated Premises",
+            exact=True,
+        )
 
         # Optional rating modifier textboxes
-        self.schedule_mod = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17675146"]')
-        self.judgment = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17674846"]')
-        self.commission_mod = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17675046"]')
-        self.experience_mod = page.locator('[osviewid="PAI_1418746_OT_2184505_OI_1_BI_1361746_CI_17674946"]')
+        self.schedule_mod = page.get_by_role("textbox", name="Schedule Mod", exact=True)
+        self.judgment = page.get_by_role("textbox", name="Judgment", exact=True)
+        self.commission_mod = page.get_by_role("textbox", name="Commission", exact=True)
+        self.experience_mod = page.get_by_role(
+            "textbox", name="Experience Mod", exact=True
+        )
 
     def coverage_and_limits_steps(self, data):
         self.open_coverage_and_limits()

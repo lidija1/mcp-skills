@@ -139,7 +139,12 @@ def parse_plain_english_api_assertion(prompt: str, lob: str = "auto") -> ApiAsse
             )
         )
 
-    stage = "rating-detail" if any(a.type in ("premium", "premium_factor", "base_rate") for a in assertions) else cfg.default_stage
+    if any(a.type in ("premium_factor", "base_rate") for a in assertions):
+        stage = "rating-detail"
+    elif any(a.type == "premium" for a in assertions):
+        stage = "verify-billing"
+    else:
+        stage = cfg.default_stage
     return ApiAssertionSpec(
         lob=lob,
         prompt=text,
@@ -337,6 +342,9 @@ def _parse_base_rate(lower: str) -> ApiAssertion | None:
     return None
 
 
+_PREMIUM_EVIDENCE_PATH = "flow_result.ui_data.field_values.Total Policy Premium"
+
+
 def _parse_premium_assertion(lower: str) -> ApiAssertion | None:
     if not re.search(r"\b(?:premium|price|cost)\b", lower):
         return None
@@ -351,7 +359,7 @@ def _parse_premium_assertion(lower: str) -> ApiAssertion | None:
             operator="between",
             min_value=_money(between.group(1)),
             max_value=_money(between.group(2)),
-            evidence_path="flow_result.rating_factors.business_values.calculated_total_premium",
+            evidence_path=_PREMIUM_EVIDENCE_PATH,
         )
 
     comparison = re.search(
@@ -374,7 +382,7 @@ def _parse_premium_assertion(lower: str) -> ApiAssertion | None:
             type="premium",
             operator=operator,
             expected=_money(comparison.group(2)),
-            evidence_path="flow_result.rating_factors.business_values.calculated_total_premium",
+            evidence_path=_PREMIUM_EVIDENCE_PATH,
         )
 
     amount = re.search(
@@ -392,7 +400,7 @@ def _parse_premium_assertion(lower: str) -> ApiAssertion | None:
             operator=operator,
             expected=expected,
             tolerance=tolerance if tolerance is not None else (0.02 if operator == "approx" else None),
-            evidence_path="flow_result.rating_factors.business_values.calculated_total_premium",
+            evidence_path=_PREMIUM_EVIDENCE_PATH,
         )
 
     return ApiAssertion(

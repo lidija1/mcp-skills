@@ -33,22 +33,22 @@ This is the living memory for OneShield app exploration. Update it after every u
 - `Effective Date*` / `Expiration Date*` — quote-level comboboxes; already set by `QuoteRegistrationPage`.
 - `Add` / `Search` / `Delete` buttons — for the Additional Insureds/Interests grid on the Policy Information screen.
 
-**Coverage and Limits screen — 9 optional endorsement checkboxes (none mapped):**
-- General Liability Manual Coverages — osviewid `...CI_17673746_EC_1`
-- Employee Benefits Coverage — osviewid `...CI_17673846_EC_1`
-- General Liability Enhancement Endorsement — osviewid `...CI_17673546_EC_1`
-- Hired Auto Coverage — osviewid `...CI_17673246_EC_1`
-- Non-Owned Auto Coverage — osviewid `...CI_17673346_EC_1`
-- Liquor Liability Coverage — osviewid `...CI_17673646_EC_1`
-- Contractual Liability Exclusion — osviewid `...CI_17676046_EC_1`
-- Exclude Employees as Additional Insureds — osviewid `...CI_17676146_EC_1`
-- Hazards in Connection with Designated Premises — osviewid `...CI_17675646_EC_1`
-
-**Coverage and Limits screen — 4 rating modifier textboxes (none mapped):**
-- `Schedule Mod` — osviewid `...CI_17675146`
-- `Judgment` — osviewid `...CI_17674846`
-- `Commission` — osviewid `...CI_17675046`
-- `Experience Mod` — osviewid `...CI_17674946`
+**Coverage and Limits screen — optional endorsements and rating modifiers:**
+- The nine endorsement checkboxes are mapped with exact
+  `page.get_by_role("checkbox", name=...)` locators using their accessible
+  names.
+- `Schedule Mod`, `Judgment`, `Commission`, and `Experience Mod` are mapped
+  with exact `page.get_by_role("textbox", name=...)` locators.
+- The discovered `osviewid` values are diagnostic evidence only. Do not use
+  them as primary page-object selectors while the semantic locators remain
+  unique and reliable.
+- Live validation on June 9, 2026 confirmed all 13 semantic locators resolve
+  exactly once and are visible. `GL_032` toggled Hired Auto, Non-Owned Auto,
+  and Liquor Liability through role-based checkbox locators and saved
+  Coverage and Limits. `GL_034` filled Schedule Mod through its role-based
+  textbox locator and saved. Both probes stopped before rating and binding.
+- The checkbox inputs do not carry an explicit DOM `role` attribute, but
+  Playwright correctly infers the checkbox role from `input[type=checkbox]`.
 
 **Coverage and Limits screen — other:**
 - `Location Selection` input — osviewid `...CI_17660646_EC_1` — filters the screen to a specific location. Only relevant for multi-location scenarios.

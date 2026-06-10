@@ -890,7 +890,7 @@ function HelpModal({onClose}) {
             fieldTips: [
                 'Driver profile can be preset or Custom age. Exact age is only used when Custom age is selected.',
                 'Coverage, Vehicle use, Gender, Marital status, License, SR-22, and Ownership shape the generated persona.',
-                'Assertion type can check Total premium from Rating Detail or Total cost from Verify Billing.',
+                'Assertion type can check Total premium from the Summary page or Total cost from Verify Billing.',
                 'Operator controls the comparison: approximate with tolerance, exact match, greater than, or less than.',
             ],
         },

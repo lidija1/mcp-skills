@@ -339,7 +339,7 @@ def _premium_factor_texts(flow_result: dict[str, Any]) -> list[str]:
 
 
 def _premium_value(flow_result: dict[str, Any], premium_path: str) -> float | None:
-    # Walk the dotted premium_path; fall back to legacy summary/premium fields.
+    # Walk the dotted premium_path; fall back to summary page field, then regex.
     parts = premium_path.split(".")
     node: Any = flow_result
     for part in parts:
@@ -352,6 +352,15 @@ def _premium_value(flow_result: dict[str, Any], premium_path: str) -> float | No
             return float(node)
         except (TypeError, ValueError):
             pass
+
+    # Read "Total Policy Premium" from the Verify Billing / summary page field_values.
+    field_values = flow_result.get("ui_data", {}).get("field_values", {})
+    for label, values in field_values.items():
+        if "total policy premium" in label.lower():
+            raw = values[0] if values else None
+            result = _parse_money(raw)
+            if result is not None:
+                return result
 
     summary = flow_result.get("rating_factors", {}).get("summary_premium") or flow_result.get("premium", "")
     return _parse_money(summary)

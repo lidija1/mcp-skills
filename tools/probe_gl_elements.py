@@ -39,10 +39,15 @@ OUTPUT_DIR = ROOT / "reports" / "lob-discovery" / "gl"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def load_case():
+def load_case(tc_id="GL_001"):
     data_path = ROOT / "testdata" / "static" / "gl" / "GLData.json"
     payload = json.loads(data_path.read_text(encoding="utf-8"))
-    data = deepcopy(payload["testCases"][0])
+    data = next(
+        (deepcopy(case) for case in payload["testCases"] if case["TC_ID"] == tc_id),
+        None,
+    )
+    if data is None:
+        raise ValueError(f"Unknown GL TC_ID: {tc_id}")
     ts = datetime.now().strftime("%H%M%S")
     data["Email"] = f"gl_probe_{ts}_{{timestamp}}@example.com"
     data["FirstName"] = "GL"
@@ -262,6 +267,33 @@ def snap_coverage_and_limits(page, data):
     co.set_medical_expense_limit(data)
     co.set_deductible_type(data)
     co.set_deductible_applies(data)
+    co.set_rating_modifiers(data)
+    co.set_optional_endorsements(data)
+
+    locator_validation = {}
+    for key, locator in (
+        ("HiredAutoCoverage", co.hired_auto_coverage),
+        ("NonOwnedAutoCoverage", co.non_owned_auto_coverage),
+        ("EmployeeBenefitsCoverage", co.employee_benefits_coverage),
+        ("LiquorLiabilityCoverage", co.liquor_liability_coverage),
+        ("GLEnhancementEndorsement", co.gl_enhancement_endorsement),
+        ("GLManualCoverages", co.gl_manual_coverages),
+        ("ContractualLiabilityExclusion", co.contractual_liability_exclusion),
+        ("ExcludeEmployeesAsAdditionalInsureds", co.exclude_employees_additional_insureds),
+        ("HazardsDesignatedPremises", co.hazards_designated_premises),
+        ("ScheduleMod", co.schedule_mod),
+        ("Judgment", co.judgment),
+        ("CommissionMod", co.commission_mod),
+        ("ExperienceMod", co.experience_mod),
+    ):
+        count = locator.count()
+        locator_validation[key] = {
+            "active": data.get(key) is True or bool(str(data.get(key, "")).strip()),
+            "count": count,
+            "visible": locator.is_visible() if count else False,
+            "role": locator.get_attribute("role") if count else None,
+            "type": locator.get_attribute("type") if count else None,
+        }
     co.click_coverage_save()
 
     return {
@@ -270,6 +302,7 @@ def snap_coverage_and_limits(page, data):
         "controlsForeignSalesYes": controls_foreign_sales_yes,
         "controlsAfterDeductible": controls_after_deductible,
         "dropdownOptions": dropdown_options,
+        "locatorValidation": locator_validation,
     }
 
 
@@ -368,10 +401,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--headed", action="store_true", default=True)
     parser.add_argument("--slow-mo", type=int, default=50)
+    parser.add_argument("--tc-id", default="GL_001")
+    parser.add_argument("--stop-after-coverage", action="store_true")
     args = parser.parse_args()
 
     load_dotenv(ROOT / ".env", override=True)
-    data = load_case()
+    data = load_case(args.tc_id)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as playwright:
@@ -404,11 +439,12 @@ def main():
         print("[3/5] Coverage and Limits")
         screens["CoverageAndLimits"] = snap_coverage_and_limits(page, data)
 
-        print("[4/5] Liability Location List")
-        screens["LiabilityLocationList"] = snap_liability_location_list(page, data)
+        if not args.stop_after_coverage:
+            print("[4/5] Liability Location List")
+            screens["LiabilityLocationList"] = snap_liability_location_list(page, data)
 
-        print("[5/5] Rating Basis and Classification")
-        screens["RatingBasisAndClassification"] = snap_rating(page, data)
+            print("[5/5] Rating Basis and Classification")
+            screens["RatingBasisAndClassification"] = snap_rating(page, data)
 
         timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
         result = {

@@ -79,6 +79,10 @@ Prefer selectors in this order:
 Avoid:
 
 - Hard-coded ExtJS generated IDs unless documented as stable.
+- Promoting discovery-only `osviewid` values into page objects before testing
+  `get_by_role(...)` and `get_by_label(...)`. Record `osviewid` as diagnostic
+  evidence or a documented fallback when the control has no unique semantic
+  locator.
 - Global text selectors when duplicate labels exist.
 - Clicking hidden dropdown items left behind by previous ExtJS interactions.
 - Sleeping instead of waiting for a concrete UI state.

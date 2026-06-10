@@ -22,6 +22,8 @@ This is the living memory for OneShield app exploration. Update it after every u
 - The current data file uses `Annual` audit frequency, `Massachusetts` for the liability location, `Norton` for the rendered city node, `501` class code, `10015: Amusement Centers` for the class description, and `100000` exposure.
 - Live validation showed the liability location tree renders `Massachusetts > Norton` for the current sample address, so `LiabilityCity` should be `Norton` for that scenario rather than the customer mailing city.
 - The GL class-description dropdown expects the full visible option text, for example `10015: Amusement Centers`, not the shorthand `: Amusement Centers`.
+- Liquor Liability option selection can leave a visible ExtJS boundlist overlay on screen; if the next field click times out with pointer-event interception, wait for the dropdown to close before targeting the next textbox.
+- `Excess Only Policy` renders `GL Excess Attachment Point*` on Coverage and Limits. Populate it there before saving; `Exposure *` remains a Rating Basis field and accepts up to 12 digits with an optional two-decimal fractional part.
 - Live validation of `ui/tests/test_general_liability.py::test_general_liability_creation[TC_ID_0001]` passed end to end after those data and selector fixes.
 
 ### 2026-06-07 - GL LOB Discovery (probe_gl_elements.py)

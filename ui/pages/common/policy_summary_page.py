@@ -23,7 +23,10 @@ class BasePolicySummary(BasePage):
         return self.read_summary("Status")
 
     def get_payment_method(self) -> str:
-        return self.read_summary("Payment Method")
+        try:
+            return self.read_summary("Payment Method")
+        except Exception:
+            return self.read_summary("Billing Method")
 
     def get_jurisdiction(self) -> str:
         return self.read_summary("Primary Jurisdiction")

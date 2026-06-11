@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-AssertionOperator = Literal["exists", "equals", "approx", "lt", "lte", "gt", "gte", "between", "contains"]
+AssertionOperator = Literal["exists", "equals", "approx", "lt", "lte", "gt", "gte", "between", "contains", "not_contains"]
 
 
 class ApiAssertion(BaseModel):

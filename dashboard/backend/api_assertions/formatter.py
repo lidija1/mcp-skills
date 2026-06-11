@@ -54,6 +54,7 @@ def _check_label(finding) -> str:
         "premium": "Premium",
         "coverage": "Coverage",
         "page_contains": "Page contains",
+        "page_not_contains": "Page does not contain",
         "uw_condition_contains": "UW condition contains",
         "completed": "Flow completed",
         "field_value": "Field value",
@@ -65,6 +66,7 @@ def _check_label(finding) -> str:
     }
     operator_is_implied = (
         finding.operator in ("exists", "equals")
+        or finding.type == "page_not_contains" and finding.operator == "not_contains"
         or finding.type in ("page_contains", "uw_condition_contains")
         and finding.operator == "contains"
     )

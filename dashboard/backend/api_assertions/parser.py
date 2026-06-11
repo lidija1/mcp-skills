@@ -53,7 +53,14 @@ def parse_plain_english_api_assertion(prompt: str, lob: str = "auto") -> ApiAsse
         ))
         uw_handled = True
 
-    # UW condition absent — negation word paired with a specific hint
+    # General negative UW intent, e.g. "should not trigger underwriting".
+    if not uw_handled:
+        negative_uw_assertions = _parse_negative_uw_assertions(lower, cfg)
+        if negative_uw_assertions:
+            assertions.extend(negative_uw_assertions)
+            uw_handled = True
+
+    # Specific UW condition absent - negation word paired with a configured hint.
     if not uw_handled:
         absent = _parse_uw_absent(lower, cfg)
         if absent:
@@ -174,6 +181,47 @@ def _parse_condition_count(lower: str) -> int | None:
     if re.search(r"\bzero\b\s+(?:uw\s+|underwriting\s+|referral\s+)?conditions?\b", lower):
         return 0
     return None
+
+
+def _parse_negative_uw_assertions(lower: str, cfg: LobConfig) -> list[ApiAssertion]:
+    """Return assertions for prompts that expect no UW referral to fire."""
+    if not _has_negative_uw_intent(lower):
+        return []
+
+    assertions: list[ApiAssertion] = []
+    specific_absent = _parse_uw_absent(lower, cfg)
+    if specific_absent:
+        assertions.append(specific_absent)
+
+    assertions.extend([
+        ApiAssertion(
+            type="page_not_contains",
+            operator="not_contains",
+            expected="underwriting",
+            evidence_path="flow_result.last_page",
+        ),
+        ApiAssertion(
+            type="uw_condition_count",
+            operator="equals",
+            expected=0.0,
+            evidence_path=f"flow_result.stage_ui_data.{cfg.uw_stage_key}.grids.rows",
+        ),
+    ])
+    return assertions
+
+
+def _has_negative_uw_intent(lower: str) -> bool:
+    uw_word = r"(?:uw|underwriting|referral|refer(?:ral|red)?|referred)"
+    trigger_word = r"(?:trigger|create|cause|produce|raise|hit|reach|route\s+to|land\s+on|go\s+to|fire|refer(?:red)?|be\s+referred)"
+    negation = r"(?:should(?:n't|\s+not)|must\s+not|does(?:n't|\s+not)|do(?:n't|\s+not)|will\s+not|won't|never)"
+    patterns = (
+        rf"\b{negation}\b[^.?!]{{0,80}}\b{trigger_word}\b[^.?!]{{0,80}}\b{uw_word}\b",
+        rf"\b{negation}\b[^.?!]{{0,80}}\b{uw_word}\b",
+        rf"\b(?:not|never|without|absent)\b[^.?!]{{0,40}}\b{uw_word}\b",
+        r"\b(?:no|zero)\s+(?:uw\s+|underwriting\s+|referral\s+)?(?:referrals?|issues?|rows?|conditions?)\b",
+        rf"\b{uw_word}\b[^.?!]{{0,80}}\b{negation}\b",
+    )
+    return any(re.search(pattern, lower) for pattern in patterns)
 
 
 def _parse_uw_absent(lower: str, cfg: LobConfig) -> ApiAssertion | None:

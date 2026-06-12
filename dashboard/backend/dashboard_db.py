@@ -9,16 +9,23 @@ import time
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
+import re
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_DB = Path("/data/dashboard.db")
+_BACKEND_DIR = Path(__file__).resolve().parent
+_DEFAULT_DB = _BACKEND_DIR / "data" / "dashboard.db"
 
 
 def _resolve_db_path() -> Path:
     configured = os.environ.get("DASHBOARD_DB_PATH")
     if configured:
-        return Path(configured)
+        path = Path(configured)
+        if path.is_absolute():
+            return path
+        if path.parts[:2] == ("dashboard", "backend"):
+            return _PROJECT_ROOT / path
+        return _BACKEND_DIR / path
     return _DEFAULT_DB
 
 
@@ -142,6 +149,181 @@ def init_db() -> None:
         _ensure_column(conn, "assertion_results", "flow_result_json", "TEXT NOT NULL DEFAULT '{}'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assertion_results_created_at ON assertion_results(created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assertion_results_created_by ON assertion_results(created_by)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_session_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_updated ON chat_sessions(user_id, updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created ON chat_messages(chat_session_id, created_at)")
+
+
+def _chat_title_from_message(message: str, max_chars: int = 56) -> str:
+    text = re.sub(r"\s+", " ", (message or "").strip())
+    text = re.sub(r"^[/#>\-\s]+", "", text).strip()
+    if not text:
+        return "New chat"
+    if len(text) <= max_chars:
+        return text
+    shortened = text[:max_chars].rsplit(" ", 1)[0].strip()
+    return (shortened or text[:max_chars]).rstrip(".,;:") + "..."
+
+
+def create_chat_session(user_id: int, title: str | None = None, first_message: str = "") -> dict[str, Any]:
+    init_db()
+    now = time.time()
+    clean_title = (title or "").strip() or _chat_title_from_message(first_message)
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO chat_sessions (user_id, title, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, clean_title, now, now),
+        )
+        row = conn.execute("SELECT * FROM chat_sessions WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _row_to_chat_session(row)
+
+
+def list_chat_sessions(user_id: int, limit: int = 100) -> list[dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT chat_sessions.*, COUNT(chat_messages.id) AS message_count
+            FROM chat_sessions
+            LEFT JOIN chat_messages ON chat_messages.chat_session_id = chat_sessions.id
+            WHERE chat_sessions.user_id = ?
+            GROUP BY chat_sessions.id
+            HAVING COUNT(chat_messages.id) > 0
+            ORDER BY chat_sessions.updated_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+    return [_row_to_chat_session(row) for row in rows]
+
+
+def get_chat_session(session_id: int, user_id: int) -> dict[str, Any] | None:
+    init_db()
+    with connect() as conn:
+        session_row = conn.execute(
+            "SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?",
+            (session_id, user_id),
+        ).fetchone()
+        if not session_row:
+            return None
+        message_rows = conn.execute(
+            """
+            SELECT * FROM chat_messages
+            WHERE chat_session_id = ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (session_id,),
+        ).fetchall()
+    session = _row_to_chat_session(session_row)
+    session["messages"] = [_row_to_chat_message(row) for row in message_rows]
+    return session
+
+
+def delete_chat_session(session_id: int, user_id: int) -> bool:
+    init_db()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?",
+            (session_id, user_id),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
+    return True
+
+
+def add_chat_message(session_id: int, user_id: int, role: str, content: str) -> dict[str, Any] | None:
+    init_db()
+    role = (role or "").strip().lower()
+    content = (content or "").strip()
+    if role not in {"user", "assistant"} or not content:
+        return None
+
+    now = time.time()
+    with connect() as conn:
+        session = conn.execute(
+            "SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?",
+            (session_id, user_id),
+        ).fetchone()
+        if not session:
+            return None
+        if role == "user" and (session["title"] or "").strip().lower() == "new chat":
+            conn.execute(
+                "UPDATE chat_sessions SET title = ? WHERE id = ?",
+                (_chat_title_from_message(content), session_id),
+            )
+        cur = conn.execute(
+            """
+            INSERT INTO chat_messages (chat_session_id, role, content, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, role, content, now),
+        )
+        conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", (now, session_id))
+        row = conn.execute("SELECT * FROM chat_messages WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _row_to_chat_message(row)
+
+
+def ensure_chat_session(user_id: int, session_id: int | None = None, first_message: str = "") -> dict[str, Any] | None:
+    if session_id:
+        existing = get_chat_session(session_id, user_id)
+        if existing:
+            return {k: v for k, v in existing.items() if k != "messages"}
+        return None
+    return create_chat_session(user_id=user_id, first_message=first_message)
+
+
+def _row_to_chat_session(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    data = dict(row)
+    return {
+        "id": data["id"],
+        "user_id": data["user_id"],
+        "title": data["title"],
+        "created_at": data["created_at"],
+        "updated_at": data["updated_at"],
+        "message_count": data.get("message_count", 0),
+    }
+
+
+def _row_to_chat_message(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    data = dict(row)
+    return {
+        "id": data["id"],
+        "chat_session_id": data["chat_session_id"],
+        "role": data["role"],
+        "content": data["content"],
+        "created_at": data["created_at"],
+    }
 
 
 def save_suite(

@@ -118,16 +118,24 @@ Port 5173 is in use, trying another one...
 [2m9:56:06 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
 [2m11:22:02 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
 [2m11:22:02 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ApiAssertionsPanel.jsx, /src/index.css[22m
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         [2m11:48:36 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/JobsPanel.jsx, /src/index.css[22m
-[2m11:48:36 AM[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/components/JobsPanel.jsx[22m Could not Fast Refresh ("rerunJob" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m11:48:36 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
-[2m12:00:39 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
-[2m12:01:04 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ReportModal.jsx, /src/index.css[22m
-[2m12:01:05 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ReportModal.jsx, /src/index.css[22m
-[2m12:01:57 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
-[2m12:02:40 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
-[2m12:06:00 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/JobsPanel.jsx, /src/index.css[22m
-[2m12:06:01 PM[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/components/JobsPanel.jsx[22m Could not Fast Refresh ("rerunJob" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m11:45:39 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css, /src/components/PolicyPanel.jsx, /src/components/JobsPanel.jsx, /src/components/RegisterPage.jsx, /src/components/LoginPage.jsx, /src/components/ApiAssertionsPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m11:46:32 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css, /src/components/PolicyPanel.jsx, /src/components/JobsPanel.jsx, /src/components/RegisterPage.jsx, /src/components/LoginPage.jsx, /src/components/ApiAssertionsPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m11:46:44 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:46:55 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:47:04 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:47:20 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:06 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:13 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:18 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:24 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:39 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:48 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:49:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:49:35 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:50:05 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m11:50:14 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m11:52:09 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+ents/JobsPanel.jsx[22m Could not Fast Refresh ("rerunJob" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
 [2m12:06:01 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
 [2m12:06:25 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/JobsPanel.jsx, /src/index.css[22m
 [2m12:06:25 PM[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/components/JobsPanel.jsx[22m Could not Fast Refresh ("rerunJob" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
@@ -232,3 +240,24 @@ Port 5173 is in use, trying another one...
 [2m11:22:02 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
 [2m11:22:02 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ApiAssertionsPanel.jsx, /src/index.css[22m
 [2m11:22:02 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m11:45:39 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css, /src/components/LoginPage.jsx, /src/components/RegisterPage.jsx, /src/components/JobsPanel.jsx, /src/components/PolicyPanel.jsx, /src/components/ApiAssertionsPanel.jsx, /src/components/ChatPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m11:45:39 AM[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/components/JobsPanel.jsx[22m Could not Fast Refresh ("rerunJob" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m11:45:39 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m11:46:32 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css, /src/components/LoginPage.jsx, /src/components/RegisterPage.jsx, /src/components/JobsPanel.jsx, /src/components/PolicyPanel.jsx, /src/components/ApiAssertionsPanel.jsx, /src/components/ChatPanel.jsx, /src/components/ReportModal.jsx[22m
+[2m11:46:32 AM[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/components/JobsPanel.jsx[22m Could not Fast Refresh ("rerunJob" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m11:46:32 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx, /src/index.css[22m
+[2m11:46:44 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:46:55 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:47:04 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:47:20 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:06 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:13 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:18 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:24 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:39 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:48:48 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:49:26 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:49:35 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m
+[2m11:50:05 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m11:50:14 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m11:52:09 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.jsx, /src/index.css[22m

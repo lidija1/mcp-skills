@@ -122,20 +122,26 @@ runCompare: (description_a, description_b, relations, label_a = '', label_b = ''
 
   // ── Chat ──────────────────────────────────────────────────────────────
   chatGreeting: () => get('/api/chat/greeting'),
-  chat: (message, confirmedTool = null, confirmedParams = null, history = []) =>
+  listChatSessions: () => get('/api/chat/sessions'),
+  createChatSession: (title = null) => post('/api/chat/sessions', { title }),
+  getChatSession: id => get(`/api/chat/sessions/${id}`),
+  deleteChatSession: id => del(`/api/chat/sessions/${id}`),
+  chat: (message, confirmedTool = null, confirmedParams = null, history = [], chatSessionId = null) =>
     post('/api/chat/message', {
       message,
       confirmed_tool: confirmedTool,
       confirmed_params: confirmedParams,
       history,
+      chat_session_id: chatSessionId,
     }),
-  chatAsk: (message, history = []) => post('/api/chat/ask', { message, history }),
-  chatAskStream: (message, history = [], maxTokens = 1200) =>
+  chatAsk: (message, history = [], chatSessionId = null, displayMessage = null) =>
+    post('/api/chat/ask', { message, display_message: displayMessage, history, chat_session_id: chatSessionId }),
+  chatAskStream: (message, history = [], maxTokens = 1200, chatSessionId = null, displayMessage = null) =>
     fetch('/api/chat/ask/stream', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ message, history, max_tokens: maxTokens }),
+      body: JSON.stringify({ message, display_message: displayMessage, history, max_tokens: maxTokens, chat_session_id: chatSessionId }),
     }),
 
   // ── Auth ──────────────────────────────────────────────────────────────

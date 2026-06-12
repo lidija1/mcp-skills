@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../utils/api'
 import { cleanDisplayText } from '../utils/text'
-import { Bot, ChevronDown, ExternalLink, SendHorizonal, User, CheckCircle2, XCircle, Loader, Plus, RotateCcw } from 'lucide-react'
+import { Bot, ChevronDown, ExternalLink, SendHorizonal, User, CheckCircle2, XCircle, Loader, Plus, RotateCcw, MessageSquare, History, Trash2 } from 'lucide-react'
 
 function BotBubble({ text }) {
   return (
@@ -163,6 +163,24 @@ const TOOL_SUGGESTIONS = [
   'run a full audit of all underwriting rules',
 ]
 
+function formatChatDate(ts) {
+  if (!ts) return ''
+  const date = new Date(ts * 1000)
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  if (sameDay) {
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  }
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function sessionMessagesToChat(messages = []) {
+  return messages.map(message => ({
+    role: message.role === 'user' ? 'user' : 'bot',
+    text: message.content || '',
+  })).filter(message => message.text)
+}
+
 export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, expanded = false }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -170,10 +188,17 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
   const [streaming, setStreaming] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState(null)
   const [mode, setMode] = useState(() => localStorage.getItem('chat_mode') || 'guidance')
+  const [sessions, setSessions] = useState([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [activeSessionId, setActiveSessionId] = useState(null)
+  const [sessionLoading, setSessionLoading] = useState(false)
+  const [compactView, setCompactView] = useState('chat')
   const [acSuggestions, setAcSuggestions] = useState([])
   const [acIndex, setAcIndex] = useState(-1)
   const [inputFocused, setInputFocused] = useState(false)
   const threadRef = useRef(null)
+  const historyVisible = expanded || compactView === 'history'
+  const chatVisible = expanded || compactView !== 'history'
 
   const loadGreeting = useCallback(() => {
     api.chatGreeting()
@@ -187,16 +212,71 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
       })
   }, [])
 
+  const loadSessions = useCallback(async () => {
+    if (!historyVisible) return
+    setSessionsLoading(true)
+    try {
+      const data = await api.listChatSessions()
+      setSessions(Array.isArray(data.sessions) ? data.sessions : [])
+    } catch {
+      setSessions([])
+    } finally {
+      setSessionsLoading(false)
+    }
+  }, [historyVisible])
+
   useEffect(() => {
     loadGreeting()
   }, [loadGreeting])
 
-  const startNewChat = useCallback(() => {
+  useEffect(() => {
+    loadSessions()
+  }, [loadSessions])
+
+  const loadChatSession = useCallback(async (sessionId) => {
+    if (!sessionId || loading) return
+    setSessionLoading(true)
+    setPendingConfirm(null)
+    try {
+      const session = await api.getChatSession(sessionId)
+      setActiveSessionId(session.id)
+      if (!expanded) setCompactView('chat')
+      const savedMessages = sessionMessagesToChat(session.messages || [])
+      if (savedMessages.length > 0) {
+        setMessages(savedMessages)
+      } else {
+        loadGreeting()
+      }
+    } catch (err) {
+      setMessages([{ role: 'bot', text: `Error: ${err.message}` }])
+    } finally {
+      setSessionLoading(false)
+    }
+  }, [expanded, loadGreeting, loading])
+
+  const startNewChat = useCallback(async () => {
     setInput('')
     setPendingConfirm(null)
     setLoading(false)
+    setActiveSessionId(null)
+    setCompactView('chat')
     loadGreeting()
   }, [loadGreeting])
+
+  const deleteChatSession = useCallback(async (sessionId) => {
+    if (!sessionId || loading) return
+    try {
+      await api.deleteChatSession(sessionId)
+      if (sessionId === activeSessionId) {
+        setActiveSessionId(null)
+        setPendingConfirm(null)
+        loadGreeting()
+      }
+      await loadSessions()
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'bot', text: `Error: ${err.message}` }])
+    }
+  }, [activeSessionId, loadGreeting, loadSessions, loading])
 
   useEffect(() => {
     if (threadRef.current) {
@@ -297,6 +377,7 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
 
     const trimmed = (userText || '').trim()
     if (!trimmed && !confirmedTool) return
+    const sessionIdForRequest = activeSessionId
 
     // /help [topic] — force Ask mode and rewrite to a structured query
     if (!confirmedTool) {
@@ -311,7 +392,7 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
         setStreaming(true)
         setMessages(prev => [...prev, { role: 'bot', text: '' }])
         try {
-          const response = await api.chatAskStream(help.query, buildHistory(messages), 4000)
+          const response = await api.chatAskStream(help.query, buildHistory(messages), 4000, sessionIdForRequest, help.displayText)
           if (!response.ok) {
             const data = await response.json().catch(() => ({}))
             throw new Error(data.detail || data.error || 'Help stream failed')
@@ -330,6 +411,7 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
               let evt
               try { evt = JSON.parse(part.slice(6)) } catch { continue }
               if (evt.error) throw new Error(evt.error)
+              if (evt.session_id) setActiveSessionId(evt.session_id)
               if (evt.done) return
               if (evt.t) {
                 acc += evt.t
@@ -350,6 +432,7 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
         } finally {
           setStreaming(false)
           setLoading(false)
+          if (historyVisible) await loadSessions()
         }
         return
       }
@@ -368,7 +451,7 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
     try {
       if (mode === 'guidance' && !confirmedTool) {
         // ── Streaming path for Guidance mode ──────────────────────────────
-        const response = await api.chatAskStream(trimmed, history)
+        const response = await api.chatAskStream(trimmed, history, 1200, sessionIdForRequest)
         if (!response.ok) {
           const data = await response.json().catch(() => ({}))
           throw new Error(data.detail || data.error || 'Guidance stream failed')
@@ -392,8 +475,9 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
             if (!part.startsWith('data: ')) continue
             let evt
             try { evt = JSON.parse(part.slice(6)) } catch { continue }
-            if (evt.error) throw new Error(evt.error)
-            if (evt.done) return
+              if (evt.error) throw new Error(evt.error)
+              if (evt.session_id) setActiveSessionId(evt.session_id)
+              if (evt.done) return
             if (evt.t) {
               acc += evt.t
               setMessages(prev => {
@@ -406,7 +490,8 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
         }
       } else {
         // ── Standard path for Tools mode and confirmed dispatches ──────────
-        const resp = await api.chat(confirmedTool ? '' : trimmed, confirmedTool, confirmedParams, history)
+        const resp = await api.chat(confirmedTool ? '' : trimmed, confirmedTool, confirmedParams, history, sessionIdForRequest)
+        if (resp.chat_session_id) setActiveSessionId(resp.chat_session_id)
 
         if (resp.status === 'job') {
           appendBot(resp.reply, { jobId: resp.job_id, jobLabel: resp.job_label })
@@ -425,8 +510,9 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
     } finally {
       setStreaming(false)
       setLoading(false)
+      if (historyVisible) await loadSessions()
     }
-  }, [loading, mode, messages, appendBot, onJobDispatched])
+  }, [activeSessionId, historyVisible, loadSessions, loading, mode, messages, appendBot, onJobDispatched])
 
   const handleConfirm = useCallback(() => {
     if (!pendingConfirm) return
@@ -451,11 +537,111 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
     }
   }, [input, send, acSuggestions, acIndex, selectSuggestion])
 
-  const isFreshChat = messages.length <= 1 && !loading
+  const isGreetingOnly = messages.length === 1 && messages[0]?.role === 'bot' && messages[0]?.text?.startsWith('Hi!')
+  const isFreshChat = (messages.length === 0 || isGreetingOnly) && !loading
   const visibleMessages = expanded && isFreshChat ? [] : messages
 
   return (
-    <div className={`chat-panel-page${isFreshChat ? ' chat-panel-page--empty' : ''}`}>
+    <div className={`chat-panel-shell${expanded ? ' chat-panel-shell--expanded' : ''}${compactView === 'history' ? ' chat-panel-shell--history' : ''}`}>
+      {historyVisible && (
+        <aside className={`chat-history-sidebar${!expanded ? ' chat-history-sidebar--compact' : ''}`} aria-label="Chat history">
+          <div className="chat-history-header">
+            <button
+              className="chat-history-new-btn"
+              type="button"
+              onClick={startNewChat}
+              disabled={loading}
+            >
+              <Plus size={15} />
+              <span>New chat</span>
+            </button>
+            {!expanded && (
+              <button
+                className="chat-history-chat-btn"
+                type="button"
+                onClick={() => setCompactView('chat')}
+              >
+                Chat
+              </button>
+            )}
+          </div>
+          <div className="chat-history-list">
+            {sessionsLoading && (
+              <div className="chat-history-state">Loading chats...</div>
+            )}
+            {!sessionsLoading && sessions.length === 0 && (
+              <div className="chat-history-state">No saved chats yet.</div>
+            )}
+            {!sessionsLoading && sessions.map(session => (
+              <div
+                key={session.id}
+                className={`chat-history-item${session.id === activeSessionId ? ' active' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="chat-history-item-main"
+                  onClick={() => loadChatSession(session.id)}
+                  disabled={loading || sessionLoading}
+                  title={session.title}
+                >
+                  <MessageSquare size={14} />
+                  <span className="chat-history-item-copy">
+                    <span className="chat-history-item-title">{session.title || 'New chat'}</span>
+                    <span className="chat-history-item-meta">{formatChatDate(session.updated_at)}</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="chat-history-delete-btn"
+                  onClick={() => deleteChatSession(session.id)}
+                  disabled={loading || sessionLoading}
+                  aria-label={`Delete ${session.title || 'chat'}`}
+                  title="Delete chat"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </aside>
+      )}
+      {chatVisible && (
+      <div className={`chat-panel-page${isFreshChat ? ' chat-panel-page--empty' : ''}`}>
+      {!expanded && (
+        <div className="chat-compact-topbar">
+          <button
+            className="chat-new-btn"
+            type="button"
+            onClick={startNewChat}
+            disabled={loading}
+          >
+            <Plus size={14} />
+            <span>New chat</span>
+          </button>
+          <button
+            className="chat-history-toggle-btn"
+            type="button"
+            onClick={() => {
+              setCompactView('history')
+              loadSessions()
+            }}
+            disabled={loading}
+          >
+            <History size={14} />
+            <span>History</span>
+          </button>
+          <button
+            className="chat-refresh-btn"
+            type="button"
+            onClick={loadGreeting}
+            disabled={loading}
+            aria-label="Refresh greeting"
+            title="Refresh greeting"
+          >
+            <RotateCcw size={14} />
+          </button>
+        </div>
+      )}
       <div className="chat-thread" ref={threadRef}>
         {visibleMessages.map((msg, i) => (
           <div key={i}>
@@ -484,28 +670,7 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
             )}
           </div>
         ))}
-        {loading && !streaming && <TypingIndicator />}
-      </div>
-
-      <div className="chat-toolbar">
-        <button
-          className="chat-new-btn"
-          type="button"
-          onClick={startNewChat}
-          disabled={loading}
-        >
-          <Plus size={14} />
-          <span>New chat</span>
-        </button>
-        <button
-          className="chat-refresh-btn"
-          type="button"
-          onClick={loadGreeting}
-          disabled={loading}
-          aria-label="Refresh greeting"
-        >
-          <RotateCcw size={14} />
-        </button>
+        {(loading || sessionLoading) && !streaming && <TypingIndicator />}
       </div>
 
       <div className="chat-input-row">
@@ -565,6 +730,8 @@ export default function ChatPanel({ onJobDispatched, jobs = [], onOpenReport, ex
           </button>
         )}
       </div>
+      </div>
+      )}
     </div>
   )
 }

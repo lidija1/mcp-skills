@@ -33,6 +33,7 @@ from mcp_tools.smart_assertions.store import store, Snapshot
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona
 from api_tests.oneshield_api_replay import OneShieldApiReplay
 from dashboard.backend.api_assertions.regression_sweep import run_sweep, SweepResult, VariantResult, SweepAnalysis
+from dashboard.backend.api_assertions.premium import extract_premium_evidence
 
 mcp = FastMCP("smart-assertions")
 
@@ -50,24 +51,7 @@ STOP_AFTER: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 def _total_premium(flow: dict) -> float | None:
-    bv = flow.get("rating_factors", {}).get("business_values", {})
-    val = bv.get("calculated_total_premium")
-    if val is not None:
-        try:
-            return float(val)
-        except (ValueError, TypeError):
-            pass
-    raw = (
-        flow.get("rating_factors", {}).get("summary_premium")
-        or flow.get("premium", "")
-    )
-    digits = re.sub(r"[^\d.]", "", str(raw or ""))
-    if digits:
-        try:
-            return float(digits)
-        except ValueError:
-            pass
-    return None
+    return extract_premium_evidence(flow).value
 
 
 def _coverage_premiums(flow: dict) -> dict[str, float]:
@@ -221,6 +205,13 @@ def _fmt_snapshot(snap: Snapshot) -> str:
 
     prem_str = f"${snap.total_premium:,.2f}" if snap.total_premium is not None else "N/A"
     lines.append(f"**Total premium:** {prem_str}")
+    evidence = extract_premium_evidence(snap.raw)
+    lines.append(f"**Premium source:** `{evidence.source}`")
+    if evidence.mismatch:
+        lines.append(
+            "**Rating Detail diagnostic:** "
+            f"${evidence.rating_detail_value:,.2f} (does not match Premium Summary)"
+        )
     if snap.total_cost is not None:
         lines.append(f"**Total cost:** ${snap.total_cost:,.2f}")
     lines.append("")
@@ -264,6 +255,18 @@ def _fmt_assert(
         lines.append(f"| Detail   | {message} |")
     lines.append("")
 
+    evidence = extract_premium_evidence(snap.raw)
+    lines += [f"**Premium source:** `{evidence.source}`", ""]
+    if evidence.mismatch:
+        lines += [
+            (
+                "**Rating Detail diagnostic:** "
+                f"${evidence.rating_detail_value:,.2f} does not match "
+                f"Premium Summary ${evidence.ui_value:,.2f}; assertion used Premium Summary."
+            ),
+            "",
+        ]
+
     if snap.blocked:
         lines += [f"⚠️ **Blocked:** {snap.blocked_reason}", ""]
 
@@ -293,7 +296,7 @@ def snapshot_flow(
     for 1 hour.
 
     The report shows:
-    - Total premium (sum of Policy Term Factor rows from Rating Detail)
+    - Total premium from the Premium Summary UI model
     - Per-coverage premium breakdown (Bodily Injury, Collision, Comprehensive, etc.)
     - UW conditions if any fired
     - Blocked status and reason
@@ -339,7 +342,7 @@ def assert_flow(
     your expected value against the actual result. Also saves the snapshot.
 
     Assertion types:
-        premium     — total premium from the Rating Detail page
+        premium     — total premium from the Premium Summary UI model
         total_cost  — total policy cost from the Verify Billing page
 
     Operators:
@@ -401,8 +404,24 @@ def _fmt_sweep(sweep: SweepResult) -> str:
     lines = [
         f"## Regression Sweep `{sweep.sweep_id}` — {status}",
         f"**Baseline:** {sweep.baseline_description}",
-        f"**Baseline premium:** {base_str}",
+        f"**Baseline premium:** {base_str} via `{sweep.baseline_premium_source or 'unavailable'}`",
         f"**Variants:** {len(sweep.results)} total | ✅ {sweep.pass_count}  ❌ {sweep.fail_count}",
+        "",
+    ]
+    if sweep.baseline_premium_mismatch:
+        lines += [
+            (
+                "**Premium diagnostic:** Rating Detail coverage sum "
+                f"${sweep.baseline_rating_detail_premium:,.2f} does not match "
+                f"Premium Summary {base_str}; assertions use Premium Summary."
+            ),
+            "",
+        ]
+    lines += [
+        (
+            "**Comparison source:** Premium Summary UI for baseline and variants. "
+            "Editable soft-UW referrals are accepted and re-rated before comparison."
+        ),
         "",
     ]
 
@@ -433,6 +452,17 @@ def _fmt_sweep(sweep: SweepResult) -> str:
             ok = "✅" if r.passed else "❌"
             msg = f" `{r.message}`" if r.message and not r.passed else ""
             lines.append(f"| {r.variant.label} | {actual} | {delta} | {dir_ok} | {mag_ok} | {ok}{msg} |")
+        lines.append("")
+
+    mismatch_results = [result for result in sweep.results if result.premium_mismatch]
+    if mismatch_results:
+        lines.append("### Premium Diagnostics")
+        for result in mismatch_results:
+            lines.append(
+                f"- **{result.variant.label}:** Premium Summary "
+                f"${result.actual_premium:,.2f} vs Rating Detail sum "
+                f"${result.rating_detail_premium:,.2f}; comparison used Premium Summary."
+            )
         lines.append("")
 
     # Ladder monotonic check inline

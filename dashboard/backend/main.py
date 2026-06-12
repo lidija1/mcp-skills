@@ -837,7 +837,7 @@ def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: Backg
                 lines = [
                     f"## Regression Sweep - {status_str}",
                     f"**Baseline:** {sweep.baseline_description}",
-                    f"**Baseline premium:** {base_str}",
+                    f"**Baseline premium:** {base_str} via `{sweep.baseline_premium_source or 'unavailable'}`",
                     f"**Variants:** {len(sweep.results)} | PASS {sweep.pass_count} FAIL {sweep.fail_count}",
                     "",
                 ]
@@ -854,7 +854,8 @@ def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: Backg
                         actual = f"${row.actual_premium:,.2f}" if row.actual_premium else ("blocked" if row.blocked else "N/A")
                         delta = f"{row.delta_pct:+.1f}%" if row.delta_pct is not None else "-"
                         ok = "PASS" if row.passed else f"FAIL {row.message[:60]}" if row.message else "FAIL"
-                        lines.append(f"| {row.variant.label} | {actual} | {delta} | {ok} |")
+                        uw_note = " (soft-UW continued)" if row.soft_uw_continued else ""
+                        lines.append(f"| {row.variant.label} | {actual} | {delta} | {ok}{uw_note} |")
                     lines.append("")
                 _done(new_jid, "\n".join(lines))
             except Exception as exc:
@@ -1985,7 +1986,7 @@ def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: R
             lines = [
                 f"## Regression Sweep — {status_str}",
                 f"**Baseline:** {sweep.baseline_description}",
-                f"**Baseline premium:** {base_str}",
+                f"**Baseline premium:** {base_str} via `{sweep.baseline_premium_source or 'unavailable'}`",
                 f"**Variants:** {len(sweep.results)} | ✅ {sweep.pass_count}  ❌ {sweep.fail_count}",
                 "",
             ]
@@ -2003,7 +2004,8 @@ def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: R
                     actual = f"${r.actual_premium:,.2f}" if r.actual_premium else ("blocked" if r.blocked else "N/A")
                     delta = f"{r.delta_pct:+.1f}%" if r.delta_pct is not None else "—"
                     ok = "✅" if r.passed else f"❌ {r.message[:60]}" if r.message else "❌"
-                    lines.append(f"| {r.variant.label} | {actual} | {delta} | {ok} |")
+                    uw_note = " (soft-UW continued)" if r.soft_uw_continued else ""
+                    lines.append(f"| {r.variant.label} | {actual} | {delta} | {ok}{uw_note} |")
                 lines.append("")
             if sweep.analysis:
                 a = sweep.analysis
@@ -2034,6 +2036,10 @@ def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: R
                     "blocked": r.blocked,
                     "message": r.message,
                     "error": r.error,
+                    "premium_source": r.premium_source,
+                    "rating_detail_premium": r.rating_detail_premium,
+                    "premium_mismatch": r.premium_mismatch,
+                    "soft_uw_continued": r.soft_uw_continued,
                 }
                 for r in sweep.results
             ]

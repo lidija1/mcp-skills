@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from dashboard.backend.api_assertions.premium import extract_premium_evidence
+
 from dashboard.backend.api_assertions.lob_config import get_lob_config
 from dashboard.backend.api_assertions.schemas import ApiAssertion, AssertionFinding
 
@@ -356,31 +358,8 @@ def _premium_factor_texts(flow_result: dict[str, Any]) -> list[str]:
 
 
 def _premium_value(flow_result: dict[str, Any], premium_path: str) -> float | None:
-    # Walk the dotted premium_path; fall back to summary page field, then regex.
-    parts = premium_path.split(".")
-    node: Any = flow_result
-    for part in parts:
-        if not isinstance(node, dict):
-            node = None
-            break
-        node = node.get(part)
-    if node is not None:
-        try:
-            return float(node)
-        except (TypeError, ValueError):
-            pass
-
-    # Read "Total Policy Premium" from the Verify Billing / summary page field_values.
-    field_values = flow_result.get("ui_data", {}).get("field_values", {})
-    for label, values in field_values.items():
-        if "total policy premium" in label.lower():
-            raw = values[0] if values else None
-            result = _parse_money(raw)
-            if result is not None:
-                return result
-
-    summary = flow_result.get("rating_factors", {}).get("summary_premium") or flow_result.get("premium", "")
-    return _parse_money(summary)
+    del premium_path
+    return extract_premium_evidence(flow_result).value
 
 
 def _parse_money(raw: Any) -> float | None:

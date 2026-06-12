@@ -18,6 +18,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from dashboard.backend.api_assertions.premium import extract_premium_evidence
+
 TTL_SECONDS = 3600  # 1 hour
 
 
@@ -57,29 +59,7 @@ class SnapshotEntry:
 
 
 def _extract_premium(flow_result: dict) -> float | None:
-    raw = (
-        flow_result.get("rating_factors", {})
-        .get("business_values", {})
-        .get("calculated_total_premium")
-    )
-    if raw is not None:
-        try:
-            return float(raw)
-        except (TypeError, ValueError):
-            pass
-    # Fallback: summary_premium string
-    summary = (
-        flow_result.get("rating_factors", {}).get("summary_premium")
-        or flow_result.get("premium", "")
-    )
-    import re
-    digits = re.sub(r"[^\d.]", "", str(summary or ""))
-    if digits:
-        try:
-            return float(digits)
-        except ValueError:
-            pass
-    return None
+    return extract_premium_evidence(flow_result).value
 
 
 def _extract_uw_conditions(flow_result: dict) -> list[str]:

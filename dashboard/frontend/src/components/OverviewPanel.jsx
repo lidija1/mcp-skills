@@ -5,6 +5,7 @@ import {
     Sparkles,
 } from 'lucide-react'
 import {shouldShowRerunAction} from '../utils/jobRerun'
+import {fullJobTitle, jobDisplayLabel} from '../utils/jobDisplay'
 
 export default function OverviewPanel({backendOk, jobs, onOpenReport, onCancelJob, onRerunJob}) {
     const completed = jobs.filter(job => job.status === 'done').length
@@ -174,7 +175,7 @@ function ActivityCard({item, index, onOpenReport, onCancelJob, onRerunJob}) {
             </div>
 
             <h3>{item.title}</h3>
-            <p className="activity-terminal">{item.terminalLine}</p>
+            <p className="activity-terminal" title={item.terminalTitle}>{item.terminalLine}</p>
             {item.liveStatus && <LivePolicyStatus status={item.liveStatus}/>}
 
             <div className="activity-card-meta">
@@ -214,6 +215,9 @@ function buildActivityFeed(jobs) {
         .slice(0, 6)
         .map((job, index) => {
             const label = job.label || 'Automation job'
+            const compactLabel = jobDisplayLabel(job, 140)
+            const terminalLine = `> ${simplifyLabel(compactLabel)}`
+            const terminalTitle = fullJobTitle(job)
             const lower = label.toLowerCase()
             const text = `${label} ${job.result || ''} ${job.error || ''}`.toLowerCase()
             const duration = formatDuration(elapsedSeconds(job))
@@ -228,7 +232,8 @@ function buildActivityFeed(jobs) {
                     id: job.id,
                     job,
                     title: job.status === 'canceled' ? 'Profile generation canceled' : 'Generated customer profile',
-                    terminalLine: `> ${simplifyLabel(label)}`,
+                    terminalLine,
+                    terminalTitle,
                     status: job.status,
                     statusLabel: statusLabel(job.status),
                     duration,
@@ -248,7 +253,8 @@ function buildActivityFeed(jobs) {
                     id: job.id,
                     job,
                     title,
-                    terminalLine: `> ${simplifyLabel(label)}`,
+                    terminalLine,
+                    terminalTitle,
                     status: job.status,
                     statusLabel: statusLabel(job.status),
                     duration,
@@ -267,7 +273,8 @@ function buildActivityFeed(jobs) {
                         : edgeCases
                             ? `${edgeCases} edge cases detected`
                             : 'Batch scenario sweep completed',
-                    terminalLine: `> ${simplifyLabel(label)}`,
+                    terminalLine,
+                    terminalTitle,
                     status: job.status,
                     statusLabel: statusLabel(job.status),
                     duration,
@@ -286,7 +293,8 @@ function buildActivityFeed(jobs) {
                         : edgeCases
                             ? `${edgeCases} edge cases detected`
                             : 'Underwriting audit completed',
-                    terminalLine: `> ${simplifyLabel(label)}`,
+                    terminalLine,
+                    terminalTitle,
                     status: job.status,
                     statusLabel: statusLabel(job.status),
                     duration,
@@ -311,7 +319,8 @@ function buildActivityFeed(jobs) {
                     id: job.id,
                     job,
                     title,
-                    terminalLine: `> ${simplifyLabel(label)}`,
+                    terminalLine,
+                    terminalTitle,
                     status:
                         isPolicyFailed ? 'error'
                             : isUwReferral ? 'warning'
@@ -334,7 +343,8 @@ function buildActivityFeed(jobs) {
                         : job.status === 'error'
                             ? 'Automation run failed'
                             : 'Playwright session completed',
-                terminalLine: `> ${simplifyLabel(label)}`,
+                terminalLine,
+                terminalTitle,
                 status: job.status,
                 statusLabel: statusLabel(job.status),
                 duration,

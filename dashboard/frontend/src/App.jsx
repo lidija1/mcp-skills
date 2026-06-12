@@ -37,6 +37,7 @@ import {
     X,
 } from 'lucide-react'
 import {cleanDisplayText} from './utils/text'
+import {jobDisplayLabel} from './utils/jobDisplay'
 
 function normalizeJobUpdate(job, update) {
     if (!update) return job
@@ -801,7 +802,7 @@ function JobDonePopups({popups, onOpenReport, onDismiss}) {
                     </div>
                     <div className="job-done-copy">
                         <strong>{isUwReferralJob(job) ? 'UW referral triggered' : 'Job completed'}</strong>
-                        <span>{cleanDisplayText(job.label)}</span>
+                        <span>{jobDisplayLabel(job, 86) || cleanDisplayText(job.label)}</span>
                     </div>
                     <button className="job-done-link" type="button" onClick={() => onOpenReport(job)}>
                         Open report

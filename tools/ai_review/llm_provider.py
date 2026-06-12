@@ -26,7 +26,7 @@ def _detect_provider(config: ReviewConfig) -> str:
 
 def call_llm(system_prompt: str, user_prompt: str, config: ReviewConfig) -> str:
     provider = _detect_provider(config)
-    print(f"[ai-review] Provider: {provider}")
+    print(f"[jarvis] Provider: {provider}")
 
     if provider == "anthropic":
         return _call_anthropic(system_prompt, user_prompt, config)
@@ -58,7 +58,7 @@ def _call_anthropic(system_prompt: str, user_prompt: str, config: ReviewConfig) 
         block.text for block in response.content
         if hasattr(block, "text")
     )
-    print(f"[ai-review] Tokens used: {response.usage.input_tokens} in / {response.usage.output_tokens} out")
+    print(f"[jarvis] Tokens used: {response.usage.input_tokens} in / {response.usage.output_tokens} out")
     return text
 
 
@@ -78,7 +78,7 @@ def _call_openai(system_prompt: str, user_prompt: str, config: ReviewConfig) -> 
         response_format={"type": "json_object"},
     )
     usage = response.usage
-    print(f"[ai-review] Tokens used: {usage.prompt_tokens} in / {usage.completion_tokens} out")
+    print(f"[jarvis] Tokens used: {usage.prompt_tokens} in / {usage.completion_tokens} out")
     return response.choices[0].message.content
 
 
@@ -103,5 +103,5 @@ def _call_deepseek(system_prompt: str, user_prompt: str, config: ReviewConfig) -
         max_tokens=8096,
     )
     usage = response.usage
-    print(f"[ai-review] Tokens used: {usage.prompt_tokens} in / {usage.completion_tokens} out")
+    print(f"[jarvis] Tokens used: {usage.prompt_tokens} in / {usage.completion_tokens} out")
     return response.choices[0].message.content

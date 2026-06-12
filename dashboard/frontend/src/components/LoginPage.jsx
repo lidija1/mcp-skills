@@ -20,6 +20,9 @@ export default function LoginPage({
     try {
       const data = await api.login(username, password)
 
+      if (data.access_token) {
+        localStorage.setItem('access_token', data.access_token)
+      }
       onLogin(data.user)
 
     } catch (err) {

@@ -13,7 +13,10 @@ CANONICAL_DEFAULTS = {
     "TestName": "",
     "Description": "",
     "FlowType": "",
+    "FieldsUnderTest": "",
     "ExpectedOutcome": "",
+    "ExpectedTerminalState": "",
+    "BindExpected": "",
     "UW_Rule": "",
     "UW_Description": "",
     "ExpectedUWType": "",
@@ -190,6 +193,14 @@ def case(tc_id, test_name, flow_type, **overrides):
                 "ExpectedOutcome",
                 "Policy Bound" if flow_type != "uw" else "UW Referral",
             ),
+            "ExpectedTerminalState": overrides.pop(
+                "ExpectedTerminalState",
+                "Policy Summary" if flow_type != "uw" else "UW Referral",
+            ),
+            "BindExpected": overrides.pop(
+                "BindExpected",
+                "No" if flow_type == "uw" else "Yes",
+            ),
         }
     )
     record.update(overrides)
@@ -275,6 +286,7 @@ def optional_cases():
             SSN="234-56-7890",
             LicenseNumber="P23456789",
             Email="jparker_{timestamp}@auto.com",
+            FieldsUnderTest="Prefix, MiddleName, RelationshipToInsured, SSN",
         ),
         case(
             "AUTO_OPT_VEHICLE_0001",
@@ -290,6 +302,9 @@ def optional_cases():
             LossPayeeName="Springfield Leasing Co",
             PhysicalDamageSymbol="1",
             Email="tmorgan_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "Ownership, LossPayeeType, LossPayeeName, PhysicalDamageSymbol"
+            ),
         ),
         case(
             "AUTO_OPT_DRIVER_0002",
@@ -307,6 +322,10 @@ def optional_cases():
             LicenseNumber="H22004567",
             DefensiveDriver="Yes",
             Email="rhall_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "Prefix, MiddleName, Suffix, EmploymentCategory, Occupation, "
+                "LicenseYear, DefensiveDriver"
+            ),
         ),
         case(
             "AUTO_OPT_DRIVER_0003",
@@ -323,6 +342,9 @@ def optional_cases():
             LicensedAnotherState="Yes",
             LicenseNumber="G77331122",
             Email="mgreen_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "Prefix, EmploymentCategory, Occupation, LicensedAnotherState"
+            ),
         ),
         case(
             "AUTO_OPT_DRIVER_0004",
@@ -336,6 +358,7 @@ def optional_cases():
             DefensiveDriver="Yes",
             LicenseNumber="Y66009871",
             Email="pyoung_{timestamp}@auto.com",
+            FieldsUnderTest="EmploymentCategory, Occupation, DefensiveDriver",
         ),
         case(
             "AUTO_OPT_QUOTE_0001",
@@ -351,6 +374,9 @@ def optional_cases():
             QuoteName="Agency billed optional quote",
             LicenseNumber="K88224461",
             Email="rking_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "QuoteName, BillingMethod, NetOfCommission, CommissionBasis"
+            ),
         ),
         case(
             "AUTO_OPT_QUOTE_0002",
@@ -365,6 +391,10 @@ def optional_cases():
             PriorPolicyPremium="1450",
             LicenseNumber="W11997731",
             Email="swright_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "PriorCarrier, PriorPolicyTerm, PriorPolicyExpirationDate, "
+                "PriorPolicyPremium"
+            ),
         ),
         case(
             "AUTO_OPT_DAMAGE_0001",
@@ -378,6 +408,7 @@ def optional_cases():
             DescribeDamage="Minor cosmetic scratch on rear passenger door",
             LicenseNumber="S55442219",
             Email="lscott_{timestamp}@auto.com",
+            FieldsUnderTest="DamageInfo, DescribeDamage",
         ),
         case(
             "AUTO_OPT_VEHICLE_0002",
@@ -391,6 +422,7 @@ def optional_cases():
             LossPayeeName="Massachusetts Auto Finance",
             LicenseNumber="A44007612",
             Email="badams_{timestamp}@auto.com",
+            FieldsUnderTest="Ownership, LossPayeeType, LossPayeeName",
         ),
         case(
             "AUTO_OPT_VEHICLE_0003",
@@ -403,6 +435,7 @@ def optional_cases():
             TitleJointlyOwned="Yes",
             LicenseNumber="B33118890",
             Email="dbaker_{timestamp}@auto.com",
+            FieldsUnderTest="TitleJointlyOwned",
         ),
         case(
             "AUTO_OPT_VEHICLE_0004",
@@ -416,6 +449,10 @@ def optional_cases():
             PolicyCoverage="Platinum",
             LicenseNumber="N66221100",
             Email="knelson_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "VehicleUse, PhysicalDamageSymbol, PolicyCoverage, "
+                "PackageDerivedCoverages"
+            ),
         ),
         case(
             "AUTO_OPT_VEHICLE_0005",
@@ -430,6 +467,96 @@ def optional_cases():
             PolicyCoverage="Silver",
             LicenseNumber="H99553318",
             Email="ahill_{timestamp}@auto.com",
+            FieldsUnderTest="VehicleUse, DistanceToWork, PolicyCoverage",
+        ),
+        case(
+            "AUTO_OPT_DRIVER_0005",
+            "SR-22 driver with filing state",
+            "uw",
+            Description=(
+                "SR-22 required driver with conditional SR-22 Filing State set "
+                "to New York; stops at UW referral"
+            ),
+            ExpectedOutcome="UW Referral",
+            ExpectedTerminalState="UW Referral",
+            BindExpected="No",
+            ExpectedUWType="Underwriting",
+            ExpectedCondition=(
+                "SR-22 / Certificate of Insurance Indicator is checked"
+            ),
+            FirstName="Victor",
+            LastName="Cruz",
+            DOB="08/14/1985",
+            MaritalStatus="Single",
+            LicenseNumber="C77114422",
+            SR22="Yes",
+            SR22FilingState="New York",
+            Email="vcruz_{timestamp}@auto.com",
+            FieldsUnderTest="SR22, SR22FilingState",
+        ),
+        case(
+            "AUTO_OPT_VEHICLE_0006",
+            "Garaging address matches customer address",
+            "optional",
+            Description=(
+                "Confirms inherited garaging fields match the customer address "
+                "and remain read-only"
+            ),
+            FirstName="Sandra",
+            LastName="Rivera",
+            DOB="11/22/1979",
+            Gender="Female",
+            LicenseNumber="R12345678",
+            Email="srivera_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "GaragingAddress1, GaragingCity, GaragingState, GaragingZIP"
+            ),
+        ),
+        case(
+            "AUTO_FLOW_E2E_0001",
+            "Combined compatible optional fields",
+            "optional",
+            Description=(
+                "Covers quote, driver, vehicle, loss-payee, commute, and "
+                "package-derived coverage fields in one bindable E2E flow"
+            ),
+            FirstName="Cameron",
+            MiddleName="J",
+            LastName="Reed",
+            Prefix="Mr.",
+            DOB="02/12/1984",
+            MaritalStatus="Married",
+            QuoteName="Combined optional E2E flow",
+            BillingMethod="Agency Billed",
+            NetOfCommission="Net commission",
+            CommissionBasis="Commission",
+            PriorCarrier="Travelers",
+            PriorPolicyTerm="12 Months",
+            PriorPolicyExpirationDate="06/01/2026",
+            PriorPolicyPremium="1650",
+            RelationshipToInsured="Self",
+            EmploymentCategory="Employed",
+            Occupation="Professional/Managerial",
+            DefensiveDriver="Yes",
+            LicenseNumber="R24681357",
+            VehicleUse="Commute",
+            DistanceToWork="18",
+            Ownership="Leased",
+            LossPayeeType="Leased",
+            LossPayeeName="BMW Financial Services",
+            PhysicalDamageSymbol="1",
+            TitleJointlyOwned="Yes",
+            PolicyCoverage="Platinum",
+            Email="creed_{timestamp}@auto.com",
+            FieldsUnderTest=(
+                "QuoteName, BillingMethod, NetOfCommission, CommissionBasis, "
+                "PriorCarrier, PriorPolicyTerm, PriorPolicyExpirationDate, "
+                "PriorPolicyPremium, Prefix, MiddleName, RelationshipToInsured, "
+                "EmploymentCategory, Occupation, DefensiveDriver, VehicleUse, "
+                "DistanceToWork, Ownership, LossPayeeType, LossPayeeName, "
+                "PhysicalDamageSymbol, TitleJointlyOwned, PolicyCoverage, "
+                "PackageDerivedCoverages"
+            ),
         ),
     ]
 
@@ -448,6 +575,7 @@ def uw_cases():
             UW_Rule="SR-22 Only",
             UW_Description="Adult active driver requiring SR-22",
             ExpectedCondition="SR-22 / Certificate of Insurance Indicator is checked",
+            FieldsUnderTest="SR22, SR22FilingState",
             FirstName="Tyler",
             LastName="Hendricks",
             DOB="06/15/1993",
@@ -465,6 +593,7 @@ def uw_cases():
             UW_Rule="Suspended License Only",
             UW_Description="Adult driver with suspended license",
             ExpectedCondition="driver license status that is revoked or suspended",
+            FieldsUnderTest="LicenseStatus",
             FirstName="Brandon",
             LastName="Kelley",
             DOB="03/22/1987",
@@ -480,6 +609,7 @@ def uw_cases():
             UW_Rule="Young Driver Under 25",
             UW_Description="Twenty-one-year-old active driver",
             ExpectedCondition="All drivers under 25 years of age",
+            FieldsUnderTest="DOB",
             FirstName="Marcus",
             LastName="Crawford",
             DOB="08/14/2004",
@@ -499,6 +629,7 @@ def uw_cases():
             UW_Rule="Revoked License Only",
             UW_Description="Adult driver with revoked license",
             ExpectedCondition="driver license status that is revoked or suspended",
+            FieldsUnderTest="LicenseStatus",
             FirstName="Derek",
             LastName="Patterson",
             DOB="11/05/1990",
@@ -519,6 +650,7 @@ def uw_cases():
                 "SR-22 / Certificate of Insurance Indicator is checked; "
                 "All drivers under 25 years of age"
             ),
+            FieldsUnderTest="DOB, SR22, SR22FilingState",
             FirstName="Ethan",
             LastName="Morrison",
             DOB="03/28/2006",
@@ -539,6 +671,7 @@ def uw_cases():
             UW_Rule="SR-22 + Suspended License",
             UW_Description="Adult driver with SR-22 and suspended license",
             ExpectedCondition="driver license status that is revoked or suspended",
+            FieldsUnderTest="SR22, SR22FilingState, LicenseStatus",
             FirstName="Harold",
             LastName="Whitfield",
             DOB="03/28/1988",
@@ -556,6 +689,10 @@ def uw_cases():
             UW_Rule="SR-22 + Revoked + Under 25",
             UW_Description="Young revoked driver requiring SR-22",
             ExpectedCondition="SR-22 / Certificate of Insurance Indicator is checked",
+            FieldsUnderTest=(
+                "DOB, SR22, SR22FilingState, LicenseStatus, DamageInfo, "
+                "DescribeDamage"
+            ),
             FirstName="Victor",
             LastName="Sloane",
             DOB="09/19/2003",
@@ -579,6 +716,7 @@ def uw_cases():
             UW_Rule="Under 25 + Leased Vehicle",
             UW_Description="Young driver with leased BMW",
             ExpectedCondition="All drivers under 25 years of age",
+            FieldsUnderTest="DOB, Ownership, LossPayeeType, LossPayeeName",
             FirstName="Nathan",
             LastName="Fielding",
             DOB="05/30/2003",
@@ -600,6 +738,7 @@ def uw_cases():
             UW_Rule="Under 25 + Suspended License",
             UW_Description="Young driver with suspended license",
             ExpectedCondition="driver license status that is revoked or suspended",
+            FieldsUnderTest="DOB, LicenseStatus",
             FirstName="Gregory",
             LastName="Ashford",
             DOB="07/11/2003",
@@ -619,6 +758,9 @@ def uw_cases():
             UW_Rule="SR-22 + Leased Vehicle",
             UW_Description="Adult SR-22 driver with leased BMW",
             ExpectedCondition="SR-22 / Certificate of Insurance Indicator is checked",
+            FieldsUnderTest=(
+                "SR22, SR22FilingState, Ownership, LossPayeeType, LossPayeeName"
+            ),
             FirstName="Calvin",
             LastName="Monroe",
             DOB="02/17/1991",

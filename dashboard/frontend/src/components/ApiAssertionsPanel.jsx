@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {api} from '../utils/api'
+import {summarizePersonaDescription} from '../utils/text'
 import {
   Check,
   ChevronDown,
@@ -134,7 +135,16 @@ export default function ApiAssertionsPanel({
       await submitJob(
         () => api.runRegressionSweep(sweepBaseline, 'auto', sweepFocus || null),
         `Regression Sweep — ${sweepBaseline.slice(0, 50)}`,
-        {metadata: {lob: 'auto', lob_display: 'Personal Auto'}},
+        {
+          executionType: 'regression_sweep',
+          metadata: {
+            lob: 'auto',
+            lob_display: 'Personal Auto',
+            baseline_description: sweepBaseline,
+            focus: sweepFocus || null,
+            rerun_payload: {baseline_description: sweepBaseline, lob: 'auto', focus: sweepFocus || null},
+          },
+        },
       )
       setSubmittedSweep(true)
       setTimeout(() => setSubmittedSweep(false), 3000)
@@ -153,7 +163,26 @@ export default function ApiAssertionsPanel({
       await submitJob(
         () => api.runAssertFlow(personaDesc, assertType, expected, assertOperator, parseFloat(assertTolerance) || 5),
         `Assert ${assertType} — ${summarizeAssertPersona(personaDesc)}`,
-        {metadata: {lob: 'auto', lob_display: 'Personal Auto'}},
+        {
+          executionType: 'api_assert_flow',
+          metadata: {
+            lob: 'auto',
+            lob_display: 'Personal Auto',
+            persona_description: personaDesc,
+            assertion_type: assertType,
+            expected_value: expected,
+            operator: assertOperator,
+            tolerance_pct: parseFloat(assertTolerance) || 5,
+            rerun_payload: {
+              persona_description: personaDesc,
+              assertion_type: assertType,
+              expected_value: expected,
+              operator: assertOperator,
+              tolerance_pct: parseFloat(assertTolerance) || 5,
+              lob: 'auto',
+            },
+          },
+        },
       )
       setSubmittedAssert(true)
       setTimeout(() => setSubmittedAssert(false), 3000)
@@ -441,6 +470,34 @@ function fmtDate(ts) {
   })
 }
 
+function fmtPercent(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return 'N/A'
+  return `${Number(v).toFixed(1)}%`
+}
+
+function isRegressionSweepRow(row) {
+  return row.assertion_type === 'regression_sweep' || row.operator === 'sweep'
+}
+
+function sweepVariants(row) {
+  const variants = row.coverage_premiums?.variants
+  return Array.isArray(variants) ? variants : []
+}
+
+function historyExpected(row) {
+  return isRegressionSweepRow(row) ? 'Sweep' : fmtMoney(row.expected_value)
+}
+
+function historyActual(row) {
+  return fmtMoney(row.actual_value)
+}
+
+function historyType(row) {
+  return isRegressionSweepRow(row)
+    ? 'regression sweep'
+    : (row.assertion_type || '').replace('_', ' ')
+}
+
 function downloadPersonaJson(row) {
   const blob = new Blob([JSON.stringify(row.persona || {}, null, 2)], {type: 'application/json'})
   const url = URL.createObjectURL(blob)
@@ -539,9 +596,13 @@ function AssertionHistory({rows, loading, filter, onFilterChange, expandedId, on
 
 function AssertionHistoryRow({row, expanded, onExpand, onDelete}) {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const isSweep = isRegressionSweepRow(row)
   const opFn = OP_LABEL[row.operator]
   const opText = opFn ? opFn(row.tolerance_pct) : row.operator
-  const coverageEntries = Object.entries(row.coverage_premiums || {})
+  const coverageEntries = isSweep ? [] : Object.entries(row.coverage_premiums || {})
+  const variants = sweepVariants(row)
+  const personaDescription = row.persona_description || ''
+  const personaSummary = summarizePersonaDescription(personaDescription, 84)
   const confirmDelete = async e => {
     e.stopPropagation()
     setConfirmingDelete(false)
@@ -552,16 +613,14 @@ function AssertionHistoryRow({row, expanded, onExpand, onDelete}) {
     <>
       <tr className={`ah-row ${expanded ? 'ah-row-expanded' : ''}`} onClick={onExpand}>
         <td className="ah-col-date">{fmtDate(row.created_at)}</td>
-        <td className="ah-col-persona" title={row.persona_description}>
-          {row.persona_description.length > 60
-            ? row.persona_description.slice(0, 60) + '…'
-            : row.persona_description}
+        <td className="ah-col-persona" title={personaDescription}>
+          <span className="ah-persona-summary">{personaSummary}</span>
         </td>
-        <td className="ah-col-type">{(row.assertion_type || '').replace('_', ' ')}</td>
-        <td className="ah-col-money">{fmtMoney(row.expected_value)}</td>
-        <td className="ah-col-money">{fmtMoney(row.actual_value)}</td>
+        <td className="ah-col-type">{historyType(row)}</td>
+        <td className="ah-col-money">{historyExpected(row)}</td>
+        <td className="ah-col-money">{historyActual(row)}</td>
         <td className="ah-col-result">
-          <span className="ah-verdict">{row.passed ? 'PASS' : 'FAIL'}</span>
+          <span className={`ah-verdict ${row.passed ? 'pass' : 'fail'}`}>{row.passed ? 'PASS' : 'FAIL'}</span>
         </td>
         <td className="ah-col-chevron">
           {expanded ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
@@ -578,11 +637,50 @@ function AssertionHistoryRow({row, expanded, onExpand, onDelete}) {
               </div>
 
               <div className="ah-detail-grid">
-                <div className="ah-detail-kv"><span>Expected</span><strong>{fmtMoney(row.expected_value)}</strong></div>
-                <div className="ah-detail-kv"><span>Actual</span><strong>{fmtMoney(row.actual_value)}</strong></div>
-                <div className="ah-detail-kv"><span>Operator</span><strong>{opText}</strong></div>
+                {!isSweep && <div className="ah-detail-kv"><span>Expected</span><strong>{historyExpected(row)}</strong></div>}
+                <div className="ah-detail-kv"><span>{isSweep ? 'Baseline Premium' : 'Actual'}</span><strong>{historyActual(row)}</strong></div>
+                <div className="ah-detail-kv"><span>{isSweep ? 'Mode' : 'Operator'}</span><strong>{isSweep ? 'Regression sweep' : opText}</strong></div>
                 {row.message && <div className="ah-detail-kv ah-detail-kv-wide"><span>Detail</span><strong>{row.message}</strong></div>}
               </div>
+
+              {isSweep && variants.length > 0 && (
+                <div className="ah-detail-section">
+                  <span className="ah-detail-label">Regression variants</span>
+                  <table className="ah-sweep-table">
+                    <thead>
+                      <tr>
+                        <th>Variant</th>
+                        <th>Category</th>
+                        <th>Expected</th>
+                        <th>Premium</th>
+                        <th>Delta</th>
+                        <th>Result</th>
+                        <th>Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {variants.map((variant, i) => (
+                        <tr key={`${variant.variant_id || variant.name || 'variant'}-${i}`}>
+                          <td>{variant.name || variant.variant_id || `Variant ${i + 1}`}</td>
+                          <td>{variant.category || 'N/A'}</td>
+                          <td>{variant.expected_behavior || 'N/A'}</td>
+                          <td className="ah-col-money">{fmtMoney(variant.actual_premium)}</td>
+                          <td className="ah-col-money">{fmtPercent(variant.delta_pct)}</td>
+                          <td><span className={`ah-verdict ${variant.passed ? 'pass' : 'fail'}`}>{variant.passed ? 'PASS' : 'FAIL'}</span></td>
+                          <td>{variant.message || 'N/A'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {isSweep && variants.length === 0 && (
+                <div className="ah-detail-section">
+                  <span className="ah-detail-label">Regression variants</span>
+                  <p className="ah-detail-empty">No variant details were returned for this sweep.</p>
+                </div>
+              )}
 
               {coverageEntries.length > 0 && (
                 <div className="ah-detail-section">

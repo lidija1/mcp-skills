@@ -1,6 +1,6 @@
-import {cleanDisplayText} from '../utils/text'
 import {canRerunJob, inferExecutionType, shouldShowRerunAction} from '../utils/jobRerun'
 import {resolveJobLobDisplay, sortLobGroupKeys} from '../utils/jobLob'
+import {fullJobTitle, jobDisplayLabel} from '../utils/jobDisplay'
 import {useEffect, useState} from 'react'
 import { getDisplayStatus } from '../utils/jobStatus.js'
 import {api} from '../utils/api'
@@ -288,25 +288,7 @@ function summarizeAssertPersona(description = '') {
 }
 
 function getJobDisplayLabel(job) {
-    const metadata = job?.metadata || {}
-
-    if (job?.execution_type === 'api_assert_flow' && metadata.persona_description) {
-        const type = metadata.assertion_type || 'assertion'
-        const expected = Number(metadata.expected_value)
-        const expectedText = Number.isFinite(expected)
-            ? `$${expected.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
-            : ''
-        const tolerance = Number(metadata.tolerance_pct ?? 5)
-        const operator = metadata.operator === 'approx'
-            ? `approx ${Number.isFinite(tolerance) ? tolerance.toFixed(0) : 5}%`
-            : metadata.operator || ''
-
-        return cleanDisplayText(
-            `Assert ${type} ${operator} ${expectedText} - ${summarizeAssertPersona(metadata.persona_description)}`
-        )
-    }
-
-    return cleanDisplayText(job.label)
+    return jobDisplayLabel(job)
 }
 
 
@@ -314,6 +296,7 @@ function HistoryRow({job, onSelect, onRerun, onCancel, canDelete, onRequestDelet
     const displayStatus = getDisplayStatus(job)
     const outcomeBadge = getOutcomeBadge(job, displayStatus)
     const jobLabel = getJobDisplayLabel(job)
+    const jobTitle = fullJobTitle(job)
     const canOpen =
     displayStatus === 'done' ||
     displayStatus === 'error' ||
@@ -326,7 +309,7 @@ function HistoryRow({job, onSelect, onRerun, onCancel, canDelete, onRequestDelet
     return (<article
         className={`jobs-table-row ${displayStatus === 'error' ? 'has-error' : ''} ${displayStatus === 'canceled' ? 'is-canceled' : ''}`}>
         <div className="jobs-job-title">
-            <strong title={jobLabel}>{jobLabel}</strong>
+            <strong title={jobTitle}>{jobLabel}</strong>
             {ownerName && <small className="jobs-owner">Created by {ownerName}</small>}
         </div>
         <div className="jobs-status-cell">

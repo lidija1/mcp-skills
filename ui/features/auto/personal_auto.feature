@@ -76,27 +76,27 @@ Feature: Personal Auto Creation
     Then I read and extract policy summary page details
 
     Examples:
-      | TC_ID      |
-      | TC_ID_0001 |
-      | TC_ID_0002 |
-      | TC_ID_0003 |
-      | TC_ID_0004 |
-      | TC_ID_0005 |
-      | TC_ID_0006 |
-      | TC_ID_0007 |
-      | TC_ID_0008 |
-      | TC_ID_0009 |
-      | TC_ID_0010 |
-      | TC_ID_0011 |
-      | TC_ID_0012 |
-      | TC_ID_0013 |
-      | TC_ID_0014 |
-      | TC_ID_0015 |
-      | TC_ID_0016 |
-      | TC_ID_0017 |
-      | TC_ID_0018 |
-      | TC_ID_0019 |
-      | TC_ID_0020 |
+      | TC_ID      | Description                                         |
+      | TC_ID_0001 | Standard Auto flow 01: Pleasure, Owned, Gold        |
+      | TC_ID_0002 | Standard Auto flow 02: Business, Owned, Silver      |
+      | TC_ID_0003 | Standard Auto flow 03: Commute, Owned, Gold         |
+      | TC_ID_0004 | Standard Auto flow 04: Farm, Owned, Bronze          |
+      | TC_ID_0005 | Standard Auto flow 05: Business, Owned, Platinum    |
+      | TC_ID_0006 | Standard Auto flow 06: Commute, Owned, Gold         |
+      | TC_ID_0007 | Standard Auto flow 07: Farm, Owned, Silver          |
+      | TC_ID_0008 | Standard Auto flow 08: Pleasure, Owned, Gold        |
+      | TC_ID_0009 | Standard Auto flow 09: Business, Owned, Silver      |
+      | TC_ID_0010 | Standard Auto flow 10: Pleasure, Owned, Platinum    |
+      | TC_ID_0011 | Standard Auto flow 11: Pleasure, Leased, Gold       |
+      | TC_ID_0012 | Standard Auto flow 12: Commute, Financed, Silver    |
+      | TC_ID_0013 | Standard Auto flow 13: Business, Owned, Bronze      |
+      | TC_ID_0014 | Standard Auto flow 14: Commute, Leased, Platinum    |
+      | TC_ID_0015 | Standard Auto flow 15: Farm, Financed, Gold         |
+      | TC_ID_0016 | Standard Auto flow 16: Pleasure, Owned, Silver      |
+      | TC_ID_0017 | Standard Auto flow 17: Business, Leased, Bronze     |
+      | TC_ID_0018 | Standard Auto flow 18: Commute, Owned, Platinum     |
+      | TC_ID_0019 | Standard Auto flow 19: Pleasure, Financed, Gold     |
+      | TC_ID_0020 | Standard Auto flow 20: Farm, Owned, Silver          |
 
   @auto @optional_fields
   Scenario Outline: Create a personal auto policy with optional driver and vehicle fields
@@ -112,17 +112,18 @@ Feature: Personal Auto Creation
     Then I read and extract policy summary page details
 
     Examples:
-      | TC_ID                 |
-      | AUTO_OPT_DRIVER_0001  |
-      | AUTO_OPT_VEHICLE_0001 |
-      | AUTO_OPT_DRIVER_0002  |
-      | AUTO_OPT_DRIVER_0003  |
-      | AUTO_OPT_DRIVER_0004  |
-      | AUTO_OPT_QUOTE_0001   |
-      | AUTO_OPT_QUOTE_0002   |
-      | AUTO_OPT_DAMAGE_0001  |
-      | AUTO_OPT_VEHICLE_0002 |
-      | AUTO_OPT_VEHICLE_0003 |
-      | AUTO_OPT_VEHICLE_0004 |
-      | AUTO_OPT_VEHICLE_0005 |
-      | AUTO_OPT_VEHICLE_0006 |
+      | TC_ID                 | Description                                                                                                  |
+      | AUTO_OPT_DRIVER_0001  | Driver identity fields                                                                                       |
+      | AUTO_OPT_VEHICLE_0001 | Leased vehicle, loss payee, and physical damage symbol                                                       |
+      | AUTO_OPT_DRIVER_0002  | Driver suffix and retired employment                                                                         |
+      | AUTO_OPT_DRIVER_0003  | Unemployed driver with prior-state license response                                                          |
+      | AUTO_OPT_DRIVER_0004  | Disabled driver and defensive course                                                                         |
+      | AUTO_OPT_QUOTE_0001   | Agency billing with commission fields                                                                        |
+      | AUTO_OPT_QUOTE_0002   | Prior carrier and prior premium fields                                                                       |
+      | AUTO_OPT_DAMAGE_0001  | Existing vehicle damage description                                                                          |
+      | AUTO_OPT_VEHICLE_0002 | Financed vehicle with loss payee                                                                              |
+      | AUTO_OPT_VEHICLE_0003 | Jointly owned vehicle title                                                                                   |
+      | AUTO_OPT_VEHICLE_0004 | Business-use vehicle with physical damage override                                                           |
+      | AUTO_OPT_VEHICLE_0005 | Commute vehicle with distance-to-work data                                                                   |
+      | AUTO_OPT_VEHICLE_0006 | Confirms inherited garaging fields match the customer address and remain read-only                           |
+      | AUTO_FLOW_E2E_0001    | Covers quote, driver, vehicle, loss-payee, commute, and package-derived coverage fields in one bindable E2E flow |

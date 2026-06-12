@@ -1,0 +1,9 @@
+{
+  "testCases": [
+    {
+      "TC_ID": "TC_ID_AUTO_DISCOVERY_0001",
+      "TestName": "Inventory Personal Auto optional fields and dropdowns",
+      "Description": "Creates one quote, inventories controls and selectable values, and stops before rating or binding"
+    }
+  ]
+}

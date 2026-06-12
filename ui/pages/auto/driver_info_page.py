@@ -1,5 +1,7 @@
 import re
 
+import allure
+
 from ui.pages.common.base_page import BasePage
 
 
@@ -8,12 +10,33 @@ class DriverInfoPage(BasePage):
     
     def __init__(self, page):
         super().__init__(page)
+
+        def field_by_label(label, role):
+            return page.get_by_text(label, exact=True).locator(
+                "xpath=ancestor::div[contains(@class,'x-field')][1]"
+            ).get_by_role(role)
+
         self.gender = page.get_by_role("combobox", name="Gender*")
+        self.prefix = page.get_by_role("combobox", name="Prefix")
+        self.middle_name = page.get_by_role("textbox", name="MI/Middle Name")
+        self.suffix = page.get_by_role("combobox", name="Suffix")
+        self.relationship_to_insured = page.get_by_role(
+            "combobox", name="Relationship to Insured"
+        )
+        self.ssn = page.get_by_role("textbox", name="SSN")
         self.marital_status = page.get_by_role("combobox", name="Marital Status*")
         self.driver_status = page.get_by_role("combobox", name="Driver Status*")
         self.employment = page.get_by_role("combobox", name="Employment Category")
         self.occupation = page.get_by_role("combobox", name="Occupation")
         self.licence = page.get_by_role("combobox", name="License Status*")
+        self.country_of_issue = field_by_label("Country of Issue", "combobox")
+        self.license_state = field_by_label("License State/Province", "combobox")
+        self.license_year = field_by_label("License Year", "textbox")
+        self.license_number = field_by_label("License Number", "textbox")
+        self.licensed_another_state = field_by_label(
+            "Have you been licensed in another state in the last three years?",
+            "radiogroup",
+        )
         self.sr22_filing_state = page.get_by_role(
             "combobox",
             name=re.compile(r"SR-?22 Filing State", re.I),
@@ -23,6 +46,7 @@ class DriverInfoPage(BasePage):
 
     def fill_driver_info(self, data):
         """Fill driver information form."""
+        self.fill_optional_driver_info(data)
         self.set_gender(data)
         self.set_marital_status(data)
         self.set_driver_status(data)
@@ -33,6 +57,70 @@ class DriverInfoPage(BasePage):
         self.set_defensive_driver(data)
         self.click_save()
         self.click_vehicle_info_link()
+
+    @allure.step("Fill optional driver fields")
+    def fill_optional_driver_info(self, data):
+        """Fill configured optional identity and license fields."""
+        self._set_optional_combo(self.prefix, data.get("Prefix"))
+        self._set_optional_text(self.middle_name, data.get("MiddleName"))
+        self._set_optional_combo(self.suffix, data.get("Suffix"))
+        self._set_optional_combo(
+            self.relationship_to_insured,
+            data.get("RelationshipToInsured"),
+        )
+        self._set_optional_text(self.ssn, data.get("SSN"), type_text=True)
+        self._set_optional_combo(
+            self.country_of_issue,
+            data.get("CountryOfIssue"),
+        )
+        self._set_optional_combo(self.license_state, data.get("LicenseState"))
+        self._set_optional_text(self.license_year, data.get("LicenseYear"))
+        self._set_optional_text(self.license_number, data.get("LicenseNumber"))
+        self.set_licensed_another_state(data.get("LicensedAnotherState"))
+
+    def _set_optional_combo(self, locator, value):
+        if not value:
+            return
+        try:
+            locator.first.wait_for(state="visible", timeout=2_000)
+        except Exception:
+            self.logger.info("Configured optional combobox is not visible; skipping.")
+            return
+        expected = str(value).strip()
+        if locator.first.input_value().strip() == expected:
+            return
+        self.select_extjs_option(locator.first, expected)
+        self.wait_for_app_ready()
+
+    def _set_optional_text(self, locator, value, type_text=False):
+        if not value:
+            return
+        try:
+            locator.first.wait_for(state="visible", timeout=2_000)
+        except Exception:
+            self.logger.info("Configured optional text field is not visible; skipping.")
+            return
+        if type_text:
+            self.smart_type(locator.first, str(value))
+        else:
+            self.smart_fill(locator.first, str(value))
+
+    @allure.step("Set licensed in another state: {answer}")
+    def set_licensed_another_state(self, answer):
+        if not answer:
+            return
+        group = self.licensed_another_state
+        try:
+            group.wait_for(state="visible", timeout=2_000)
+        except Exception:
+            self.logger.info(
+                "Licensed-in-another-state question is not visible; skipping."
+            )
+            return
+        radio = group.get_by_label(
+            re.compile(f"^{re.escape(str(answer))}$", re.I)
+        )
+        radio.dispatch_event("click")
 
     def set_gender(self, data):
         """Set gender field."""

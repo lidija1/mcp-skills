@@ -93,6 +93,66 @@ This is the living memory for OneShield app exploration. Update it after every u
 - After `Next`, `Save`, `Rate`, `Bind`, and quote/policy creation actions, wait for masks/spinners and verify the target page state.
 - Capture current page header, URL, and OneShield step indicator when diagnosing navigation issues.
 
+### 2026-06-11 - GL_010 Parallel Rating Stabilization
+
+**Context**
+- LOB: General Liability
+- Scenario: `ui/tests/test_gl.py::test_gl_workflow[GL_010-Excess Only Policy - Umbrella Overlay with Underlying GL]`
+- Test data: `testdata/static/gl/GLData.json`, `GL_010`
+
+**Confirmed Behavior**
+- GL_010 passed headed with tracing/network capture and passed again headless after the wait change.
+- The rating save emits `FieldProcessorServlet`; Rate Quote emits `GatewayServlet` with `TX_NAME=Action.1753948`.
+- The live app accepted the current excess-only data and bound active policies without additional SIR inputs.
+- The earlier 10-worker failure was timing-sensitive: Rate Quote was not rendered within the old click retry window after rating save.
+
+**Stable Selectors / Methods**
+- Keep the accessible `>>> rate quote` and `>>> request issue` button locators.
+- Use `BasePage.with_oneshield_response()` for required server transitions.
+- After rating save, require `FieldProcessorServlet`, clear both app masks, then wait for Rate Quote to become visible.
+- After Rate Quote, require `GatewayServlet`, clear both app masks, then wait for Request Issue to become visible.
+
+**Required Waits**
+- Required OneShield response timeout is 120 seconds, matching the app's configured AJAX timeout.
+- Post-response action buttons use a 60-second visibility timeout.
+
+**Known Failed Approaches**
+- Attempt: Use the optional generic 10-second response observation and immediately click Rate Quote after mask checks.
+- Symptom: Under 10-worker load, the rating page had not finished rebuilding and Rate Quote stayed absent through both 15-second click attempts.
+- Replacement: Require the endpoint-specific response and verify the next action button as the page-state postcondition.
+
+### 2026-06-11 - GL_026 Liquor Liability Boundlist Stabilization
+
+**Context**
+- LOB: General Liability
+- Scenario: `ui/tests/test_gl.py::test_gl_optional_fields_workflow[GL_026-Liquor Liability Coverage Added - Restaurant or Bar Serving Alcohol]`
+- Test data: `testdata/static/gl/GLData.json`, `GL_026`
+
+**Confirmed Behavior**
+- The Liquor Occurrence Limit picker can reappear during the Gross Sales `FieldProcessorServlet` refresh.
+- A visually hidden picker may remain internally expanded in ExtJS and later intercept the Liquor Liability Rate textbox.
+- GL_026 passed headed and passed headless after collapsing the ExtJS picker component and avoiding the preliminary pointer click for Liquor text fields.
+
+**Stable Selectors / Methods**
+- `BasePage._close_extjs_boundlists()` resolves visible boundlists through `Ext.getCmp()` and calls the owning field's `collapse()` method before pressing Escape.
+- `BasePage.smart_fill(..., click_first=False)` supports editable fields whose value can be filled without a pointer click.
+- GL optional required text fields close any active boundlist before filling and wait for their `FieldProcessorServlet` response.
+
+**Required Waits**
+- Wait for Gross Sales and Liquor Rate field-processing responses before moving to the next required control.
+- Verify all visible `.x-boundlist` containers are gone after dropdown selection.
+
+**Known Failed Approaches**
+- Attempt: Press Escape after selecting an option and immediately continue.
+- Symptom: The picker disappeared briefly but returned after a later field refresh and intercepted the Rate textbox.
+- Replacement: Collapse the owning ExtJS combobox component and verify no visible boundlist remains.
+- Attempt: Add a 30-second `FieldProcessorServlet` wait to each Liquor dropdown.
+- Symptom: The dropdown selections emitted no matching response, adding 90 seconds without preventing the overlay race.
+- Replacement: Keep dropdown selection local; synchronize the text fields that actually emit `FieldProcessorServlet`.
+- Attempt: Close the overlay immediately before `smart_fill()` while retaining its pointer click.
+- Symptom: The ExtJS picker could reopen between cleanup and the click action.
+- Replacement: Use `smart_fill(..., click_first=False)` for the affected required text fields.
+
 ## Known Failed Approaches
 
 Record failed approaches here. Do not retry them unchanged.
@@ -1031,6 +1091,169 @@ Add confirmed behavior below as exploration progresses.
 
 **Open Questions**
 - Final bind after combined SR-22 + under-25 re-rate has not been run live in this session.
+
+### 2026-06-11 - Personal Auto Optional Driver and Vehicle Fields
+
+**Context**
+- LOB: Personal Auto
+- Scenarios: `AUTO_OPT_DRIVER_0001`, `AUTO_OPT_VEHICLE_0001`
+- Test data: `testdata/static/auto/AutoData.json`
+
+**Confirmed Behavior**
+- Driver prefix, middle name, relationship, SSN, and standard driver fields save successfully.
+- `Country of Issue`, license state/year/number, and licensed-in-another-state can be conditionally hidden for an active U.S. license; configured fields that are not rendered are skipped.
+- Selecting `Leased` ownership reveals the loss-payee Add action. Interest type `Leased`, loss-payee name, and physical damage symbol save successfully.
+- Garaging address, city, and ZIP can be inherited as read-only values. Matching configured values should be asserted instead of filled.
+- Source occupation `Accountant` is not a live dropdown option. It was normalized to `Professional/Managerial`, the applicable available category.
+- Bound policies: `PA10320520657-00` and `PA10320707357-00`.
+
+**Stable Selectors / Methods**
+- Driver optional identity fields use role locators; inconsistent license-field accessibility requires locating the ExtJS field container by visible label.
+- Ownership and interest type require `select_extjs_option` so ExtJS selection behavior is triggered.
+- Request Issue requires the successful `GatewayServlet` response before waiting for Delivery Preferences.
+
+**Required Waits**
+- Wait for app masks after ownership changes and after adding the loss-payee row.
+- Require the Request Issue `GatewayServlet` response and then require the `>>> next` postcondition.
+
+**Known Failed Approaches**
+- Attempt: Fill occupation with source value `Accountant`.
+- Symptom: Request Issue returned to Driver Detail because the combobox value was not a valid option.
+- Replacement: Use the live option `Professional/Managerial`.
+- Attempt: Fill inherited garaging address fields.
+- Symptom: Fields were visible but read-only.
+- Replacement: Assert that each inherited value matches the configured test data.
+
+**Open Questions**
+- Some license-related fields remain conditional and were not rendered for these active U.S. license cases.
+
+### 2026-06-11 - Personal Auto Canonical Test Data
+
+**Context**
+- LOB: Personal Auto
+- Generator: `tools/generate_auto_testdata.py`
+- Data: `testdata/static/auto/AutoData.json` and `AutoUWRulesData.json`
+
+**Confirmed Behavior**
+- `AutoData.json` is the canonical source for 20 standard and 12 optional-flow
+  cases. The former `AutoOptionalData.json` records were merged into it.
+- `AutoUWRulesData.json` contains 10 focused UW cases.
+- Every record in both files uses the same 99-key schema, including optional and
+  conditional fields. Non-applicable fields remain blank or use a safe default.
+- Existing optional IDs `AUTO_OPT_DRIVER_0001` and
+  `AUTO_OPT_VEHICLE_0001` were preserved.
+
+**Stable Selectors / Methods**
+- Optional Quote Summary fields are filled only when configured, using semantic
+  locators in `QuoteSummaryPage`.
+- Optional driver and vehicle fields continue through their owning page objects.
+
+**Required Waits**
+- Optional ExtJS quote dropdown selections wait for application masks before
+  continuing.
+
+**Known Failed Approaches**
+- Attempt: Maintain a separate optional-data file.
+- Symptom: Standard, optional, and UW records drifted into incompatible schemas.
+- Replacement: Generate both active Auto JSON files from one canonical default
+  schema and keep optional cases in `AutoData.json`.
+
+**Open Questions**
+- None for the package-derived coverage values; Stacked/Unstacked remains a
+  separate discovery item.
+
+### 2026-06-11 - Personal Auto Package Coverage Automation
+
+**Context**
+- LOB: Personal Auto
+- Probe: `tools/probe_auto_coverages.py`
+- Page object: `PolicyTermPage`
+
+**Confirmed Behavior**
+- Bronze, Silver, Gold, and Platinum populate the same 14 coverage controls.
+- The coverage controls are exposed as comboboxes but are read-only package
+  outputs. They cannot be selected independently in the tested flow.
+- Package selection determines Medical Expense, Wages Loss Basic, Funeral
+  Expense, Accidental Death, Combination Base, OTC and COLL deductibles,
+  COMP/OTC Options, T&L Limit, Substitute Transportation, Gap, Sound Equip,
+  Tapes, and Custom Amount.
+- `tools/generate_auto_testdata.py` now populates the package-derived expected
+  values in all 42 Auto and UW records.
+- A live Gold flow verified all 14 values and bound policy `PA10321891257-00`.
+
+**Stable Selectors / Methods**
+- Coverage controls use exact role/name locators in `PolicyTermPage`.
+- `verify_package_coverage_values()` asserts both exact displayed value and
+  non-editable state before Rate Quote.
+- `VehicleInfoPage.click_coverages_link()` requires
+  `Policy Coverage Option*` to be visible before returning.
+
+**Required Waits**
+- Package selection waits for `FieldProcessorServlet` and both application masks.
+- Coverage assertions run only after the package refresh completes.
+
+**Known Failed Approaches**
+- Attempt: Treat the package-derived controls as editable dropdown inputs.
+- Symptom: The controls rendered with `readOnly=true`; opening their bound lists
+  timed out.
+- Replacement: Select only the package and assert its derived coverage matrix.
+- Attempt: Snapshot immediately after clicking the Coverages tree node.
+- Symptom: A prior probe captured stale Vehicle Information controls.
+- Replacement: Require the Policy Coverage Option control as the navigation
+  postcondition.
+
+**Open Questions**
+- The visible Stacked/Unstacked radio choice was not part of the existing
+  database definitions and still needs a separate behavior probe.
+
+### 2026-06-11 - Personal Auto Field And Dropdown Discovery
+
+**Context**
+- LOB: Personal Auto
+- Probe: `tools/probe_auto_elements.py`
+- Inventory: `reports/lob-discovery/auto/`
+
+**Confirmed Behavior**
+- Quote Summary exposes optional Quote Name, Net of commission, Commission Basis,
+  Current/Prior carrier, prior Term, prior Expiration Date, and Premium fields.
+- Quote-level Term options are `6 Months` and `12 Months`; Billing Method options
+  are `Direct Billed` and `Agency Billed`.
+- Selecting SR-22 `Yes` twice consistently revealed `SR-22 Filing State`.
+- License country, state/province, year, and number appeared after the first
+  SR-22 refresh and remained rendered after SR-22 returned to `No`.
+- Vehicle options captured for the tested path include years 2017-2019, the
+  current make list, 2018 BMW models, M3 specifications, vehicle uses, and
+  ownership values `Owned`, `Leased`, and `Financed`.
+- Garaging Address Line 2 is present and inherited read-only in the tested quote.
+- One quote was created; no rating, request issue, or bind action was executed.
+
+**Stable Selectors / Methods**
+- Newly mapped Quote Summary controls use exact role/name locators in
+  `QuoteSummaryPage`.
+- Garaging Address Line 2 uses
+  `get_by_role("textbox", name="Address Line 2")`.
+- `tools/probe_auto_elements.py` inventories visible controls and collects only
+  visible, enabled ExtJS bound-list options.
+
+**Required Waits**
+- Wait for `FieldProcessorServlet` and application masks after SR-22 and
+  ownership changes before comparing visible controls.
+- Close each ExtJS bound list before opening the next combobox.
+
+**Known Failed Approaches**
+- Attempt: Use probe first name `Auto`.
+- Symptom: The driver tree regex matched both `Automobile Policy` and the driver
+  name, causing a strict-mode violation.
+- Replacement: Use a probe name that does not overlap a tree-node label.
+- Attempt: Treat clicking the Coverages tree link as sufficient proof of
+  navigation.
+- Symptom: The final snapshot still contained Vehicle Information controls.
+- Replacement: Future coverage probes must require the Policy Coverage Option
+  control as the navigation postcondition.
+
+**Open Questions**
+- Free-text VIN mode and non-passenger vehicle types need separate targeted
+  probes because they can replace the year/make/model/specification controls.
 
 ### Template
 

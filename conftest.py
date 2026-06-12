@@ -1,5 +1,6 @@
 import os
 import datetime
+import uuid
 import pytest
 import allure
 from pathlib import Path
@@ -8,6 +9,7 @@ from playwright.sync_api import sync_playwright
 
 from utils.logger import setup_logger
 from utils.api_flow_recorder import ApiFlowRecorder
+from utils.metrics_collector import build_metric, write_metric
 
 load_dotenv()
 
@@ -41,6 +43,8 @@ def pytest_configure(config):
     """Initialize session storage for test results (supports parallel execution)."""
     config.test_results = []
     config.addinivalue_line("markers", "parallel: mark test as able to run in parallel")
+    config._metrics_run_id = str(uuid.uuid4())[:8]
+    config._metrics_timings = {}  # nodeid -> start datetime
 
     # Resolve env early so it's available to all hooks
     env = _resolve_env(config)
@@ -287,6 +291,22 @@ def data(test_data):
 #     print("=" * 30)
 
 
+def pytest_sessionfinish(session, exitstatus):
+    """Auto-generate the automation dashboard after every test run."""
+    try:
+        import subprocess, sys
+        script = Path("scripts") / "generate_metrics_dashboard.py"
+        if script.exists():
+            subprocess.run([sys.executable, str(script)], check=False, timeout=30)
+    except Exception as exc:
+        print(f"\n[METRICS] Dashboard generation skipped: {exc}")
+
+
+def pytest_runtest_setup(item):
+    """Record test start time for metrics."""
+    item.config._metrics_timings[item.nodeid] = datetime.datetime.now(datetime.timezone.utc)
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """
@@ -299,42 +319,42 @@ def pytest_runtest_makereport(item, call):
     # Capture screenshot if test failed (report.failed = True means test did not pass)
     # Skip screenshot for API tests (marked with @pytest.mark.api)
     if report.when == "call" and report.failed:
-        # Check if test is marked as API test
         is_api_test = any(mark.name == 'api' for mark in item.iter_markers())
 
-        if is_api_test:
-            # Skip screenshot for API tests
-            return
+        if not is_api_test:
+            page = None
 
-        page = None
+            if hasattr(item, 'funcargs') and 'page' in item.funcargs:
+                page = item.funcargs.get("page")
 
-        # Try to get the page fixture from funcargs
-        # First, check if 'page' is directly available in funcargs (common for UI tests)
-        # Funcargs is a dictionary of fixture values that are available for the test function.
-        # If 'page' is one of the fixtures used in the test, it will be present in funcargs.
-        if hasattr(item, 'funcargs') and 'page' in item.funcargs:
-            page = item.funcargs.get("page")
+            if not page and hasattr(item, '_request'):
+                try:
+                    page = item._request.getfixturevalue("page")
+                except Exception:
+                    pass
 
-        # If not found in funcargs, try to get it from the fixture request
-        # Some tests might not use 'page' directly as a fixture but might have it available through the request object.
-        if not page and hasattr(item, '_request'):
-            try:
-                page = item._request.getfixturevalue("page")
-            except Exception:
-                pass
+            if page:
+                try:
+                    screenshot_bytes = page.screenshot(full_page=True)
+                    allure.attach(
+                        screenshot_bytes,
+                        name=f"Failure_{item.name}",
+                        attachment_type=allure.attachment_type.PNG
+                    )
+                    print(f"\n Screenshot captured for failed test: {item.name}")
+                except Exception as e:
+                    print(f"\n Failed to capture screenshot for {item.name}: {str(e)}")
 
-        # Capture and attach screenshot if page is available
-        if page:
-            try:
-                # Take screenshot as bytes (no need to save to file)
-                screenshot_bytes = page.screenshot(full_page=True)
-
-                # Attach screenshot directly from bytes in Allure report
-                allure.attach(
-                    screenshot_bytes,
-                    name=f"Failure_{item.name}",
-                    attachment_type=allure.attachment_type.PNG
-                )
-                print(f"\n Screenshot captured for failed test: {item.name}")
-            except Exception as e:
-                print(f"\n Failed to capture screenshot for {item.name}: {str(e)}")
+    # Write execution metric after the call phase (skip setup/teardown phases)
+    if report.when == "call":
+        try:
+            start_time = item.config._metrics_timings.get(
+                item.nodeid,
+                datetime.datetime.now(datetime.timezone.utc),
+            )
+            end_time = datetime.datetime.now(datetime.timezone.utc)
+            run_id = getattr(item.config, "_metrics_run_id", "unknown")
+            metric = build_metric(item, report, start_time, end_time, run_id)
+            write_metric(metric)
+        except Exception as exc:
+            print(f"\n[METRICS] Failed to write metric for {item.name}: {exc}")

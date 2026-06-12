@@ -160,8 +160,15 @@ class GeneralLiabilityOptionalCoveragesPage(BasePage):
     def _fill_required_text(self, locator, configured_value):
         if configured_value in (None, ""):
             raise AssertionError(f"Missing test data for required field: {locator}")
+        self._close_extjs_boundlists()
         self.with_optional_oneshield_response(
-            lambda: self.smart_fill(locator, str(configured_value))
+            lambda: self.smart_fill(
+                locator,
+                str(configured_value),
+                click_first=False,
+            ),
+            timeout=30000,
+            url_parts=["FieldProcessorServlet"],
         )
         self.wait_for_app_ready()
 

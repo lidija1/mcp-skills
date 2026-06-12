@@ -1,4 +1,5 @@
 from ui.pages.common.base_page import BasePage
+from utils.metrics_collector import record_metric
 
 
 class VerifyBillingPage(BasePage):
@@ -29,10 +30,12 @@ class VerifyBillingPage(BasePage):
     def click_bind(self):
         self.smart_click(self.bind_button)
         self._dismiss_error_dialog()
+        record_metric("policy_created", True)
 
     def click_bind_with_payment(self):
         self.smart_click(self.bind_with_payment_button)
         self._dismiss_error_dialog()
+        record_metric("policy_created", True)
 
     # -------------------------------------------------------------------------
     # Private helper

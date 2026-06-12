@@ -1,4 +1,5 @@
 from ui.pages.common.base_page import BasePage
+from utils.metrics_collector import record_metric
 
 
 class HomeownerVerifyBillingPage(BasePage):
@@ -28,3 +29,4 @@ class HomeownerVerifyBillingPage(BasePage):
     def click_bind(self):
         self.smart_click(self.bind_button)
         self.wait_for_loader_to_disappear()
+        record_metric("policy_created", True)

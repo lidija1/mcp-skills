@@ -7,3 +7,11 @@ def test_personal_auto_workflow():
     All step definitions are imported via conftest.py's pytest_plugins.
     """
     pass
+
+
+@scenario(
+    '../features/auto/personal_auto.feature',
+    'Create a personal auto policy with optional driver and vehicle fields',
+)
+def test_personal_auto_optional_fields():
+    pass

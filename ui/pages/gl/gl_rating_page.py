@@ -59,10 +59,38 @@ class GeneralLiabilityRatingBasisAndClassificationPage(BasePage):
         self.wait_for_loader_to_disappear()
 
     def click_rating_save(self):
-        self._click_and_wait(self.rating_save_button, wait_for_response=True)
+        self.with_oneshield_response(
+            lambda: self.smart_click(self.rating_save_button),
+            url_parts=["FieldProcessorServlet"],
+        )
+        self.wait_for_app_ready()
+        self.page.wait_for_function(
+            """() => {
+                const visible = el => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 0 && rect.height > 0
+                        && style.display !== 'none'
+                        && style.visibility !== 'hidden';
+                };
+                return [...document.querySelectorAll('button, a')]
+                    .filter(visible)
+                    .some(el => {
+                        const text = (el.innerText || el.textContent || '').trim();
+                        return text === '>>> rate quote'
+                            || text === 'GL Optional Coverages';
+                    });
+            }""",
+            timeout=60000,
+        )
 
     def click_rate_quote(self):
-        self._click_and_wait(self.rate_quote_button, wait_for_response=True)
+        self.with_oneshield_response(
+            lambda: self.smart_click(self.rate_quote_button),
+            url_parts=["GatewayServlet"],
+        )
+        self.wait_for_app_ready()
+        self.request_issue_button.wait_for(state="visible", timeout=60000)
 
     def click_request_issue(self):
         self._click_and_wait(self.request_issue_button, wait_for_response=True)

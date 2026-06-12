@@ -156,7 +156,7 @@ class BasePage:
 
     @allure.step("Smart Fill: '{target}' = '{value}'")
     def smart_fill(self, target: Union[str, Locator], value: str, timeout: int = 15000, max_retries: int = 2,
-                   clear_first: bool = True, verify_fill: bool = True) -> None:
+                   clear_first: bool = True, verify_fill: bool = True, click_first: bool = True) -> None:
         """
         Smart fill wrapper with:
         - Visibility check
@@ -196,8 +196,9 @@ class BasePage:
                 # Step 4: Scroll into view if needed
                 locator.scroll_into_view_if_needed()
 
-                # Step 5: Click to focus
-                locator.click(timeout=timeout)
+                # Step 5: Click to focus when the control requires pointer activation.
+                if click_first:
+                    locator.click(timeout=timeout)
 
                 # Step 6: Clear existing value if requested
                 if clear_first:
@@ -435,6 +436,18 @@ class BasePage:
             self.logger.debug("No OneShield response observed within the timeout window.")
             return None
 
+    def with_oneshield_response(self, action, timeout: int = 120000, url_parts=None):
+        """Run an action and require the matching OneShield response to complete."""
+        with self.page.expect_response(
+            lambda response: self._matches_oneshield_response(response, url_parts),
+            timeout=timeout,
+        ) as response_info:
+            result = action()
+
+        response = response_info.value
+        self.logger.info(f"Observed required OneShield response: {response.status} {response.url}")
+        return result
+
     def _matches_oneshield_response(self, response, url_parts=None):
         if response.status >= 400:
             return False
@@ -500,16 +513,57 @@ class BasePage:
                 else:
                     click_option()
 
-                # ExtJS combo lists can keep their overlay around after a JS click.
-                # Nudge the control closed so the next interaction does not get intercepted.
-                self.page.keyboard.press("Escape")
+                self._close_extjs_boundlists()
                 return
             except Exception as error:
                 last_error = error
-                self.page.keyboard.press("Escape")
+                self._close_extjs_boundlists(raise_on_timeout=False)
                 self.wait_for_app_ready()
                 time.sleep(0.5)
         raise last_error
+
+    def _close_extjs_boundlists(self, timeout: int = 5000, raise_on_timeout: bool = True):
+        """Close floating ExtJS option lists before the next field interaction."""
+        visible_boundlists_gone = (
+            "() => ![...document.querySelectorAll('.x-boundlist')]"
+            ".some(el => {"
+            " const r = el.getBoundingClientRect();"
+            " const style = window.getComputedStyle(el);"
+            " return r.width > 0 && r.height > 0"
+            " && style.visibility !== 'hidden'"
+            " && style.display !== 'none';"
+            "})"
+        )
+
+        for _ in range(2):
+            self.page.evaluate(
+                """() => {
+                    if (typeof Ext === 'undefined' || !Ext.getCmp) return;
+                    for (const el of document.querySelectorAll('.x-boundlist')) {
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        if (rect.width <= 0 || rect.height <= 0
+                                || style.visibility === 'hidden'
+                                || style.display === 'none') {
+                            continue;
+                        }
+                        const picker = Ext.getCmp(el.dataset.componentid || el.id);
+                        const field = picker && (picker.pickerField || picker.ownerCmp);
+                        if (field && typeof field.collapse === 'function') {
+                            field.collapse();
+                        }
+                    }
+                }"""
+            )
+            self.page.keyboard.press("Escape")
+            try:
+                self.page.wait_for_function(visible_boundlists_gone, timeout=timeout)
+                return
+            except PWTimeout:
+                continue
+
+        if raise_on_timeout:
+            raise AssertionError("ExtJS boundlist remained visible after option selection")
 
     def collect_extjs_options(self, locator: Locator, timeout: int = 5000):
         """Return the currently visible ExtJS option texts for a combobox."""
@@ -542,7 +596,7 @@ class BasePage:
             )
 
         options = self.page.evaluate(visible_items_js)
-        self.page.keyboard.press("Escape")
+        self._close_extjs_boundlists()
         return options
 
     def collect_radio_options(self, group_name: str):
@@ -584,5 +638,3 @@ class BasePage:
                 items.append(text)
 
         return items
-
-

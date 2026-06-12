@@ -1,6 +1,7 @@
 import re
 
 from ui.pages.common.base_page import BasePage
+from utils.metrics_collector import record_metric
 
 
 class CreatePolicyPage(BasePage):
@@ -26,7 +27,12 @@ class CreatePolicyPage(BasePage):
 
     def click_issue(self):
         """Request policy issue."""
-        self.smart_click(self.request_issue)
+        self.with_oneshield_response(
+            lambda: self.smart_click(self.request_issue),
+            url_parts=["GatewayServlet"],
+        )
+        self.wait_for_app_ready()
+        self.next_button.wait_for(state="visible", timeout=30_000)
 
     def click_re_rate_if_visible(self, timeout: int = 3_000) -> bool:
         """Click re-rate when the current premium summary requires it."""
@@ -46,3 +52,4 @@ class CreatePolicyPage(BasePage):
     def click_bind(self):
         """Bind the policy."""
         self.smart_click(self.bind_button)
+        record_metric("policy_created", True)

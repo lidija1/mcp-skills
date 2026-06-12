@@ -38,6 +38,21 @@ def _evaluate(
         actual = flow_result.get("last_page", "")
         return _string_finding(assertion, actual)
 
+    if assertion.type == "page_not_contains":
+        actual = flow_result.get("last_page", "")
+        actual_text = str(actual or "")
+        expected_text = str(assertion.expected or "")
+        passed = expected_text.lower() not in actual_text.lower()
+        return AssertionFinding(
+            type=assertion.type,
+            operator=assertion.operator,
+            expected=assertion.expected,
+            actual=actual,
+            evidence_path=assertion.evidence_path,
+            passed=passed,
+            message="" if passed else f"Page contains '{assertion.expected}' but expected it absent.",
+        )
+
     if assertion.type == "uw_condition_contains":
         actual_rows = _uw_row_texts(flow_result, uw_stage_key)
         passed = any(str(assertion.expected).lower() in row.lower() for row in actual_rows)
@@ -296,6 +311,8 @@ def _string_finding(assertion: ApiAssertion, actual: Any) -> AssertionFinding:
 
     if assertion.operator == "contains":
         passed = expected_text.lower() in actual_text.lower()
+    elif assertion.operator == "not_contains":
+        passed = expected_text.lower() not in actual_text.lower()
     elif assertion.operator == "equals":
         passed = expected_text.lower() == actual_text.lower()
     elif assertion.operator == "exists":

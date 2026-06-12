@@ -1,10 +1,13 @@
+from pathlib import Path
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 
 # Putanja do SQLite baze
-DATABASE_URL = "sqlite:///./data/dashboard.db"
+DB_PATH = Path(__file__).resolve().parent / "data" / "dashboard.db"
+DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
 
 
 # Konektovanje na SQLite

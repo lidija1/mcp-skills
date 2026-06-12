@@ -23,10 +23,11 @@ import json
 import concurrent.futures
 import re
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import dashboard_db
 import job_store
 from tool_registry import REGISTRY, ToolValidationError, validate_params
 from tool_registry import registry_summary_for_prompt
@@ -95,6 +96,7 @@ class ChatMessageReq(BaseModel):
     confirmed_tool: str | None = None
     confirmed_params: dict | None = None
     history: list[dict] = []
+    chat_session_id: int | None = None
 
 
 class ChatMessageResp(BaseModel):
@@ -103,12 +105,15 @@ class ChatMessageResp(BaseModel):
     tool_call: dict | None = None   # populated when status == "confirm"
     job_id: str | None = None       # populated when status == "job"
     job_label: str | None = None
+    chat_session_id: int | None = None
 
 
 class ChatAskReq(BaseModel):
     message: str = ""
+    display_message: str | None = None
     history: list[dict] = []
     max_tokens: int = 1200
+    chat_session_id: int | None = None
 
     def effective_max_tokens(self) -> int:
         return max(256, min(self.max_tokens, 6000))
@@ -117,6 +122,34 @@ class ChatAskReq(BaseModel):
 class ChatAskResp(BaseModel):
     reply: str
     status: str
+    chat_session_id: int | None = None
+
+
+class ChatSessionCreateReq(BaseModel):
+    title: str | None = None
+
+
+def _current_user_id() -> int:
+    user = dashboard_db.get_current_user()
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return int(user["id"])
+
+
+def _ensure_session(user_id: int, session_id: int | None, first_message: str = "") -> dict:
+    session = dashboard_db.ensure_chat_session(
+        user_id=user_id,
+        session_id=session_id,
+        first_message=first_message,
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    return session
+
+
+def _save_message(user_id: int, session_id: int | None, role: str, content: str) -> None:
+    if session_id and content and content.strip():
+        dashboard_db.add_chat_message(session_id, user_id, role, content)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -553,6 +586,35 @@ def chat_provider_status():
     return provider_status(probe=True)
 
 
+@router.get("/sessions")
+def list_chat_sessions():
+    user_id = _current_user_id()
+    return {"sessions": dashboard_db.list_chat_sessions(user_id)}
+
+
+@router.post("/sessions")
+def create_chat_session(req: ChatSessionCreateReq):
+    user_id = _current_user_id()
+    return dashboard_db.create_chat_session(user_id=user_id, title=req.title)
+
+
+@router.get("/sessions/{session_id}")
+def get_chat_session(session_id: int):
+    user_id = _current_user_id()
+    session = dashboard_db.get_chat_session(session_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    return session
+
+
+@router.delete("/sessions/{session_id}")
+def delete_chat_session(session_id: int):
+    user_id = _current_user_id()
+    if not dashboard_db.delete_chat_session(session_id, user_id):
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    return {"deleted": session_id}
+
+
 @router.post("/ask", response_model=ChatAskResp)
 def chat_ask(req: ChatAskReq):
     """
@@ -568,6 +630,12 @@ def chat_ask(req: ChatAskReq):
             status="error",
         )
 
+    persisted_user_message = (req.display_message or message).strip()
+    user_id = _current_user_id()
+    session = _ensure_session(user_id, req.chat_session_id, first_message=persisted_user_message)
+    session_id = session["id"]
+    _save_message(user_id, session_id, "user", persisted_user_message)
+
     history = _sanitize_history(req.history)
     try:
         graph_context = retrieve_framework_context(message)
@@ -577,9 +645,12 @@ def chat_ask(req: ChatAskReq):
         )
         reply = complete_text(system=system, user=message, max_tokens=req.effective_max_tokens(), history=history)
     except Exception as exc:
-        return ChatAskResp(reply=f"Could not generate guidance: {exc}", status="error")
+        reply = f"Could not generate guidance: {exc}"
+        _save_message(user_id, session_id, "assistant", reply)
+        return ChatAskResp(reply=reply, status="error", chat_session_id=session_id)
 
-    return ChatAskResp(reply=reply, status="ok")
+    _save_message(user_id, session_id, "assistant", reply)
+    return ChatAskResp(reply=reply, status="ok", chat_session_id=session_id)
 
 
 @router.post("/ask/stream")
@@ -605,9 +676,17 @@ def chat_ask_stream(req: ChatAskReq):
             media_type="text/event-stream",
         )
 
+    persisted_user_message = (req.display_message or message).strip()
+    user_id = _current_user_id()
+    session = _ensure_session(user_id, req.chat_session_id, first_message=persisted_user_message)
+    session_id = session["id"]
+    _save_message(user_id, session_id, "user", persisted_user_message)
+
     history = _sanitize_history(req.history)
 
     def _generate():
+        acc = ""
+        yield f"data: {json.dumps({'session_id': session_id})}\n\n"
         try:
             graph_context = retrieve_framework_context(message)
             system = _ASK_SYSTEM_PROMPT.format(
@@ -615,10 +694,14 @@ def chat_ask_stream(req: ChatAskReq):
                 context=graph_context,
             )
             for token in complete_text_stream(system=system, user=message, max_tokens=req.effective_max_tokens(), history=history):
+                acc += token
                 yield f"data: {json.dumps({'t': token})}\n\n"
+            _save_message(user_id, session_id, "assistant", acc)
             yield 'data: {"done": true}\n\n'
         except Exception as exc:
-            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+            error_text = str(exc)
+            _save_message(user_id, session_id, "assistant", f"Error: {error_text}")
+            yield f"data: {json.dumps({'error': error_text})}\n\n"
 
     return StreamingResponse(
         _generate(),
@@ -647,23 +730,31 @@ def chat_message(req: ChatMessageReq, bg: BackgroundTasks):
     """
     # ── Confirmed dispatch path ──────────────────────────────────────────────
     if req.confirmed_tool:
+        user_id = _current_user_id()
+        session = _ensure_session(user_id, req.chat_session_id, first_message="")
+        session_id = session["id"]
+
+        def _confirmed_resp(reply: str, status: str, **extra):
+            _save_message(user_id, session_id, "assistant", reply)
+            return ChatMessageResp(reply=reply, status=status, chat_session_id=session_id, **extra)
+
         tool_name = req.confirmed_tool
         if tool_name not in REGISTRY:
-            return ChatMessageResp(reply=f"Unknown tool: {tool_name!r}", status="error")
+            return _confirmed_resp(f"Unknown tool: {tool_name!r}", "error")
         try:
             # Re-validate on confirm — client cannot bypass registry
             cleaned = validate_params(tool_name, req.confirmed_params or {})
         except ToolValidationError as exc:
-            return ChatMessageResp(reply=str(exc), status="error")
+            return _confirmed_resp(str(exc), "error")
 
         tool_spec = REGISTRY[tool_name]
 
         if not tool_spec["creates_job"]:
-            return ChatMessageResp(reply=_list_uw_rules_inline(cleaned.get("lob", "")), status="ok")
+            return _confirmed_resp(_list_uw_rules_inline(cleaned.get("lob", "")), "ok")
 
         dispatch_fn = _DISPATCH.get(tool_name)
         if not dispatch_fn:
-            return ChatMessageResp(reply=f"No dispatch handler for {tool_name!r}.", status="error")
+            return _confirmed_resp(f"No dispatch handler for {tool_name!r}.", "error")
 
         label = _job_label(tool_name, cleaned)
         jid = job_store.new_job(
@@ -672,7 +763,7 @@ def chat_message(req: ChatMessageReq, bg: BackgroundTasks):
             metadata={"tool": tool_name, "params": cleaned},
         )
         bg.add_task(dispatch_fn(jid, cleaned))
-        return ChatMessageResp(
+        return _confirmed_resp(
             reply=f"Started. Job `{jid}` is running — check the Jobs panel for results.",
             status="job",
             job_id=jid,
@@ -688,45 +779,51 @@ def chat_message(req: ChatMessageReq, bg: BackgroundTasks):
             reply=f"Message too long (max {_MAX_MESSAGE_CHARS} characters).", status="error"
         )
 
+    user_id = _current_user_id()
+    session = _ensure_session(user_id, req.chat_session_id, first_message=message)
+    session_id = session["id"]
+    _save_message(user_id, session_id, "user", message)
+
+    def _message_resp(reply: str, status: str, **extra):
+        _save_message(user_id, session_id, "assistant", reply)
+        return ChatMessageResp(reply=reply, status=status, chat_session_id=session_id, **extra)
+
     history = _sanitize_history(req.history)
     try:
         intent = parse_intent(message, history=history)
     except Exception as exc:
-        return ChatMessageResp(reply=f"Could not parse your request: {exc}", status="error")
+        return _message_resp(f"Could not parse your request: {exc}", "error")
 
     tool_name = intent.get("tool")
     reply_text = intent.get("reply", "")
     raw_params = intent.get("params") or {}
 
     if not tool_name:
-        return ChatMessageResp(reply=reply_text or "I'm not sure how to help with that.", status="ok")
+        return _message_resp(reply_text or "I'm not sure how to help with that.", "ok")
 
     if tool_name not in REGISTRY:
-        return ChatMessageResp(
-            reply=f"That action ({tool_name!r}) is not in the approved tool list.",
-            status="ok",
-        )
+        return _message_resp(f"That action ({tool_name!r}) is not in the approved tool list.", "ok")
 
     try:
         cleaned = validate_params(tool_name, raw_params)
     except ToolValidationError as exc:
-        return ChatMessageResp(reply=str(exc), status="error")
+        return _message_resp(str(exc), "error")
 
     tool_spec = REGISTRY[tool_name]
 
     if not tool_spec["creates_job"]:
-        return ChatMessageResp(reply=_list_uw_rules_inline(cleaned.get("lob", "")), status="ok")
+        return _message_resp(_list_uw_rules_inline(cleaned.get("lob", "")), "ok")
 
     if tool_spec["requires_confirmation"]:
-        return ChatMessageResp(
-            reply=reply_text or f"Ready to run **{tool_name}**. Confirm to proceed.",
-            status="confirm",
+        return _message_resp(
+            reply_text or f"Ready to run **{tool_name}**. Confirm to proceed.",
+            "confirm",
             tool_call={"tool": tool_name, "params": cleaned},
         )
 
     dispatch_fn = _DISPATCH.get(tool_name)
     if not dispatch_fn:
-        return ChatMessageResp(reply=f"No dispatch handler for {tool_name!r}.", status="error")
+        return _message_resp(f"No dispatch handler for {tool_name!r}.", "error")
 
     label = _job_label(tool_name, cleaned)
     jid = job_store.new_job(
@@ -735,7 +832,7 @@ def chat_message(req: ChatMessageReq, bg: BackgroundTasks):
         metadata={"tool": tool_name, "params": cleaned},
     )
     bg.add_task(dispatch_fn(jid, cleaned))
-    return ChatMessageResp(
+    return _message_resp(
         reply=reply_text or "Job started — check the Jobs panel for results.",
         status="job",
         job_id=jid,

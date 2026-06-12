@@ -476,6 +476,208 @@ class OneShieldApiReplay:
         self.replay_trace.append(self._action_diagnostics(page, tx_name, response))
         return response
 
+    def continue_soft_uw_to_premium_summary(
+        self,
+        test_data: dict[str, Any],
+        comment: str = "Approved by API regression sweep - risk accepted.",
+    ) -> requests.Response:
+        """Override editable UW rows and continue to the rated Premium Summary."""
+        if not self._state_page_contains("underwriting"):
+            raise RuntimeError(
+                f"Soft-UW continuation requires an underwriting page, got {self._state_page_name()!r}"
+            )
+
+        response = self._post_live_action(
+            ">>> accept",
+            test_data,
+            lambda form: self._set_soft_uw_override_fields(form, comment),
+        )
+        if self._state_page_contains("underwriting"):
+            raise RuntimeError(
+                "UW accept did not leave the referral page; one or more rules may be hard stops."
+            )
+
+        if self._state_page_contains("contact information", "contact permission"):
+            self._set_contact_permission_and_continue(test_data)
+
+        if not self._state_page_contains("premium", "summary"):
+            raise RuntimeError(
+                "Soft-UW continuation did not reach Premium Summary; "
+                f"current page is {self._state_page_name()!r}"
+            )
+
+        if self._has_live_action("re-rate"):
+            response = self._post_live_action("re-rate", test_data)
+
+        if not self._state_page_contains("premium", "summary"):
+            raise RuntimeError(
+                "Soft-UW re-rate did not return to Premium Summary; "
+                f"current page is {self._state_page_name()!r}"
+            )
+        return response
+
+    def _set_contact_permission_and_continue(self, test_data: dict[str, Any]) -> None:
+        permission = self._state_layout_cell(
+            ("Contact Permission", "Contact Permissions", "Preferred Contact Method")
+        )
+        permission_value = "Email"
+        if not permission:
+            permission = self._state_layout_cell(
+                ("Email", "Email Contact Permission", "Email Permission")
+            )
+            permission_value = "Yes"
+        if permission and self._has_live_action("save changes"):
+            self._post_live_action(
+                "save changes",
+                test_data,
+                lambda form: self._set_form_cell_value(
+                    form,
+                    permission,
+                    permission_value,
+                ),
+            )
+        elif self._has_live_action("save"):
+            self._post_live_action(
+                "save",
+                test_data,
+                (
+                    lambda form: self._set_form_cell_value(
+                        form,
+                        permission,
+                        permission_value,
+                    )
+                )
+                if permission
+                else None,
+            )
+
+        if self._has_live_action(">>> next"):
+            self._post_live_action(
+                ">>> next",
+                test_data,
+                (
+                    lambda form: self._set_form_cell_value(
+                        form,
+                        permission,
+                        permission_value,
+                    )
+                )
+                if permission and not self._has_live_action("save changes")
+                else None,
+            )
+        elif self._has_live_action("next"):
+            self._post_live_action(
+                "next",
+                test_data,
+                (
+                    lambda form: self._set_form_cell_value(
+                        form,
+                        permission,
+                        permission_value,
+                    )
+                )
+                if permission and not self._has_live_action("save changes")
+                else None,
+            )
+
+    def _set_soft_uw_override_fields(self, form: dict[str, str], comment: str) -> None:
+        block = self._visible_grid_block_by_label("underwriting issues")
+        if not block:
+            raise RuntimeError("Underwriting issues grid was not found in the live UI model.")
+
+        grid = block.get("grid", {})
+        editor_rows = grid.get("editorCells", [])
+        records = grid.get("valueRecords", [])
+        if not records or len(editor_rows) < len(records):
+            raise RuntimeError("UW rows do not expose editable cell metadata.")
+
+        for index in range(len(records)):
+            row_editors = editor_rows[index]
+            if not isinstance(row_editors, dict):
+                raise RuntimeError(f"UW row {index + 1} has no editable cell map.")
+
+            cells = [
+                cell
+                for cell in row_editors.values()
+                if isinstance(cell, dict)
+            ]
+            override = self._editor_cell_by_label(cells, "Overridden?")
+            comments = self._editor_cell_by_label(cells, "Underwriter's Comments")
+            if (
+                not override
+                or override.get("readOnly") is True
+                or not comments
+                or comments.get("readOnly") is True
+            ):
+                raise RuntimeError(
+                    f"UW row {index + 1} is not editable by the current user."
+                )
+
+            self._set_form_cell_value(form, override, "Yes")
+            self._set_form_cell_value(form, comments, comment)
+
+    def _editor_cell_by_label(
+        self,
+        cells: list[dict[str, Any]],
+        label: str,
+    ) -> dict[str, Any] | None:
+        expected = self._ui_label_key(label)
+        for cell in cells:
+            candidates = [
+                cell.get("label"),
+                (cell.get("mouseoverMesg") or {}).get("content")
+                if isinstance(cell.get("mouseoverMesg"), dict)
+                else None,
+            ]
+            if any(
+                self._ui_label_key(str(candidate or "")) == expected
+                for candidate in candidates
+            ):
+                return cell
+        return None
+
+    def _post_live_action(
+        self,
+        label: str,
+        test_data: dict[str, Any],
+        mutate_form: Any | None = None,
+    ) -> requests.Response:
+        button = self._state_action_button(label)
+        event = self.find_gateway_event(
+            page="auto_premium_summary",
+            tx_name="Action.305905",
+        )
+        request = self._captured_request(event)
+        form = self._stateful_form(request.form, test_data, event)
+        form["TX_NAME"] = str(button["actionIdText"])
+        form["validateFlag"] = str(button.get("validationType", form.get("validateFlag", "0")))
+        if mutate_form:
+            mutate_form(form)
+        response = self._send_form(request, form)
+        self._update_state_from_response(response)
+        self.replay_trace.append(
+            self._action_diagnostics("auto_soft_uw", form["TX_NAME"], response)
+        )
+        return response
+
+    def _has_live_action(self, label: str) -> bool:
+        try:
+            self._state_action_button(label)
+            return True
+        except LookupError:
+            return False
+
+    def _state_action_button(self, label: str) -> dict[str, Any]:
+        expected = self._ui_label_key(label)
+        for button in self.state.get("actionBarButtons", []):
+            if not isinstance(button, dict) or not button.get("enabled", True):
+                continue
+            if self._ui_label_key(str(button.get("label", ""))) == expected:
+                if button.get("actionIdText"):
+                    return button
+                raise LookupError(f"Current action {label!r} has no actionIdText")
+        raise LookupError(f"Current page has no enabled action {label!r}")
+
     def replay_event(self, event: dict[str, Any], test_data: dict[str, Any] | None = None) -> requests.Response:
         """Replay one captured event using the current live OneShield state."""
         request = self._captured_request(event)
@@ -491,6 +693,7 @@ class OneShieldApiReplay:
         stop_after: str = "rate",
         allow_bind: bool = False,
         fast_mode: bool = True,
+        continue_soft_uw: bool = False,
     ) -> dict[str, Any]:
         """Run the captured Personal Auto API flow with current session state.
 
@@ -546,6 +749,20 @@ class OneShieldApiReplay:
             if not event_stage and self._state_page_contains("underwriting"):
                 response_by_stage["rate"] = response
                 ui_data_by_stage["rate"] = self._state_ui_data()
+                if continue_soft_uw:
+                    ui_data_by_stage["uw-referral"] = ui_data_by_stage["rate"]
+                    try:
+                        response = self.continue_soft_uw_to_premium_summary(test_data)
+                    except RuntimeError as exc:
+                        blocked_reason = str(exc)
+                        break
+                    response_by_stage["rate"] = response
+                    ui_data_by_stage["rate"] = self._state_ui_data()
+                    if stop_after == "rating-detail":
+                        response = self.open_auto_rating_detail(test_data)
+                        response_by_stage["rating-detail"] = response
+                        ui_data_by_stage["rating-detail"] = self._state_ui_data()
+                    break
                 if stop_after == "rating-detail":
                     rd_response = self.open_auto_rating_detail(test_data)
                     response_by_stage["rating-detail"] = rd_response
@@ -560,9 +777,24 @@ class OneShieldApiReplay:
                 blocked_reason = self._blocking_reason_after_stage(stage)
                 if blocked_reason:
                     break
-                if stage == "rate" and self._state_page_contains("underwriting") and stop_after not in ("rate", "rating-detail"):
-                    blocked_reason = self._underwriting_block_before_stage(stop_after)
-                    break
+                if stage == "rate" and self._state_page_contains("underwriting"):
+                    if continue_soft_uw:
+                        ui_data_by_stage["uw-referral"] = ui_data_by_stage["rate"]
+                        try:
+                            response = self.continue_soft_uw_to_premium_summary(test_data)
+                        except RuntimeError as exc:
+                            blocked_reason = str(exc)
+                            break
+                        response_by_stage["rate"] = response
+                        ui_data_by_stage["rate"] = self._state_ui_data()
+                        if stop_after == "rating-detail":
+                            response = self.open_auto_rating_detail(test_data)
+                            response_by_stage["rating-detail"] = response
+                            ui_data_by_stage["rating-detail"] = self._state_ui_data()
+                        break
+                    if stop_after not in ("rate", "rating-detail"):
+                        blocked_reason = self._underwriting_block_before_stage(stop_after)
+                        break
                 if stage == "rate" and stop_after == "rating-detail":
                     response = self.open_auto_rating_detail(test_data)
                     response_by_stage["rating-detail"] = response
@@ -1244,6 +1476,11 @@ class OneShieldApiReplay:
             "trace": self.replay_trace,
             "summary": summary,
             "rating_factors": rating_factors,
+            "soft_uw_continued": any(
+                item.get("page") == "auto_soft_uw"
+                and item.get("tx_name") not in {"Action.469805"}
+                for item in self.replay_trace
+            ),
             "ui_data": self._state_ui_data(),
             "stage_ui_data": stage_ui_data or {},
         }

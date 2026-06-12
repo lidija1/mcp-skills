@@ -1255,6 +1255,44 @@ Add confirmed behavior below as exploration progresses.
 - Free-text VIN mode and non-passenger vehicle types need separate targeted
   probes because they can replace the year/make/model/specification controls.
 
+### 2026-06-12 - Auto API Soft-UW Premium Continuation
+
+**Context**
+- LOB: Personal Auto
+- API cases: `UW_TC_001` (SR-22) and `UW_TC_003` (young driver)
+- Stop point: Rating Detail after returning through Premium Summary
+
+**Confirmed Behavior**
+- API replay can approve editable UW referrals without binding a policy.
+- It submits `Overridden? = Yes` and an underwriter comment for every editable
+  UW row, then posts the live `>>> accept` action.
+- Contact Information exposes an `Email` permission checkbox and only a
+  `>>>Next` action; the Email value must be included in that Next request.
+- Both live cases returned to Premium Summary, re-rated, exposed the UI
+  `Premium` field, and then opened Rating Detail successfully.
+- Regression sweeps now enable this continuation for risk-adding variants.
+
+**Stable Selectors / Methods**
+- Use live `grid.editorCells` metadata for UW row `varName`, lookup codes, and
+  read-only status.
+- Resolve UW accept, Contact Next, and re-rate from live
+  `actionBarButtons.actionIdText`.
+- Keep the pre-override UW snapshot under `stage_ui_data["uw-referral"]`; store
+  the post-re-rate Premium Summary under `stage_ui_data["rate"]`.
+
+**Required Waits**
+- Each Gateway action must update replay state before the next live action is
+  resolved.
+
+**Known Failed Approaches**
+- Attempt: Post a separate `save changes` action on Contact Information.
+- Symptom: The API model exposed only `>>>Next`.
+- Replacement: Submit Email permission in the `>>>Next` Gateway request.
+
+**Open Questions**
+- Additional soft-UW rules need live validation before being treated as
+  automatically overridable.
+
 ### Template
 
 **Context**

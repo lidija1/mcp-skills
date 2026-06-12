@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from api_tests.oneshield_api_replay import OneShieldApiReplay
+from dashboard.backend.api_assertions.premium import extract_premium_evidence
 from dashboard.backend.api_assertions.snapshot import (
     snapshot_store,
-    _extract_premium,
     _extract_uw_conditions,
 )
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona, _detect_provider
@@ -58,6 +58,10 @@ class VariantResult:
     passed: bool
     message: str
     error: str = ""
+    premium_source: str = ""
+    rating_detail_premium: float | None = None
+    premium_mismatch: bool = False
+    soft_uw_continued: bool = False
 
 
 @dataclass
@@ -77,6 +81,9 @@ class SweepResult:
     variants: list[RegressionVariant]
     results: list[VariantResult]
     analysis: SweepAnalysis | None = None
+    baseline_premium_source: str = ""
+    baseline_rating_detail_premium: float | None = None
+    baseline_premium_mismatch: bool = False
 
     @property
     def passed(self) -> bool:
@@ -253,7 +260,12 @@ def _run_persona(description: str, lob: str) -> tuple[dict, dict]:
         raise ValueError(f"Persona generation failed: {persona['error']}")
     client = OneShieldApiReplay()
     try:
-        flow = client.run_captured_auto_flow(persona, stop_after="rating-detail", fast_mode=True)
+        flow = client.run_captured_auto_flow(
+            persona,
+            stop_after="rating-detail",
+            fast_mode=True,
+            continue_soft_uw=True,
+        )
     finally:
         client.close()
     return persona, flow
@@ -332,7 +344,8 @@ def _run_variant_task(
         )
 
     run_id = snapshot_store.save(persona, flow, lob=lob, persona_desc=variant.label)
-    actual_premium = _extract_premium(flow)
+    premium_evidence = extract_premium_evidence(flow)
+    actual_premium = premium_evidence.value
     uw_conditions = _extract_uw_conditions(flow)
     blocked = bool(flow.get("blocked_reason"))
     blocked_reason = flow.get("blocked_reason", "")
@@ -364,6 +377,10 @@ def _run_variant_task(
             magnitude_passed=None,
             passed=True,
             message=f"skipped — {field}={persona[field]!r} matches baseline (same value)",
+            premium_source=premium_evidence.source,
+            rating_detail_premium=premium_evidence.rating_detail_value,
+            premium_mismatch=premium_evidence.mismatch,
+            soft_uw_continued=bool(flow.get("soft_uw_continued")),
         )
 
     direction_passed, magnitude_passed, delta_pct, message = _assert_variant(
@@ -384,6 +401,10 @@ def _run_variant_task(
         magnitude_passed=magnitude_passed,
         passed=passed,
         message=message,
+        premium_source=premium_evidence.source,
+        rating_detail_premium=premium_evidence.rating_detail_value,
+        premium_mismatch=premium_evidence.mismatch,
+        soft_uw_continued=bool(flow.get("soft_uw_continued")),
     )
 
 
@@ -546,7 +567,8 @@ def run_sweep(
         variants = variant_future.result()
         baseline_persona, baseline_flow = baseline_future.result()
 
-    baseline_premium = _extract_premium(baseline_flow)
+    baseline_evidence = extract_premium_evidence(baseline_flow)
+    baseline_premium = baseline_evidence.value
     baseline_run_id = snapshot_store.save(
         baseline_persona, baseline_flow, lob=lob,
         persona_desc=f"[baseline] {baseline_description}",
@@ -580,6 +602,9 @@ def run_sweep(
         baseline_persona=baseline_persona,
         variants=variants,
         results=results,
+        baseline_premium_source=baseline_evidence.source,
+        baseline_rating_detail_premium=baseline_evidence.rating_detail_value,
+        baseline_premium_mismatch=baseline_evidence.mismatch,
     )
 
     # Phase 4: AI pattern analysis

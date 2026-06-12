@@ -11,6 +11,7 @@ import pytest
 from api_tests.conftest import PREMIUM_BASELINES_PATH
 from api_tests.oneshield_api_replay import DEFAULT_AUTO_DATA, load_auto_test_data
 from api_tests.rating_assertions import assert_coverage_premium, compute_coverage_premiums
+from dashboard.backend.api_assertions.premium import extract_premium_evidence
 
 pytestmark = pytest.mark.api
 
@@ -79,6 +80,32 @@ def test_oneshield_api_uw_referral_snapshot_matches_ui_rule(
 
 
 SR22_UW_CASES = ["UW_TC_001", "UW_TC_010", "UW_TC_013"]
+SOFT_UW_PREMIUM_CASES = ["UW_TC_001", "UW_TC_003"]
+
+
+@pytest.mark.uw_rules
+@pytest.mark.parametrize("tc_id", SOFT_UW_PREMIUM_CASES)
+def test_oneshield_api_soft_uw_continues_to_premium_summary(
+    oneshield_api_client,
+    tc_id,
+):
+    """Approve editable SR-22/young-driver referrals and capture UI premium."""
+    test_data = load_auto_test_data(AUTO_UW_RULES_DATA, tc_id)
+
+    result = oneshield_api_client.run_captured_auto_flow(
+        test_data,
+        stop_after="rating-detail",
+        fast_mode=True,
+        continue_soft_uw=True,
+    )
+    evidence = extract_premium_evidence(result)
+
+    assert result["completed"] is True, result["blocked_reason"]
+    assert result["soft_uw_continued"] is True
+    assert "uw-referral" in result["stage_ui_data"]
+    assert "premium" in result["stage_ui_data"]["rate"]["page_name"].lower()
+    assert evidence.value is not None
+    assert evidence.source == "stage_ui_data.rate.field_values.Premium"
 
 
 @pytest.mark.uw_rules

@@ -38,7 +38,7 @@ LOB_REGISTRY: dict[str, LobConfig] = {
         valid_stages=("rate", "rating-detail", "request-issue", "billing-plan", "verify-billing"),
         default_stage="rate",
         uw_stage_key="rate",
-        premium_path="rating_factors.business_values.calculated_total_premium",
+        premium_path="stage_ui_data.rate.field_values.Premium",
     ),
 }
 

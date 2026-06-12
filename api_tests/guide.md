@@ -311,6 +311,19 @@ result = client.run_captured_auto_flow(
 }
 ```
 
+Premium assertions use the Premium Summary UI model at
+`stage_ui_data["rate"]["field_values"]["Premium"]`. Rating Detail
+`business_values["calculated_total_premium"]` is a diagnostic sum of selected
+`Policy Term Factor` rows and may not equal the premium displayed by
+OneShield. Reports should expose that mismatch and assert against Premium
+Summary.
+
+Regression sweeps pass `continue_soft_uw=True`. For editable SR-22 and
+under-25 referrals, the replay sets every `Overridden?` value to `Yes`, adds
+an underwriter comment, posts the live `>>> accept` action, completes Contact
+Information when shown, and re-rates back to Premium Summary. Read-only UW
+rows remain blocked and are not forced through.
+
 `trace` records each replayed event with:
 
 - capture page

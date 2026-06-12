@@ -273,6 +273,98 @@ def test_loss_payee_add_button_keeps_live_block_object_references():
     )
 
 
+def test_soft_uw_override_sets_yes_and_underwriter_comment():
+    client = object.__new__(OneShieldApiReplay)
+    client.state = {
+        "layout": {
+            "blockRows": [
+                {
+                    "blocks": [
+                        {
+                            "label": "underwriting issues",
+                            "grid": {
+                                "valueRecords": [{"ROW-OBJECT-ID": "123"}],
+                                "editorCells": [
+                                    {
+                                        "comments": {
+                                            "varName": "bv_123_27370105",
+                                            "bvId": "27370105",
+                                            "readOnly": False,
+                                            "mouseoverMesg": {
+                                                "content": "Underwriter's Comments"
+                                            },
+                                        },
+                                        "override": {
+                                            "varName": "bv_123_27370205",
+                                            "bvId": "27370205",
+                                            "readOnly": False,
+                                            "mouseoverMesg": {
+                                                "content": "Overridden?"
+                                            },
+                                            "lookups": [
+                                                {"displayValue": "Yes", "code": "1"},
+                                                {"displayValue": "No", "code": "2"},
+                                            ],
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    form = {"namefields": ""}
+
+    client._set_soft_uw_override_fields(form, "Approved for regression")
+
+    assert form["bv_123_27370105"] == "Approved for regression"
+    assert form["bv_123_27370205"] == "1"
+    assert form["namefields"] == "bv_123_27370205,bv_123_27370105"
+
+
+def test_soft_uw_override_rejects_read_only_hard_stop():
+    client = object.__new__(OneShieldApiReplay)
+    client.state = {
+        "layout": {
+            "blockRows": [
+                {
+                    "blocks": [
+                        {
+                            "label": "underwriting issues",
+                            "grid": {
+                                "valueRecords": [{"ROW-OBJECT-ID": "123"}],
+                                "editorCells": [
+                                    {
+                                        "comments": {
+                                            "varName": "bv_123_27370105",
+                                            "readOnly": False,
+                                            "mouseoverMesg": {
+                                                "content": "Underwriter's Comments"
+                                            },
+                                        },
+                                        "override": {
+                                            "varName": "bv_123_27370205",
+                                            "readOnly": True,
+                                            "mouseoverMesg": {
+                                                "content": "Overridden?"
+                                            },
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
+    with pytest.raises(RuntimeError, match="not editable"):
+        client._set_soft_uw_override_fields({"namefields": ""}, "No")
+
+
 def test_collect_grid_rows_uses_list_navigation_until_total_rows_loaded(monkeypatch):
     client = object.__new__(OneShieldApiReplay)
 

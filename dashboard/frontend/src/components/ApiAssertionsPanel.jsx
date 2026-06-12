@@ -210,7 +210,7 @@ export default function ApiAssertionsPanel({
             <>
               <div className="card-copy">
                 <h2>AI-driven premium regression sweep</h2>
-                <p>Describe a clean baseline driver. The system generates variants (risk-adding, discounts, hard stops, ladders), runs them in parallel, and asserts that each mutation moves the premium in the expected direction.</p>
+                <p>Describe a clean baseline driver. The system generates variants, accepts editable soft-UW referrals such as young driver and SR-22, re-rates them, and compares Premium Summary UI values.</p>
               </div>
 
               <div className="field-wrap large">

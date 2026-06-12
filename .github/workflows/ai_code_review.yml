@@ -1,0 +1,43 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements-review.txt
+
+      - name: Run AI Code Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # Optional overrides:
+          # LLM_PROVIDER: anthropic          # force provider
+          # REVIEW_MODEL: claude-opus-4-8    # force model
+          # REVIEW_MODE: inline              # inline | summary | both
+          # REVIEW_FOCUS: bugs,security,performance,style
+          # MIN_SEVERITY: warning            # error | warning | info
+          # MAX_DIFF_LINES: "500"
+          # MAX_TOTAL_LINES: "2000"
+          # REVIEW_SKIP_PATHS: "*.lock,dist/**,*.json"
+        run: python -m tools.ai_review.main

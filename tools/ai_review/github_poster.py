@@ -10,7 +10,7 @@ from .diff_fetcher import PRContext
 from .reviewer import Finding, ReviewResult
 
 _SEVERITY_EMOJI = {"error": "🔴", "warning": "🟡", "info": "🔵"}
-_BOT_MARKER = "<!-- ai-review-bot -->"
+_BOT_MARKER = "<!-- jarvis-review-bot -->"
 
 
 def _gh_headers(token: str) -> dict:
@@ -44,7 +44,7 @@ def _build_summary_body(pr: PRContext, result: ReviewResult, findings: list[Find
 
     lines = [
         _BOT_MARKER,
-        f"## 🤖 AI Code Review — PR #{pr.number}",
+        f"## 🤖 Jarvis Code Review — PR #{pr.number}",
         f"",
         f"> {result.summary}",
         f"",
@@ -70,7 +70,7 @@ def _build_summary_body(pr: PRContext, result: ReviewResult, findings: list[Find
             lines.append("")
 
     lines.append(f"---")
-    lines.append(f"_Reviewed by AI · {ts} · min severity: `{config.min_severity}` · focus: `{', '.join(config.review_focus)}`_")
+    lines.append(f"_Reviewed by Jarvis · {ts} · min severity: `{config.min_severity}` · focus: `{', '.join(config.review_focus)}`_")
     return "\n".join(lines)
 
 
@@ -83,7 +83,7 @@ def _post_or_update_summary(pr: PRContext, body: str, token: str) -> None:
         url = f"{_base_url(pr)}/issues/{pr.number}/comments"
         resp = requests.post(url, json={"body": body}, headers=_gh_headers(token), timeout=20)
     resp.raise_for_status()
-    print(f"[ai-review] Summary comment {'updated' if existing_id else 'posted'}")
+    print(f"[jarvis] Summary comment {'updated' if existing_id else 'posted'}")
 
 
 def _compute_position(patch: str, target_line: int) -> int | None:
@@ -141,9 +141,9 @@ def _post_inline_comments(pr: PRContext, findings: list[Finding], token: str) ->
         }
         resp = requests.post(url, json=payload, headers=_gh_headers(token), timeout=30)
         if not resp.ok:
-            print(f"[ai-review] Inline comment batch failed ({resp.status_code}): {resp.text[:300]}")
+            print(f"[jarvis] Inline comment batch failed ({resp.status_code}): {resp.text[:300]}")
         else:
-            print(f"[ai-review] Posted {len(review_comments)} inline comment(s)")
+            print(f"[jarvis] Posted {len(review_comments)} inline comment(s)")
 
     return file_level
 

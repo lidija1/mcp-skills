@@ -1,4 +1,4 @@
-name: AI Code Review
+name: Jarvis Code Review
 
 on:
   pull_request:
@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-review.txt
 
-      - name: Run AI Code Review
+      - name: Run Jarvis Code Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

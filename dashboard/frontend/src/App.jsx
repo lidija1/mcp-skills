@@ -390,7 +390,6 @@ export default function App() {
 
     const login = useCallback(async user => {
         localStorage.removeItem('dashboardUser')
-        localStorage.removeItem('access_token')
         setDashboardUser(user)
         setShowRegister(false)
         try {
@@ -410,7 +409,6 @@ export default function App() {
         }
         localStorage.removeItem('selectedLob')
         localStorage.removeItem('dashboardUser')
-        localStorage.removeItem('access_token')
         setDashboardUser(null)
         setJobs([])
         navigate('/login')

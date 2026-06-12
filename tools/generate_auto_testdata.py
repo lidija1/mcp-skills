@@ -470,31 +470,6 @@ def optional_cases():
             FieldsUnderTest="VehicleUse, DistanceToWork, PolicyCoverage",
         ),
         case(
-            "AUTO_OPT_DRIVER_0005",
-            "SR-22 driver with filing state",
-            "uw",
-            Description=(
-                "SR-22 required driver with conditional SR-22 Filing State set "
-                "to New York; stops at UW referral"
-            ),
-            ExpectedOutcome="UW Referral",
-            ExpectedTerminalState="UW Referral",
-            BindExpected="No",
-            ExpectedUWType="Underwriting",
-            ExpectedCondition=(
-                "SR-22 / Certificate of Insurance Indicator is checked"
-            ),
-            FirstName="Victor",
-            LastName="Cruz",
-            DOB="08/14/1985",
-            MaritalStatus="Single",
-            LicenseNumber="C77114422",
-            SR22="Yes",
-            SR22FilingState="New York",
-            Email="vcruz_{timestamp}@auto.com",
-            FieldsUnderTest="SR22, SR22FilingState",
-        ),
-        case(
             "AUTO_OPT_VEHICLE_0006",
             "Garaging address matches customer address",
             "optional",

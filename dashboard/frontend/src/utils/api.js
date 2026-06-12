@@ -1,20 +1,9 @@
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('access_token')
-
-  return token
-    ? {
-        Authorization: `Bearer ${token}`,
-      }
-    : {}
-}
-
 const post = async (url, body) => {
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
     },
     body: JSON.stringify(body),
   })
@@ -31,7 +20,6 @@ const post = async (url, body) => {
 const get = async url => {
   const response = await fetch(url, {
     credentials: 'include',
-    headers: getAuthHeaders(),
   })
 
   const data = await response.json()
@@ -47,7 +35,6 @@ const del = async url => {
   const response = await fetch(url, {
     method: 'DELETE',
     credentials: 'include',
-    headers: getAuthHeaders(),
   })
 
   const data = await response.json()
@@ -140,7 +127,7 @@ runCompare: (description_a, description_b, relations, label_a = '', label_b = ''
     fetch('/api/chat/ask/stream', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, display_message: displayMessage, history, max_tokens: maxTokens, chat_session_id: chatSessionId }),
     }),
 

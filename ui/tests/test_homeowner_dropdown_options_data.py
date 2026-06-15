@@ -31,8 +31,14 @@ def test_homeowner_dropdown_options_data_covers_live_probe():
         for case in data["testCases"]
         if not case.get("Description")
     ]
+    missing_test_names = [
+        case["TC_ID"]
+        for case in data["testCases"]
+        if not case.get("TestName")
+    ]
 
     assert not missing
     assert not extra
     assert not missing_descriptions
+    assert not missing_test_names
     assert data["metadata"]["caseCount"] == len(data["testCases"])

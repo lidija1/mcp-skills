@@ -81,8 +81,6 @@ runCompare: (description_a, description_b, relations, label_a = '', label_b = ''
   runAiAssert: persona_description => post('/api/api-tests/ai-assert', { persona_description }),
   runAssertFlow: (persona_description, assertion_type, expected_value, operator, tolerance_pct) =>
     post('/api/api-tests/assert-flow', { persona_description, assertion_type, expected_value, operator, tolerance_pct }),
-  runRegressionSweep: (baseline_description, lob = 'auto', focus = null) =>
-    post('/api/api-tests/regression-sweep', { baseline_description, lob, focus }),
   getSnapshot: run_id => get(`/api/api-tests/snapshot/${run_id}`),
   getAssertionHistory: () => get('/api/api-tests/results'),
   deleteAssertionResult: id => del(`/api/api-tests/results/${id}`),

@@ -64,7 +64,6 @@ def build_summary(records: list[dict]) -> dict:
     avg_time = round(total_time / total, 2) if total else 0.0
     policies = sum(1 for r in records if r.get("policy_created") or r.get("policy_number"))
     direct_asserts = sum(1 for r in records if r.get("validation_type") == "direct_assert")
-    reg_sweeps = sum(1 for r in records if r.get("validation_type") == "regression_sweep")
     return {
         "total": total,
         "passed": passed,
@@ -75,7 +74,6 @@ def build_summary(records: list[dict]) -> dict:
         "avg_time": avg_time,
         "policies": policies,
         "direct_asserts": direct_asserts,
-        "reg_sweeps": reg_sweeps,
     }
 
 
@@ -264,7 +262,6 @@ def generate_html(records: list[dict]) -> str:
   <div class="card"><div class="label">Avg Duration (s)</div><div class="value">{s["avg_time"]}</div></div>
   <div class="card blue"><div class="label">Policies Created</div><div class="value">{s["policies"]}</div></div>
   <div class="card"><div class="label">Direct Asserts</div><div class="value">{s["direct_asserts"]}</div></div>
-  <div class="card"><div class="label">Reg. Sweeps</div><div class="value">{s["reg_sweeps"]}</div></div>
 </div>
 
 <div class="charts">

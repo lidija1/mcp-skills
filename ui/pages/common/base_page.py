@@ -388,6 +388,47 @@ class BasePage:
     def wait_for_loader_to_disappear(self):
         self.wait_for_app_ready()
 
+    def get_extjs_options(self, locator, timeout=7000):
+        """Return visible selectable options for one ExtJS combobox."""
+        locator.scroll_into_view_if_needed()
+        locator.click()
+        try:
+            self.page.wait_for_function(
+                """() => [...document.querySelectorAll('.x-boundlist')]
+                    .some(list => {
+                        const rect = list.getBoundingClientRect();
+                        const style = window.getComputedStyle(list);
+                        return rect.width > 0 && rect.height > 0
+                            && style.display !== 'none'
+                            && style.visibility !== 'hidden';
+                    })""",
+                timeout=timeout,
+            )
+            options = self.page.evaluate(
+                """() => {
+                    const visible = el => {
+                        const rect = el.getBoundingClientRect();
+                        const style = window.getComputedStyle(el);
+                        return rect.width > 0 && rect.height > 0
+                            && style.display !== 'none'
+                            && style.visibility !== 'hidden';
+                    };
+                    const lists = [...document.querySelectorAll('.x-boundlist')]
+                        .filter(visible);
+                    const active = lists[lists.length - 1];
+                    return [...active.querySelectorAll('.x-boundlist-item')]
+                        .filter(visible)
+                        .filter(item => !item.classList.contains('x-item-disabled'))
+                        .map(item => (item.textContent || '')
+                            .replace(/\\s+/g, ' ').trim())
+                        .filter(Boolean);
+                }"""
+            )
+            return list(dict.fromkeys(options))
+        finally:
+            self.page.keyboard.press("Escape")
+            self._close_extjs_boundlists()
+
     def _click_and_wait(self, locator, wait_for_response=False):
         if wait_for_response:
             self.with_optional_oneshield_response(lambda: self.smart_click(locator))

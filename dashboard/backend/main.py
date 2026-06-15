@@ -175,7 +175,7 @@ def _job_lob_metadata(policy_lob: str, **extra) -> dict:
 
 
 def _normalize_policy_tc_id(raw: str) -> str | None:
-    """Accept dashboard shorthand like tc0001 and return canonical TC_ID_0001."""
+    """Accept dashboard shorthand like tc0001 or LOB-prefixed IDs like HO_001."""
     value = raw.strip().strip('"').strip("'")
     if not value:
         return None
@@ -188,6 +188,9 @@ def _normalize_policy_tc_id(raw: str) -> str | None:
     match = re.fullmatch(r"TC[_ -]?(\d{1,4})", upper)
     if match:
         return f"TC_ID_{int(match.group(1)):04d}"
+    # LOB-prefixed IDs: HO_001, HO_DISC_001, UW_001, CY_001, etc.
+    if re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_\d+", upper):
+        return upper
     return None
 
 
@@ -469,7 +472,6 @@ ASSERT_RERUN_TYPES = {
     "api_ladder",
     "api_ai_assert",
     "api_assert_flow",
-    "regression_sweep",
 }
 
 
@@ -544,15 +546,6 @@ def _infer_assert_rerun_payload(job: dict) -> dict | None:
                 "operator": metadata.get("operator") or data.get("operator") or "approx",
                 "tolerance_pct": metadata.get("tolerance_pct") or data.get("tolerance_pct") or 5.0,
                 "lob": metadata.get("lob") or data.get("lob") or "auto",
-            }
-
-    if execution_type == "regression_sweep":
-        baseline = metadata.get("baseline_description") or _extract_markdown_field(result, "Baseline")
-        if baseline:
-            return {
-                "baseline_description": baseline,
-                "lob": metadata.get("lob") or "auto",
-                "focus": metadata.get("focus"),
             }
 
     return None
@@ -726,7 +719,7 @@ def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: Backg
         return {"job_id": new_jid}
 
     if execution_type == "api_assert_flow":
-        from mcp_tools.smart_assertions.server import STOP_AFTER, VALID_OPERATORS, _build_snapshot, _assert
+        from mcp_tools.smart_assertions.server import STOP_AFTER, VALID_OPERATORS, BASE_RATE_COVERAGE, _build_snapshot, _assert
         from mcp_tools.policy_flow_generator.persona_generator import generate_persona
         from api_tests.oneshield_api_replay import OneShieldApiReplay
         import json as _json
@@ -761,7 +754,13 @@ def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: Backg
                 finally:
                     client.close()
                 snap = _build_snapshot(persona_description, persona, flow, assertion_type, lob)
-                actual = snap.total_premium if assertion_type == "premium" else snap.total_cost
+                if assertion_type == "premium":
+                    actual = snap.total_premium
+                elif assertion_type in BASE_RATE_COVERAGE:
+                    cov_key = BASE_RATE_COVERAGE[assertion_type]
+                    actual = next((v for k, v in snap.base_rates.items() if cov_key.lower() in k.lower()), None)
+                else:
+                    actual = snap.total_cost
                 passed, message = _assert(actual, expected_value, operator, tolerance_pct)
                 import dashboard.backend.dashboard_db as _db
                 saved = _db.save_assertion_result(
@@ -804,60 +803,6 @@ def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: Backg
                     "persona": snap.persona,
                 }
                 _done(new_jid, _json.dumps(result_payload))
-            except Exception as exc:
-                import traceback
-                _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
-
-        bg.add_task(_run)
-        return {"job_id": new_jid}
-
-    if execution_type == "regression_sweep":
-        from dashboard.backend.api_assertions.regression_sweep import run_sweep
-
-        baseline_description = (payload.get("baseline_description") or "").strip()
-        if not baseline_description:
-            raise HTTPException(status_code=400, detail="This regression sweep job cannot be rerun")
-        lob = payload.get("lob") or "auto"
-        focus = payload.get("focus")
-        focus_label = f" [{focus}]" if focus else ""
-        new_jid = _new_job(
-            f"Regression Sweep{focus_label} - {baseline_description[:50]}",
-            execution_type="regression_sweep",
-            created_by=(user or {}).get("id"),
-            metadata=_assert_rerun_metadata({"lob": lob, "lob_display": "Personal Auto", "baseline_description": baseline_description, "focus": focus}, job_id, payload),
-        )
-
-        def _run():
-            try:
-                _status(new_jid, "Generating variant list", "AI phase 1")
-                sweep = run_sweep(baseline_description, lob=lob, focus=focus)
-                _status(new_jid, "Analyzing results", "AI phase 4")
-                status_str = "ALL PASS" if sweep.passed else f"{sweep.fail_count} FAILED"
-                base_str = f"${sweep.baseline_premium:,.2f}" if sweep.baseline_premium else "N/A"
-                lines = [
-                    f"## Regression Sweep - {status_str}",
-                    f"**Baseline:** {sweep.baseline_description}",
-                    f"**Baseline premium:** {base_str} via `{sweep.baseline_premium_source or 'unavailable'}`",
-                    f"**Variants:** {len(sweep.results)} | PASS {sweep.pass_count} FAIL {sweep.fail_count}",
-                    "",
-                ]
-                for category_key, category_label in [("risk_adding", "RISK ADDING"), ("ladder", "LADDER"), ("discount", "DISCOUNTS"), ("hard_stop", "HARD STOPS")]:
-                    category_results = [r for r in sweep.results if r.variant.category == category_key]
-                    if not category_results:
-                        continue
-                    lines.append(f"### {category_label}")
-                    lines += ["| Variant | Premium | Delta | Result |", "|---|---|---|---|"]
-                    for row in category_results:
-                        if row.error:
-                            lines.append(f"| {row.variant.label} | - | - | FAIL `{row.error[:40]}` |")
-                            continue
-                        actual = f"${row.actual_premium:,.2f}" if row.actual_premium else ("blocked" if row.blocked else "N/A")
-                        delta = f"{row.delta_pct:+.1f}%" if row.delta_pct is not None else "-"
-                        ok = "PASS" if row.passed else f"FAIL {row.message[:60]}" if row.message else "FAIL"
-                        uw_note = " (soft-UW continued)" if row.soft_uw_continued else ""
-                        lines.append(f"| {row.variant.label} | {actual} | {delta} | {ok}{uw_note} |")
-                    lines.append("")
-                _done(new_jid, "\n".join(lines))
             except Exception as exc:
                 import traceback
                 _fail(new_jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
@@ -1834,7 +1779,8 @@ def ai_assert_ep(req: AiAssertReq, bg: BackgroundTasks, request: Request):
 def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
     """Run a structured UW assertion: persona → Sandbox replay → PASS/FAIL against expected value."""
     from mcp_tools.smart_assertions.server import (
-        STOP_AFTER, VALID_OPERATORS, _total_premium, _total_cost,
+        STOP_AFTER, VALID_OPERATORS, BASE_RATE_COVERAGE,
+        _total_premium, _total_cost,
         _coverage_premiums, _uw_conditions, _build_snapshot, _assert, _fmt_assert,
     )
     from mcp_tools.policy_flow_generator.persona_generator import generate_persona
@@ -1892,7 +1838,13 @@ def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
                 client.close()
 
             snap = _build_snapshot(req.persona_description, persona, flow, req.assertion_type, req.lob)
-            actual = snap.total_premium if req.assertion_type == "premium" else snap.total_cost
+            if req.assertion_type == "premium":
+                actual = snap.total_premium
+            elif req.assertion_type in BASE_RATE_COVERAGE:
+                cov_key = BASE_RATE_COVERAGE[req.assertion_type]
+                actual = next((v for k, v in snap.base_rates.items() if cov_key.lower() in k.lower()), None)
+            else:
+                actual = snap.total_cost
             passed, message = _assert(actual, req.expected_value, req.operator, req.tolerance_pct)
             import dashboard.backend.dashboard_db as _db
             saved = _db.save_assertion_result(
@@ -1935,138 +1887,6 @@ def assert_flow_ep(req: AssertFlowReq, bg: BackgroundTasks, request: Request):
                 "persona": snap.persona,
             }
             _done(jid, _json.dumps(result_payload))
-        except Exception as exc:
-            import traceback
-            _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))
-
-    bg.add_task(_run)
-    return {"job_id": jid}
-
-
-class RegressionSweepReq(BaseModel):
-    baseline_description: str
-    lob: str = "auto"
-    focus: str | None = None
-
-
-@app.post("/api/api-tests/regression-sweep")
-def regression_sweep_ep(req: RegressionSweepReq, bg: BackgroundTasks, request: Request):
-    """AI-driven premium regression sweep: generate variants → parallel replay → rule + AI assertions."""
-    from dashboard.backend.api_assertions.regression_sweep import run_sweep
-
-    if not req.baseline_description.strip():
-        raise HTTPException(status_code=400, detail="baseline_description is required.")
-
-    user = user_from_request(request)
-    focus_label = f" [{req.focus}]" if req.focus else ""
-    jid = _new_job(
-        f"Regression Sweep{focus_label} — {req.baseline_description[:50]}",
-        execution_type="regression_sweep",
-        created_by=(user or {}).get("id"),
-        metadata={
-            "lob": req.lob,
-            "lob_display": "Personal Auto",
-            "baseline_description": req.baseline_description,
-            "focus": req.focus,
-            "rerun_payload": {
-                "baseline_description": req.baseline_description,
-                "lob": req.lob,
-                "focus": req.focus,
-            },
-        },
-    )
-
-    def _run():
-        try:
-            _status(jid, "Generating variant list", "AI phase 1")
-            sweep = run_sweep(req.baseline_description, lob=req.lob, focus=req.focus)
-            _status(jid, "Analyzing results", "AI phase 4")
-            status_str = "✅ ALL PASS" if sweep.passed else f"❌ {sweep.fail_count} FAILED"
-            base_str = f"${sweep.baseline_premium:,.2f}" if sweep.baseline_premium else "N/A"
-            lines = [
-                f"## Regression Sweep — {status_str}",
-                f"**Baseline:** {sweep.baseline_description}",
-                f"**Baseline premium:** {base_str} via `{sweep.baseline_premium_source or 'unavailable'}`",
-                f"**Variants:** {len(sweep.results)} | ✅ {sweep.pass_count}  ❌ {sweep.fail_count}",
-                "",
-            ]
-            cats = [("risk_adding", "RISK ADDING"), ("ladder", "LADDER"), ("discount", "DISCOUNTS"), ("hard_stop", "HARD STOPS")]
-            for cat_key, cat_label in cats:
-                cat_results = [r for r in sweep.results if r.variant.category == cat_key]
-                if not cat_results:
-                    continue
-                lines.append(f"### {cat_label}")
-                lines += ["| Variant | Premium | Delta | Result |", "|---|---|---|---|"]
-                for r in cat_results:
-                    if r.error:
-                        lines.append(f"| {r.variant.label} | — | — | ❌ `{r.error[:40]}` |")
-                        continue
-                    actual = f"${r.actual_premium:,.2f}" if r.actual_premium else ("blocked" if r.blocked else "N/A")
-                    delta = f"{r.delta_pct:+.1f}%" if r.delta_pct is not None else "—"
-                    ok = "✅" if r.passed else f"❌ {r.message[:60]}" if r.message else "❌"
-                    uw_note = " (soft-UW continued)" if r.soft_uw_continued else ""
-                    lines.append(f"| {r.variant.label} | {actual} | {delta} | {ok}{uw_note} |")
-                lines.append("")
-            if sweep.analysis:
-                a = sweep.analysis
-                lines.append("### AI Analysis")
-                for p in a.patterns:
-                    lines.append(f"- {p}")
-                if a.root_causes:
-                    lines.append("")
-                    lines.append("**Root causes:**")
-                    for c in a.root_causes:
-                        lines.append(f"- {c}")
-                if a.follow_up_variants:
-                    lines.append("")
-                    lines.append("**Suggested follow-ups:**")
-                    for v in a.follow_up_variants:
-                        lines.append(f"- **{v.label}** — expected `{v.expected_direction}`")
-
-            # Save to database — one summary row per sweep
-            import dashboard.backend.dashboard_db as _db
-            variant_summary = [
-                {
-                    "label": r.variant.label,
-                    "category": r.variant.category,
-                    "expected_direction": r.variant.expected_direction,
-                    "actual_premium": r.actual_premium,
-                    "delta_pct": r.delta_pct,
-                    "passed": r.passed,
-                    "blocked": r.blocked,
-                    "message": r.message,
-                    "error": r.error,
-                    "premium_source": r.premium_source,
-                    "rating_detail_premium": r.rating_detail_premium,
-                    "premium_mismatch": r.premium_mismatch,
-                    "soft_uw_continued": r.soft_uw_continued,
-                }
-                for r in sweep.results
-            ]
-            analysis_summary = {
-                "patterns": sweep.analysis.patterns if sweep.analysis else [],
-                "root_causes": sweep.analysis.root_causes if sweep.analysis else [],
-            }
-            _db.save_assertion_result(
-                persona_description=req.baseline_description,
-                assertion_type="regression_sweep",
-                expected_value=0,
-                actual_value=sweep.baseline_premium,
-                operator="sweep",
-                tolerance_pct=0,
-                passed=sweep.passed,
-                message=f"{sweep.pass_count}/{len(sweep.results)} variants passed",
-                lob=req.lob,
-                coverage_premiums={"variants": variant_summary},
-                uw_conditions=[p for p in (sweep.analysis.patterns if sweep.analysis else [])],
-                persona=sweep.baseline_persona,
-                flow_result=None,
-                blocked=False,
-                run_id=sweep.sweep_id,
-                user_id=(user or {}).get("id"),
-            )
-
-            _done(jid, "\n".join(lines))
         except Exception as exc:
             import traceback
             _fail(jid, traceback.format_exc() if os.getenv("DASHBOARD_DEBUG_ERRORS") else str(exc))

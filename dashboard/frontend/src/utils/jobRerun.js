@@ -24,7 +24,6 @@ const ASSERT_EXECUTION_TYPES = new Set([
   'api_ladder',
   'api_ai_assert',
   'api_assert_flow',
-  'regression_sweep',
 ])
 
 function isAssertExecutionType(type) {
@@ -104,7 +103,6 @@ function canRerunAssertJob(job) {
   if (type === 'api_ai_assert') return Boolean(metadata.persona_description || markdownField(job?.result, 'Persona'))
   if (type === 'api_ladder') return Boolean((metadata.base_description || ladderBaseDescription(job?.result)) && metadata.dimension)
   if (type === 'api_assert_flow') return Boolean(assertFlowPayloadFromResult(job?.result))
-  if (type === 'regression_sweep') return Boolean(metadata.baseline_description || markdownField(job?.result, 'Baseline'))
 
   return false
 }

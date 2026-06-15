@@ -68,8 +68,6 @@ def _infer_lob(item) -> str:
 
 def _infer_validation_type(item) -> str:
     name = item.name.lower()
-    if "regression_sweep" in name or "regression-sweep" in name:
-        return "regression_sweep"
     if "direct_assert" in name or "direct-assert" in name:
         return "direct_assert"
     return "normal_flow"

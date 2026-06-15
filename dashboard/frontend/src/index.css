@@ -784,6 +784,20 @@ textarea.field {
     font-weight: 800;
 }
 
+.suite-section-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 100%;
+    justify-content: flex-start;
+    user-select: none;
+}
+
+.suite-section-toggle:hover {
+    color: #2563eb;
+}
+
 .suite-preview {
     width: 100%;
     margin: 4px 0 16px;
@@ -3895,6 +3909,17 @@ code.asr-val-code.fail {
     font-size: 13px;
     line-height: 1.55;
     color: var(--text);
+}
+
+.af-panel-note {
+    margin: 10px 0 0;
+    padding: 10px 14px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
 }
 
 .af-panel-empty {
@@ -10319,3 +10344,4 @@ button.jobs-group-row {
         display: none;
     }
 }
+

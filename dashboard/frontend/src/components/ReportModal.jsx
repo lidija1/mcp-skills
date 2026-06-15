@@ -900,7 +900,7 @@ function AssertFlowDetailsPanel({data, onClose}) {
                                         <td>{fmt(prem)}</td>
                                     </tr>
                                 ))}
-                                {data.actual_value !== null && data.actual_value !== undefined && (
+                                {data.assertion_type === 'premium' && data.actual_value !== null && data.actual_value !== undefined && (
                                     <tr className="af-coverage-total">
                                         <td>Total</td>
                                         <td>{fmt(data.actual_value)}</td>
@@ -908,19 +908,19 @@ function AssertFlowDetailsPanel({data, onClose}) {
                                 )}
                                 </tbody>
                             </table>
+                            {data.assertion_type?.startsWith('base_rate_') && (
+                                <p className="af-panel-note">
+                                    These are the <strong>final rated premiums</strong> per coverage — after all multipliers,
+                                    surcharges, and discounts are applied. The assertion compared against the{' '}
+                                    <strong>base rate</strong> ({fmt(data.actual_value)}), which is the pre-adjustment
+                                    starting value before rating factors are applied. The two numbers will differ for most
+                                    risks.
+                                </p>
+                            )}
                         </section>
                     )}
 
-                    {data.uw_conditions?.length > 0 && (
-                        <section className="af-panel-section">
-                            <div className="af-panel-section-title">UW Conditions</div>
-                            <ul className="af-uw-list">
-                                {data.uw_conditions.map((c, i) => <li key={i}>{c}</li>)}
-                            </ul>
-                        </section>
-                    )}
-
-                    {!coverageEntries.length && !data.uw_conditions?.length && (
+                    {!coverageEntries.length && (
                         <p className="af-panel-empty">No additional details available.</p>
                     )}
                 </div>

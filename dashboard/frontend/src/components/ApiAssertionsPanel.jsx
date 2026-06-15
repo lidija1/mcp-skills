@@ -12,24 +12,8 @@ import {
   SlidersHorizontal,
   Target,
   Trash2,
-  TrendingUp,
-  X,
+  ChevronsUpDown,
 } from 'lucide-react'
-
-const SWEEP_FOCUS_OPTIONS = [
-  {value: '', label: 'All categories'},
-  {value: 'risk_adding', label: 'Risk adding only'},
-  {value: 'discount', label: 'Discounts only'},
-  {value: 'hard_stop', label: 'Hard stops only'},
-  {value: 'ladder', label: 'Ladder only'},
-]
-
-const SWEEP_EXAMPLES = [
-  '35-year-old married driver, Gold coverage, clean record, pleasure use',
-  '28-year-old single male driver, Silver coverage, clean record, commute use',
-  '45-year-old married female driver, Platinum coverage, clean record, pleasure use',
-  '22-year-old single driver, Bronze coverage, clean record, pleasure use',
-]
 
 const DRIVER_PROFILES = [
   {value: 'young', label: 'Young driver', text: 'young driver under 25'},
@@ -43,12 +27,29 @@ const COVERAGES = ['Bronze', 'Silver', 'Gold', 'Platinum']
 const LICENSE_STATUSES = ['Active License', 'Suspended', 'Revoked']
 const VEHICLE_USES = ['Pleasure', 'Commute', 'Business']
 const OWNERSHIPS = ['Owned', 'Leased', 'Financed']
-const MARITAL_STATUSES = ['Single', 'Married', 'Divorced', 'Widowed']
+const MARITAL_STATUSES = ['Divorced', 'Engaged', 'Estranged', 'Married', 'Single', 'Widowed']
 const GENDERS = ['Male', 'Female']
+const EMPLOYMENTS = ['Employed', 'Unemployed', 'Retired', 'Disabled']
+const OCCUPATIONS = [
+  'Arts/Entertainment', 'Attorney/Paralegal,Etc.', 'Banking/Mortgage',
+  'Business Owner/Self Employed', 'Carpenter', 'Clergy/Religion',
+  'Clerical/Administration', 'Computer Personnel', 'Construction', 'Contractor',
+  'Customer Service', 'Day Care', 'Delivery Person', 'Educator', 'Electrician',
+  'Engineer/Architect', 'Food Service', 'Government', 'Health Care', 'Homemaker',
+  'Insurance', 'Landscaping/Lawn Care', 'Law Enforcement', 'Marketing',
+  'Military/Defense', 'Non Profit/Volunteer', 'Painter', 'Plumber',
+  'Professional/Managerial', 'Real Estate', 'Sales/Inside', 'Sales/Outside',
+  'Social/Mental Health Worker', 'Student', 'Truck Driver',
+]
+const DAMAGE_INFOS = ['No prior damage', 'Prior damage']
 
 const DIRECT_ASSERT_TYPES = [
   {value: 'premium', label: 'Total premium (Summary page)'},
-  {value: 'total_cost', label: 'Total cost (Verify Billing)'},
+  {value: 'base_rate_bi',    label: 'Base rate — Bodily Injury'},
+  {value: 'base_rate_pd',    label: 'Base rate — Property Damage'},
+  {value: 'base_rate_coll',  label: 'Base rate — Collision'},
+  {value: 'base_rate_comp',  label: 'Base rate — Comprehensive'},
+  {value: 'base_rate_med',   label: 'Base rate — Medical Payments'},
 ]
 
 const OPERATORS = [
@@ -75,19 +76,13 @@ const DEFAULT_BUILDER = {
 
 export default function ApiAssertionsPanel({
   submitJob,
-  activeTab = 'sweep',
+  activeTab = 'assert',
   onActiveTabChange = () => {},
   historyFilter = 'all',
   onHistoryFilterChange = () => {},
   expandedId = null,
   onExpandedIdChange = () => {},
 }) {
-
-  // Regression Sweep tab
-  const [sweepBaseline, setSweepBaseline] = useState('')
-  const [sweepFocus, setSweepFocus] = useState('')
-  const [loadingSweep, setLoadingSweep] = useState(false)
-  const [submittedSweep, setSubmittedSweep] = useState(false)
 
   // History tab
   const [historyRows, setHistoryRows] = useState([])
@@ -119,6 +114,7 @@ export default function ApiAssertionsPanel({
   }
 
   // Direct Assert tab
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [assertBuilder, setAssertBuilder] = useState(DEFAULT_BUILDER)
   const [assertType, setAssertType] = useState('premium')
   const [assertExpected, setAssertExpected] = useState('')
@@ -126,32 +122,6 @@ export default function ApiAssertionsPanel({
   const [assertTolerance, setAssertTolerance] = useState('5')
   const [loadingAssert, setLoadingAssert] = useState(false)
   const [submittedAssert, setSubmittedAssert] = useState(false)
-
-  const handleRunSweep = async () => {
-    if (!sweepBaseline.trim()) return
-    setLoadingSweep(true)
-    setSubmittedSweep(false)
-    try {
-      await submitJob(
-        () => api.runRegressionSweep(sweepBaseline, 'auto', sweepFocus || null),
-        `Regression Sweep — ${sweepBaseline.slice(0, 50)}`,
-        {
-          executionType: 'regression_sweep',
-          metadata: {
-            lob: 'auto',
-            lob_display: 'Personal Auto',
-            baseline_description: sweepBaseline,
-            focus: sweepFocus || null,
-            rerun_payload: {baseline_description: sweepBaseline, lob: 'auto', focus: sweepFocus || null},
-          },
-        },
-      )
-      setSubmittedSweep(true)
-      setTimeout(() => setSubmittedSweep(false), 3000)
-    } finally {
-      setLoadingSweep(false)
-    }
-  }
 
   const handleRunAssertFlow = async () => {
     const expected = parseFloat(assertExpected)
@@ -210,14 +180,6 @@ export default function ApiAssertionsPanel({
         <div className="card-content">
           <div className="api-tab-row" role="group" aria-label="Assertion mode">
             <button
-              className={`api-tab-btn ${activeTab === 'sweep' ? 'active' : ''}`}
-              type="button"
-              onClick={() => onActiveTabChange('sweep')}
-            >
-              <TrendingUp size={13}/>
-              Regression Sweep
-            </button>
-            <button
               className={`api-tab-btn ${activeTab === 'assert' ? 'active' : ''}`}
               type="button"
               onClick={() => onActiveTabChange('assert')}
@@ -234,62 +196,6 @@ export default function ApiAssertionsPanel({
               History
             </button>
           </div>
-
-          {activeTab === 'sweep' && (
-            <>
-              <div className="card-copy">
-                <h2>AI-driven premium regression sweep</h2>
-                <p>Describe a clean baseline driver. The system generates variants, accepts editable soft-UW referrals such as young driver and SR-22, re-rates them, and compares Premium Summary UI values.</p>
-              </div>
-
-              <div className="field-wrap large">
-                <textarea
-                  className="field"
-                  value={sweepBaseline}
-                  onChange={e => setSweepBaseline(e.target.value)}
-                  placeholder="e.g. 35-year-old married driver, Gold coverage, clean record, pleasure use"
-                />
-                {sweepBaseline && (
-                  <button
-                    onClick={() => setSweepBaseline('')}
-                    className="clear-button"
-                    title="Clear"
-                    aria-label="Clear"
-                    type="button"
-                  >
-                    <X size={16}/>
-                  </button>
-                )}
-              </div>
-
-              <div className="suite-form-grid dense">
-                <FieldSelect
-                  label="Focus category"
-                  value={sweepFocus}
-                  onChange={setSweepFocus}
-                  options={SWEEP_FOCUS_OPTIONS}
-                />
-              </div>
-
-              <div className="card-action-row">
-                <button
-                  onClick={handleRunSweep}
-                  disabled={!sweepBaseline.trim() || loadingSweep}
-                  className={`action-button blue ${submittedSweep ? 'completed' : ''}`}
-                  type="button"
-                >
-                  {loadingSweep
-                    ? <span className="spinner"/>
-                    : submittedSweep
-                      ? <Check size={17}/>
-                      : <TrendingUp size={17}/>}
-                  <span>
-                    {loadingSweep ? 'Submitting...' : submittedSweep ? 'Submitted' : 'Run Regression Sweep'}
-                  </span>
-                </button>
-              </div>
-            </>
-          )}
 
           {activeTab === 'history' && (
             <AssertionHistory
@@ -354,6 +260,23 @@ export default function ApiAssertionsPanel({
                 <FieldSelect label="Ownership" value={assertBuilder.ownership} onChange={v => updateAssertBuilder('ownership', v)} options={OWNERSHIPS}/>
               </div>
 
+              <button
+                type="button"
+                className="suite-section-title suite-section-toggle"
+                onClick={() => setAdvancedOpen(o => !o)}
+              >
+                <ChevronsUpDown size={15}/>
+                Advanced fields
+                {advancedOpen ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+              </button>
+              {advancedOpen && (
+                <div className="suite-form-grid dense">
+                  <FieldSelect label="Employment" value={assertBuilder.employment} onChange={v => updateAssertBuilder('employment', v)} options={EMPLOYMENTS}/>
+                  <FieldSelect label="Occupation" value={assertBuilder.occupation} onChange={v => updateAssertBuilder('occupation', v)} options={OCCUPATIONS}/>
+                  <FieldSelect label="Prior damage" value={assertBuilder.damageInfo} onChange={v => updateAssertBuilder('damageInfo', v)} options={DAMAGE_INFOS}/>
+                </div>
+              )}
+
               <div className="suite-section-title">
                 <Target size={15}/>
                 Assertion
@@ -417,31 +340,6 @@ export default function ApiAssertionsPanel({
         </div>
       </section>
 
-      {activeTab === 'sweep' && (
-        <section className="tool-card">
-          <div className="card-content">
-            <div className="batch-header">
-              <div className="card-copy">
-                <h2>Baseline examples</h2>
-                <p>Click to load a clean baseline. The sweep generates all variants automatically.</p>
-              </div>
-              <TrendingUp size={24}/>
-            </div>
-            <div className="scenario-list">
-              {SWEEP_EXAMPLES.map(example => (
-                <button
-                  key={example}
-                  className="text-button"
-                  type="button"
-                  onClick={() => setSweepBaseline(example)}
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
     </div>
   )
 }

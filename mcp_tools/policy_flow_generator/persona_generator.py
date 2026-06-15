@@ -215,6 +215,8 @@ def _generate_persona_with_ollama(lob: str, system_prompt: str, user_message: st
     raw = _ollama_chat(system_prompt, user_message, max_tokens=2048)
     parsed = _parse_model_json(raw)
     parsed = _normalize_model_persona(lob, parsed)
+    if lob == "auto":
+        _apply_auto_static_defaults(parsed)
     parsed["_lob"] = lob
     parsed["_provider"] = "ollama"
     _ensure_persona_type(lob, parsed, description)
@@ -330,6 +332,8 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "SR22FilingState":    "Massachusetts",        // REQUIRED when SR22="Yes"; otherwise omit
   "Occupation":         "Day Care",
   "LicenseStatus":      "Active License" | "Suspended" | "Revoked",
+  "LicenseYear":        string,    // 4-digit year first licensed; derive from DOB+16 (e.g. DOB 1990 → "2006"); cap at current year
+  "LicenseNumber":      string,    // format "MA" + 8 zero-padded digits (e.g. "MA00012345")
   "VehicleType":        "Private Passenger Auto",
   "Year":               string,    // pre-assigned from vehicle catalog — copy exact value from user message
   "Make":               string,    // pre-assigned from vehicle catalog — copy exact value from user message
@@ -767,6 +771,82 @@ def _coverage_from_text(text: str, default: str = "Gold") -> str:
     return default
 
 
+_AUTO_COVERAGE_DEFAULTS: dict[str, dict] = {
+    "Bronze": {
+        "CompOTCOptions": "No Coverage", "OTCDeductible": "100", "CollisionDeductible": "100",
+        "Gap": "No", "SoundEquipment": "1,500", "CustomAmount": "1,500", "Tapes": "No Coverage",
+        "SubstituteTransportation": "50", "TransportationAndLaborLimit": "No Coverage",
+        "MedicalExpense": "10,000", "WagesLossBasic": "Max 5,000, Monthly 1,000",
+        "FuneralExpense": "No Coverage", "AccidentalDeath": "No Coverage", "CombinationBase": "No",
+    },
+    "Silver": {
+        "CompOTCOptions": "No Coverage", "OTCDeductible": "250", "CollisionDeductible": "250",
+        "Gap": "No", "SoundEquipment": "2,500", "CustomAmount": "2,500", "Tapes": "No Coverage",
+        "SubstituteTransportation": "50", "TransportationAndLaborLimit": "No Coverage",
+        "MedicalExpense": "25,000", "WagesLossBasic": "Max 15,000, Monthly 1,000",
+        "FuneralExpense": "No Coverage", "AccidentalDeath": "5,000", "CombinationBase": "No",
+    },
+    "Gold": {
+        "CompOTCOptions": "Full Glass", "OTCDeductible": "500", "CollisionDeductible": "500",
+        "Gap": "Yes", "SoundEquipment": "3,500", "CustomAmount": "3,500", "Tapes": "200",
+        "SubstituteTransportation": "50", "TransportationAndLaborLimit": "25",
+        "MedicalExpense": "50,000", "WagesLossBasic": "Max 25,000, Monthly 1,500",
+        "FuneralExpense": "1,500", "AccidentalDeath": "10,000", "CombinationBase": "Yes",
+    },
+    "Platinum": {
+        "CompOTCOptions": "Full Glass", "OTCDeductible": "1,000", "CollisionDeductible": "1,000",
+        "Gap": "Yes", "SoundEquipment": "5,000", "CustomAmount": "5,000", "Tapes": "200",
+        "SubstituteTransportation": "50", "TransportationAndLaborLimit": "25",
+        "MedicalExpense": "100,000", "WagesLossBasic": "Max 50,000, Monthly 2,500",
+        "FuneralExpense": "2,500", "AccidentalDeath": "25,000", "CombinationBase": "Yes",
+    },
+}
+
+
+def _apply_auto_static_defaults(persona: dict) -> dict:
+    """Inject static/derived fields into any auto persona (AI or fast-fallback)."""
+    # Static fields — same value for every test case
+    static = {
+        "MiddleName": "", "Prefix": "", "Suffix": "", "SSN": "", "Address2": "",
+        "Country": "United States", "Agency": "Sherrie Insurance Co", "QuoteName": "",
+        "Term": "12 Months", "ExpirationDate": "", "NetOfCommission": "", "CommissionBasis": "",
+        "PriorCarrier": "", "PriorPolicyTerm": "", "PriorPolicyExpirationDate": "", "PriorPolicyPremium": "",
+        "RelationshipToInsured": "Self", "CountryOfIssue": "United States",
+        "LicenseState": "Massachusetts", "LicensedAnotherState": "No",
+        "VehicleDetailEntryMode": "Use Lookup to Select VIN", "VIN": "",
+        "PhysicalDamageSymbol": "", "StatedAmount": "",
+        "GaragingAddress2": "", "GaragingCity": "Springfield",
+        "GaragingState": "Massachusetts", "GaragingCountry": "United States", "GaragingZIP": "01101",
+        "TitleJointlyOwned": "No", "PayerCurrency": "US Dollar", "nbCheck": "Processed",
+    }
+    for key, val in static.items():
+        persona.setdefault(key, val)
+
+    # Garaging address mirrors main address
+    persona.setdefault("GaragingAddress1", persona.get("Address", ""))
+
+    # LicenseYear: derive from DOB if not set by AI
+    if not persona.get("LicenseYear"):
+        dob = persona.get("DOB", "")
+        try:
+            dob_year = int(dob.split("/")[2])
+            persona["LicenseYear"] = str(min(dob_year + 16, _TODAY.year - 1))
+        except (IndexError, ValueError):
+            persona["LicenseYear"] = str(_TODAY.year - 10)
+
+    # LicenseNumber: generate if not set by AI
+    if not persona.get("LicenseNumber"):
+        persona["LicenseNumber"] = f"MA{random.randint(0, 99999999):08d}"
+
+    # Coverage tier fields: derive from PolicyCoverage
+    coverage = persona.get("PolicyCoverage", "Gold")
+    tier = _AUTO_COVERAGE_DEFAULTS.get(coverage, _AUTO_COVERAGE_DEFAULTS["Gold"])
+    for key, val in tier.items():
+        persona.setdefault(key, val)
+
+    return persona
+
+
 def _fast_auto_persona(description: str, vehicle: dict | None) -> dict:
     text = description.lower()
     age = _extract_age(description, 42)
@@ -803,8 +883,11 @@ def _fast_auto_persona(description: str, vehicle: dict | None) -> dict:
             "Spec": "LE 4dr Sedan",
         }
 
+    dob = _dob_for_age(age)
+    coverage = _coverage_from_text(text)
+
     persona.update({
-        "DOB": _dob_for_age(age),
+        "DOB": dob,
         "Program": "Personal Auto",
         "FalseInfo": "No",
         "DamageInfo": "Yes" if damage else "No",
@@ -822,9 +905,11 @@ def _fast_auto_persona(description: str, vehicle: dict | None) -> dict:
         "Spec": str(vehicle["Spec"]),
         "VehicleUse": vehicle_use,
         "Ownership": ownership,
-        "PolicyCoverage": _coverage_from_text(text),
+        "PolicyCoverage": coverage,
     })
 
+    if vehicle_use == "Commute":
+        persona["DistanceToWork"] = "15" if "high mileage" in text or "long commute" in text else "10"
     if damage:
         persona["DescribeDamage"] = "Prior accident damage noted on the vehicle"
     if sr22:
@@ -1172,6 +1257,7 @@ def generate_persona(lob: str, description: str) -> str:
         parsed = _normalize_model_persona(lob, parsed)
         if lob == "auto":
             _apply_vehicle_from_catalog(parsed, vehicle)
+            _apply_auto_static_defaults(parsed)
         parsed["_lob"] = lob
         parsed["_provider"] = provider
         _ensure_persona_type(lob, parsed, description)
@@ -1329,6 +1415,8 @@ def _generate_persona_variation_chunk(
                 persona = _normalize_model_persona(lob, persona)
                 if lob == "auto" and vehicles and idx < len(vehicles):
                     _apply_vehicle_from_catalog(persona, vehicles[idx])
+                if lob == "auto":
+                    _apply_auto_static_defaults(persona)
                 parsed[idx] = persona
                 persona["_lob"] = lob
                 persona["_provider"] = provider

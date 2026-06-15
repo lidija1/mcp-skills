@@ -63,11 +63,11 @@ DEFAULT_ROOF_TYPES = [
 def load_base_case():
     payload = json.loads(HOME_DATA.read_text(encoding="utf-8"))
     for case in payload["testCases"]:
-        if case.get("TC_ID") == "TC_ID_0001":
+        if case.get("TC_ID") == "HO_001":
             data = deepcopy(case)
             break
     else:
-        raise ValueError("TC_ID_0001 not found in HomeData.json")
+        raise ValueError("HO_001 not found in HomeData.json")
 
     data["PaymentPlan"] = "Pay In Full"
     data["PolicyCoverageOption"] = "Gold"

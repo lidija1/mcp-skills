@@ -19,6 +19,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urljoin
@@ -713,6 +714,8 @@ class OneShieldApiReplay:
         response_by_stage: dict[str, requests.Response] = {}
         ui_data_by_stage: dict[str, dict[str, Any]] = {}
         stop_events = {
+            "customer-validation": ("auto_customer", "Action.1435248"),
+            "quote-validation": ("auto_quote_registration", "Action.1453546"),
             "rate": ("auto_premium_summary", "Action.1753948"),
             "rating-detail": ("auto_premium_summary", "Action.469805"),
             "request-issue": ("auto_premium_summary", "Action.305905"),
@@ -1024,6 +1027,15 @@ class OneShieldApiReplay:
             return
 
         layout_fields = [
+            ("DOB", ("Date of Birth", "DOB"), test_data.get("DOB")),
+            ("PhoneNum", ("Phone Number", "Phone"), test_data.get("PhoneNum")),
+            ("Email", ("Email Address", "Email"), test_data.get("Email")),
+            (
+                "EffectiveDate",
+                ("Effective Date",),
+                test_data.get("EffectiveDate")
+                or (date.today() + timedelta(days=1)).strftime("%m/%d/%Y"),
+            ),
             ("Gender", ("Gender",), test_data.get("Gender")),
             ("MaritalStatus", ("Marital Status",), test_data.get("MaritalStatus")),
             ("DriverStatus", ("Driver Status",), test_data.get("DriverStatus")),
@@ -1486,6 +1498,18 @@ class OneShieldApiReplay:
         }
 
     def _blocking_reason_after_stage(self, stage: str) -> str:
+        if stage == "customer-validation" and not self._state_page_contains("select an address"):
+            messages = "; ".join(self._state_messages())
+            return (
+                "customer fields were rejected; "
+                f"current page is {self._state_page_name()!r}. {messages}"
+            ).strip()
+        if stage == "quote-validation" and not self._state_page_contains("quote summary"):
+            messages = "; ".join(self._state_messages())
+            return (
+                "quote registration fields were rejected; "
+                f"current page is {self._state_page_name()!r}. {messages}"
+            ).strip()
         if stage == "rate" and not self._state_page_contains("premium", "underwriting"):
             messages = "; ".join(self._state_messages())
             return (

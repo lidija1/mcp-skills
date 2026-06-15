@@ -1316,3 +1316,12 @@ Add confirmed behavior below as exploration progresses.
 
 **Open Questions**
 - 
+# Homeowner Conditional Floor Fields
+
+- `Condo/Co-op` and `Tenants` reveal `# of Floors` on Location Coverage.
+- When the building has more than one floor, OneShield also requires
+  `The floor on which the risk is located`.
+- Its label uses the stable `osviewid` suffix `_CI_15064646_Label`; the input
+  is the first following input and does not expose a reliable accessible name.
+- Both fields must be populated before Location Coverage becomes complete and
+  the Rate Quote action is available.

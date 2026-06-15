@@ -130,5 +130,27 @@ class HomeOwnerQuoteSummaryPage(BasePage):
         assert data["FirstName"].lower() in self.first_name.input_value().lower()
         assert data["LastName"].lower() in self.last_name.input_value().lower()
 
+    def assert_dropdown_options(self, expected):
+        """Assert every configured Quote Summary dropdown option is available."""
+        dropdowns = {
+            "ProgramType": self.program,
+            "BillingMethod": self.billing,
+            "Term": self.term,
+            "Prefix": self.prefix,
+            "Suffix": self.suffix,
+        }
+        for key, locator in dropdowns.items():
+            configured = expected.get(key)
+            if configured is None:
+                continue
+            try:
+                actual = self.get_extjs_options(locator)
+            except Exception as exc:
+                raise AssertionError(
+                    f"Could not collect Quote Summary options for {key}: {exc}"
+                ) from exc
+            missing = [option for option in configured if option not in actual]
+            assert not missing, f"{key} missing dropdown options: {missing}"
+
     def _open_and_select(self, locator, value):
         self.select_extjs_option(locator, value)

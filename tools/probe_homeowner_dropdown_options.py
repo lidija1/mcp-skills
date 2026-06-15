@@ -23,7 +23,7 @@ from ui.pages.homeowner.homeowner_quote_summary_page import HomeOwnerQuoteSummar
 OUTPUT = ROOT / "reports" / "homeowner_dropdown_options.json"
 
 
-def load_case(tc_id="TC_ID_0001"):
+def load_case(tc_id="HO_001"):
     data_path = ROOT / "testdata" / "static" / "homeowner" / "HomeData.json"
     payload = json.loads(data_path.read_text(encoding="utf-8"))
     for case in payload["testCases"]:

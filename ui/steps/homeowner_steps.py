@@ -41,6 +41,113 @@ def ho_coverage_info(homeowner_coverage_page, homeowner_bind_information_page, t
     log.info("Successfully filled homeowner location coverage information.")
 
 
+def _reach_homeowner_location_coverage(
+    homeowner_quote_summary_page,
+    homeowner_city_information_page,
+    test_data,
+):
+    homeowner_quote_summary_page.summary_steps(test_data)
+    homeowner_city_information_page.click_save()
+    homeowner_city_information_page.click_homeowners_link(test_data)
+
+
+def _complete_required_homeowner_coverage(homeowner_coverage_page, test_data):
+    homeowner_coverage_page.set_residency(test_data)
+    homeowner_coverage_page.set_number_of_floors(test_data)
+    homeowner_coverage_page.set_coverage(test_data)
+    homeowner_coverage_page.wait_for_loader_to_disappear()
+    homeowner_coverage_page.set_replacement(test_data)
+    homeowner_coverage_page.set_contents(test_data)
+    homeowner_coverage_page.set_loss_of_use(test_data)
+    homeowner_coverage_page.set_perils(test_data)
+    homeowner_coverage_page.set_windstorm(test_data)
+    homeowner_coverage_page.set_liability(test_data)
+    homeowner_coverage_page.set_medical(test_data)
+    homeowner_coverage_page.set_year_built(test_data)
+    homeowner_coverage_page.set_construction(test_data)
+    homeowner_coverage_page.set_roof_type(test_data)
+
+
+@when("I exercise the configured Homeowner discovered-element flow")
+def exercise_configured_homeowner_discovery(
+    homeowner_quote_summary_page,
+    homeowner_city_information_page,
+    homeowner_coverage_page,
+    homeowner_additional_sections_page,
+    test_data,
+    log,
+):
+    flow = test_data["OptionalFlow"]
+    log.info("Exercising Homeowner discovered-element flow: %s", flow)
+
+    if flow == "DropdownInventory":
+        expected = test_data["ExpectedDropdownOptions"]
+        homeowner_quote_summary_page.set_program(test_data)
+        homeowner_quote_summary_page.set_billing(test_data)
+        homeowner_quote_summary_page.assert_dropdown_options(expected)
+        _reach_homeowner_location_coverage(
+            homeowner_quote_summary_page,
+            homeowner_city_information_page,
+            test_data,
+        )
+        _complete_required_homeowner_coverage(
+            homeowner_coverage_page,
+            test_data,
+        )
+        homeowner_coverage_page.assert_dropdown_options(expected)
+        return
+
+    _reach_homeowner_location_coverage(
+        homeowner_quote_summary_page,
+        homeowner_city_information_page,
+        test_data,
+    )
+    _complete_required_homeowner_coverage(homeowner_coverage_page, test_data)
+
+    if flow == "ConditionalFields":
+        homeowner_coverage_page.set_lived_here(test_data)
+        homeowner_coverage_page.set_prior_address(test_data)
+        assert (
+            homeowner_coverage_page.prior_address_line_2.input_value()
+            == test_data["PriorAddressLine2"]
+        )
+        return
+
+    homeowner_coverage_page.set_optional_dropdowns(test_data)
+    homeowner_coverage_page.set_under_construction(test_data)
+    homeowner_coverage_page.set_lived_here(test_data)
+    homeowner_coverage_page.set_loses(test_data)
+    homeowner_coverage_page.click_save()
+
+    if flow == "OptionalCoverages":
+        homeowner_additional_sections_page.exercise_optional_coverages(test_data)
+        return
+    if flow == "Reinsurance":
+        homeowner_additional_sections_page.exercise_reinsurance(test_data)
+        return
+    if flow == "Inspection":
+        homeowner_additional_sections_page.exercise_inspection(test_data)
+        return
+    if flow == "Manuscript":
+        homeowner_additional_sections_page.exercise_manuscript(test_data)
+        return
+    if flow == "AdditionalInterests":
+        homeowner_additional_sections_page.exercise_additional_interests(test_data)
+        return
+    raise AssertionError(f"Unsupported Homeowner discovery flow: {flow}")
+
+
+@then("the Homeowner discovery flow stops before rating and binding")
+def assert_homeowner_discovery_stops_before_rating(page, log):
+    assert not page.get_by_role(
+        "button", name=">>> request issue"
+    ).is_visible(timeout=1000)
+    assert not page.get_by_role(
+        "button", name=">>> bind", exact=True
+    ).is_visible(timeout=1000)
+    log.info("Homeowner discovery stopped before rating, issue, and binding.")
+
+
 @when("I exercise additional homeowner elements")
 def exercise_additional_homeowner_elements(
     homeowner_quote_summary_page,

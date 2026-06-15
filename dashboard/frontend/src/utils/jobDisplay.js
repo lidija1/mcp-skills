@@ -26,21 +26,10 @@ function splitDashLabel(label) {
   }
 }
 
-function parseRegressionBaseline(label) {
-  const {description} = splitDashLabel(label)
-  return description || ''
-}
-
 export function fullJobTitle(job) {
   const metadata = job?.metadata || {}
   const label = cleanDisplayText(job?.label || '')
   const split = splitDashLabel(label)
-
-  if (job?.execution_type === 'regression_sweep' || /^Regression Sweep/i.test(label)) {
-    const focusLabel = metadata.focus ? ` [${metadata.focus}]` : ''
-    const baseline = metadata.baseline_description || parseRegressionBaseline(label)
-    return baseline ? `Regression Sweep${focusLabel} - ${baseline}` : label
-  }
 
   if (metadata.persona_description) {
     const prefix = /^(AI Assert|Assert)\b/i.test(split.prefix) ? split.prefix : ''
@@ -53,14 +42,6 @@ export function fullJobTitle(job) {
 export function jobDisplayLabel(job, maxLength = 92) {
   const metadata = job?.metadata || {}
   const label = cleanDisplayText(job?.label || '')
-
-  if (job?.execution_type === 'regression_sweep' || /^Regression Sweep/i.test(label)) {
-    const focusLabel = metadata.focus ? ` [${metadata.focus}]` : ''
-    const baseline = metadata.baseline_description || parseRegressionBaseline(label)
-    const available = Math.max(34, maxLength - `Regression Sweep${focusLabel} - `.length)
-    const summary = summarizePersonaDescription(baseline || label, available)
-    return truncateDisplayText(`Regression Sweep${focusLabel} - ${summary}`, maxLength)
-  }
 
   if (job?.execution_type === 'api_assert_flow' && metadata.persona_description) {
     const split = splitDashLabel(label)

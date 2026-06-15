@@ -1,10 +1,9 @@
 {
   "testCases": [
-
     {
       "TC_ID": "HO_UW_002",
       "UW_Rule": "Renovation + Old Frame",
-      "UW_Description": "Property under renovation, Frame, 1952 build — hard-stop fires on Location Coverage save before Rate Quote.",
+      "UW_Description": "Property under renovation, Frame, 1952 build \u2014 hard-stop fires on Location Coverage save before Rate Quote.",
       "CustomerType": "Individual",
       "FirstName": "Robert",
       "LastName": "Granger",
@@ -41,9 +40,10 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Homeowner underwriting case HO_UW_002",
+      "Description": "Homeowner underwriting case HO_UW_002"
     },
-
     {
       "TC_ID": "HO_UW_003",
       "UW_Rule": "Renovation + All Risk Flags",
@@ -84,13 +84,14 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "Yes",
-      "Declined": "Yes"
+      "Declined": "Yes",
+      "TestName": "Homeowner underwriting case HO_UW_003",
+      "Description": "Homeowner underwriting case HO_UW_003"
     },
-
     {
       "TC_ID": "HO_UW_004",
-      "UW_Rule": "Old Frame — No Renovation",
-      "UW_Description": "1952 Frame build, no renovation flag — tests whether old construction alone fires the underwriting condition after Rate Quote.",
+      "UW_Rule": "Old Frame \u2014 No Renovation",
+      "UW_Description": "1952 Frame build, no renovation flag \u2014 tests whether old construction alone fires the underwriting condition after Rate Quote.",
       "CustomerType": "Individual",
       "FirstName": "George",
       "LastName": "Malone",
@@ -127,13 +128,14 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Homeowner underwriting case HO_UW_004",
+      "Description": "Homeowner underwriting case HO_UW_004"
     },
-
     {
       "TC_ID": "HO_UW_005",
       "UW_Rule": "Refused + Declined (Bind Info)",
-      "UW_Description": "Previously refused and declined coverage, modern 2015 build — tests Bind Information flags triggering UW after Rate Quote.",
+      "UW_Description": "Previously refused and declined coverage, modern 2015 build \u2014 tests Bind Information flags triggering UW after Rate Quote.",
       "CustomerType": "Individual",
       "FirstName": "Sandra",
       "LastName": "Kelvin",
@@ -170,13 +172,14 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "Yes",
-      "Declined": "Yes"
+      "Declined": "Yes",
+      "TestName": "Homeowner underwriting case HO_UW_005",
+      "Description": "Homeowner underwriting case HO_UW_005"
     },
-
     {
       "TC_ID": "HO_UW_006",
       "UW_Rule": "Residence Vacant (Page 1)",
-      "UW_Description": "Vacant residence — eligibility radio on Quote Summary page. Expect hard-stop on Page 1 save.",
+      "UW_Description": "Vacant residence \u2014 eligibility radio on Quote Summary page. Expect hard-stop on Page 1 save.",
       "CustomerType": "Individual",
       "FirstName": "Victor",
       "LastName": "Holloway",
@@ -213,13 +216,14 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Homeowner underwriting case HO_UW_006",
+      "Description": "Homeowner underwriting case HO_UW_006"
     },
-
     {
       "TC_ID": "HO_UW_007",
       "UW_Rule": "Day Care at Home (Page 1)",
-      "UW_Description": "Day care or child care run out of the home — eligibility radio on Quote Summary. Expect UW referral on Page 1 save.",
+      "UW_Description": "Day care or child care run out of the home \u2014 eligibility radio on Quote Summary. Expect UW referral on Page 1 save.",
       "CustomerType": "Individual",
       "FirstName": "Alice",
       "LastName": "Farnsworth",
@@ -256,13 +260,14 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Homeowner underwriting case HO_UW_007",
+      "Description": "Homeowner underwriting case HO_UW_007"
     },
-
     {
       "TC_ID": "HO_UW_008",
       "UW_Rule": "Flat Roof (High-Risk Roof Type)",
-      "UW_Description": "Flat roof on modern 2012 building — tests high-risk roof type trigger after Rate Quote.",
+      "UW_Description": "Flat roof on modern 2012 building \u2014 tests high-risk roof type trigger after Rate Quote.",
       "CustomerType": "Individual",
       "FirstName": "Dennis",
       "LastName": "Ashworth",
@@ -299,13 +304,14 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Homeowner underwriting case HO_UW_008",
+      "Description": "Homeowner underwriting case HO_UW_008"
     },
-
     {
       "TC_ID": "HO_UW_009",
       "UW_Rule": "Asbestos Shakes Roof (Hazardous Material)",
-      "UW_Description": "Asbestos Shakes roof on modern 2010 building — hazardous material, expect hard-stop after Rate Quote.",
+      "UW_Description": "Asbestos Shakes roof on modern 2010 building \u2014 hazardous material, expect hard-stop after Rate Quote.",
       "CustomerType": "Individual",
       "FirstName": "Irene",
       "LastName": "Caldwell",
@@ -342,8 +348,9 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Homeowner underwriting case HO_UW_009",
+      "Description": "Homeowner underwriting case HO_UW_009"
     }
-
   ]
 }

@@ -401,7 +401,6 @@ const ASSERTION_EXECUTION_TYPES = new Set([
     'api_ladder',
     'api_ai_assert',
     'api_assert_flow',
-    'regression_sweep',
 ])
 
 function getOutcomeBadge(job, displayStatus) {

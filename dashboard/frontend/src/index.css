@@ -784,6 +784,20 @@ textarea.field {
     font-weight: 800;
 }
 
+.suite-section-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 100%;
+    justify-content: flex-start;
+    user-select: none;
+}
+
+.suite-section-toggle:hover {
+    color: #2563eb;
+}
+
 .suite-preview {
     width: 100%;
     margin: 4px 0 16px;
@@ -10319,3 +10333,4 @@ button.jobs-group-row {
         display: none;
     }
 }
+

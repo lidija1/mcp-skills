@@ -76,15 +76,8 @@ Feature: Homeowner Creation
     Then I read and extract policy summary page details
 
     Examples:
-      | TC_ID      |
-      | TC_ID_0001 |
-#      | TC_ID_0013 |
-#      | TC_ID_0002 |
-#      | TC_ID_0003 |
-#      | TC_ID_0004 |
-#      | TC_ID_0005 |
-#      | TC_ID_0006 |
-#      | TC_ID_0007 |
-#      | TC_ID_0008 |
-#      | TC_ID_0009 |
-#      | TC_ID_0010 |
+      | TC_ID | Description                                                              |
+      | HO_001 | Baseline Homeowner Gold policy with standard limits                     |
+      | HO_002 | Platinum Homeowner policy with mitigation and security controls         |
+      | HO_003 | Condo Silver policy reveals number of floors and removes other structures |
+      | HO_004 | Tenants Bronze policy with prior address conditional fields             |

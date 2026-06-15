@@ -43,11 +43,11 @@ FIELD_METADATA = {
 def load_base_case():
     payload = json.loads(HOME_DATA.read_text(encoding="utf-8"))
     for case in payload["testCases"]:
-        if case.get("TC_ID") == "TC_ID_0001":
+        if case.get("TC_ID") == "HO_001":
             base = deepcopy(case)
             break
     else:
-        raise ValueError("TC_ID_0001 not found in HomeData.json")
+        raise ValueError("HO_001 not found in HomeData.json")
 
     base.pop("Pool", None)
     base["Loses"] = "No"
@@ -94,14 +94,15 @@ def build_cases():
         case = deepcopy(base)
         case_id = f"TC_HO_DD_{index:04d}"
         case["TC_ID"] = case_id
+        case["TestName"] = (
+            f"{screen} {field_label} option - {option}"
+        )
         case[key] = option
         case["FirstName"] = f"Dropdown{index:03d}"
         case["LastName"] = slug(key)[:20]
         case["Email"] = f"ho_dropdown_{index:04d}_{{timestamp}}@home.com"
         case["Address"] = f"{300 + index} Old Taunton Ave"
-        case["Description"] = (
-            f"Homeowner dropdown option coverage: {screen} / {field_label} = {option}."
-        )
+        case["Description"] = case["TestName"]
         case["DropdownScreen"] = screen
         case["DropdownField"] = field_label
         case["DropdownDataKey"] = key
@@ -115,7 +116,7 @@ def build_cases():
                 "Homeowner-specific dropdown value and includes a human-readable Description."
             ),
             "source": str(SOURCE.relative_to(ROOT)),
-            "baseCase": "testdata/static/homeowner/HomeData.json::TC_ID_0001",
+            "baseCase": "testdata/static/homeowner/HomeData.json::HO_001",
             "caseCount": len(cases),
         },
         "testCases": cases,

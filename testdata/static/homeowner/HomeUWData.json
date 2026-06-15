@@ -2,7 +2,6 @@
   "testCases": [
     {
       "TC_ID": "UW_001",
-      "description": "Flat roof triggers Hard-Stop: Roof type is flat, tin or rolled paper",
       "CustomerType": "Individual",
       "FirstName": "Aaron",
       "LastName": "Fletcher",
@@ -37,11 +36,12 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Flat roof triggers Hard-Stop: Roof type is flat, tin or rolled paper",
+      "Description": "Flat roof triggers Hard-Stop: Roof type is flat, tin or rolled paper"
     },
     {
       "TC_ID": "UW_002",
-      "description": "Underground oil tank triggers Hard-Stop: Any underground oil or storage tanks?",
       "CustomerType": "Individual",
       "FirstName": "Beth",
       "LastName": "Carroll",
@@ -76,11 +76,12 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Underground oil tank triggers Hard-Stop: Any underground oil or storage tanks?",
+      "Description": "Underground oil tank triggers Hard-Stop: Any underground oil or storage tanks?"
     },
     {
       "TC_ID": "UW_003",
-      "description": "Renovation=Yes triggers Hard-Stop: Property is under construction",
       "CustomerType": "Individual",
       "FirstName": "Carlos",
       "LastName": "Diaz",
@@ -115,11 +116,12 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Renovation=Yes triggers Hard-Stop: Property is under construction",
+      "Description": "Renovation=Yes triggers Hard-Stop: Property is under construction"
     },
     {
       "TC_ID": "UW_004",
-      "description": "DayCare=Yes triggers Hard-Stop: Child or Day Care run out of the home",
       "CustomerType": "Individual",
       "FirstName": "Diana",
       "LastName": "Evans",
@@ -154,11 +156,12 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "DayCare=Yes triggers Hard-Stop: Child or Day Care run out of the home",
+      "Description": "DayCare=Yes triggers Hard-Stop: Child or Day Care run out of the home"
     },
     {
       "TC_ID": "UW_005",
-      "description": "ResidenceRented=Yes triggers Hard-Stop: Property rented more than 10 weeks a year",
       "CustomerType": "Individual",
       "FirstName": "Edward",
       "LastName": "Foster",
@@ -193,11 +196,12 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "ResidenceRented=Yes triggers Hard-Stop: Property rented more than 10 weeks a year",
+      "Description": "ResidenceRented=Yes triggers Hard-Stop: Property rented more than 10 weeks a year"
     },
     {
       "TC_ID": "UW_006",
-      "description": "ResidenceVacant=Yes triggers Hard-Stop: Property is Vacant",
       "CustomerType": "Individual",
       "FirstName": "Fiona",
       "LastName": "Grant",
@@ -232,11 +236,12 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "ResidenceVacant=Yes triggers Hard-Stop: Property is Vacant",
+      "Description": "ResidenceVacant=Yes triggers Hard-Stop: Property is Vacant"
     },
     {
       "TC_ID": "UW_007",
-      "description": "Clean profile — all risk fields safe, no UW conditions expected",
       "CustomerType": "Individual",
       "FirstName": "George",
       "LastName": "Hayes",
@@ -271,7 +276,9 @@
       "Loses": "No",
       "ExistingClient": "No",
       "Refused": "No",
-      "Declined": "No"
+      "Declined": "No",
+      "TestName": "Clean profile \u2014 all risk fields safe, no UW conditions expected",
+      "Description": "Clean profile \u2014 all risk fields safe, no UW conditions expected"
     }
   ]
 }

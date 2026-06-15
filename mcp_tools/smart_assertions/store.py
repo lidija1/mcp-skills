@@ -23,6 +23,7 @@ class Snapshot:
     total_premium: float | None
     total_cost: float | None
     coverage_premiums: dict[str, float]   # {coverage_name: premium} from Policy Term Factor rows
+    base_rates: dict[str, float]          # {coverage_name: base_rate} from Base Rate rows
     uw_conditions: list[str]
     blocked: bool
     blocked_reason: str
@@ -42,6 +43,7 @@ class Snapshot:
             "total_premium": self.total_premium,
             "total_cost": self.total_cost,
             "coverage_premiums": self.coverage_premiums,
+            "base_rates": self.base_rates,
             "uw_conditions": self.uw_conditions,
             "blocked": self.blocked,
             "blocked_reason": self.blocked_reason,

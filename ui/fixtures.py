@@ -29,6 +29,7 @@ from ui.pages.homeowner.homeowner_premium_summary_page import HomeownerPremiumSu
 from ui.pages.homeowner.homeowner_delivery_preferences_page import HomeownerDeliveryPreferencesPage
 from ui.pages.homeowner.homeowner_billing_plan_page import HomeownerBillingPlanPage
 from ui.pages.homeowner.homeowner_verify_billing_page import HomeownerVerifyBillingPage
+from ui.pages.homeowner.homeowner_additional_sections_page import HomeownerAdditionalSectionsPage
 
 # Cyber insurance page fixtures
 from ui.pages.cyber.cyber_policy_information_page import CyberPolicyInformationPage
@@ -198,6 +199,11 @@ def homeowner_billing_plan_page(page):
 @pytest.fixture
 def homeowner_verify_billing_page(page):
     return HomeownerVerifyBillingPage(page)
+
+
+@pytest.fixture
+def homeowner_additional_sections_page(page):
+    return HomeownerAdditionalSectionsPage(page)
 
 
 @pytest.fixture

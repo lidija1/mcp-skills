@@ -54,13 +54,13 @@ Feature: Homeowner UW Rules Validation
     Then the UW referral page shows a "<uw_type>" condition containing "<expected_condition>"
 
     Examples:
-      | TC_ID  | uw_type   | expected_condition                        |
-      | UW_001 | Hard-Stop | Roof type is flat, tin or rolled paper    |
-      | UW_002 | Hard-Stop | Any underground oil or storage tanks?     |
-      | UW_003 | Hard-Stop | Property is under construction            |
-      | UW_004 | Hard-Stop | Child or Day Care run out of the home     |
-      | UW_005 | Hard-Stop | Property rented more than 10 weeks a year |
-      | UW_006 | Hard-Stop | Property is Vacant                        |
+      | TC_ID  | Description                                      | uw_type   | expected_condition                        |
+      | UW_001 | Flat roof triggers the roof-type hard stop       | Hard-Stop | Roof type is flat, tin or rolled paper    |
+      | UW_002 | Underground oil tank triggers a hard stop        | Hard-Stop | Any underground oil or storage tanks?     |
+      | UW_003 | Major renovation triggers a construction stop    | Hard-Stop | Property is under construction            |
+      | UW_004 | Home day care triggers a business-use hard stop  | Hard-Stop | Child or Day Care run out of the home     |
+      | UW_005 | Long-term rental triggers an occupancy hard stop | Hard-Stop | Property rented more than 10 weeks a year |
+      | UW_006 | Vacant residence triggers a vacancy hard stop    | Hard-Stop | Property is Vacant                        |
 
   # ── Negative: clean profile reaches premium summary without referral ───────
   @uw @homeowner @smoke
@@ -98,5 +98,5 @@ Feature: Homeowner UW Rules Validation
     Then no active UW conditions are present
 
     Examples:
-      | TC_ID  |
-      | UW_007 |
+      | TC_ID  | Description                                           |
+      | UW_007 | Clean Homeowner profile reaches rating without referral |

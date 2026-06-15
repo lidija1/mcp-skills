@@ -1,5 +1,5 @@
 """
-Smart Assertions MCP server — two tools only.
+Smart Assertions MCP server.
 
   snapshot_flow  Run a persona through OneShield API replay and save the raw
                  result (premium, per-coverage breakdown, UW conditions) to the
@@ -32,7 +32,6 @@ from mcp.server.fastmcp import FastMCP
 from mcp_tools.smart_assertions.store import store, Snapshot
 from mcp_tools.policy_flow_generator.persona_generator import generate_persona
 from api_tests.oneshield_api_replay import OneShieldApiReplay
-from dashboard.backend.api_assertions.regression_sweep import run_sweep, SweepResult, VariantResult, SweepAnalysis
 from dashboard.backend.api_assertions.premium import extract_premium_evidence
 
 mcp = FastMCP("smart-assertions")
@@ -42,8 +41,22 @@ mcp = FastMCP("smart-assertions")
 # ---------------------------------------------------------------------------
 
 STOP_AFTER: dict[str, str] = {
-    "premium":    "rating-detail",
-    "total_cost": "verify-billing",
+    "premium":        "rating-detail",
+    "total_cost":     "verify-billing",
+    "base_rate_bi":   "rating-detail",
+    "base_rate_pd":   "rating-detail",
+    "base_rate_coll": "rating-detail",
+    "base_rate_comp": "rating-detail",
+    "base_rate_med":  "rating-detail",
+}
+
+# Maps UI assertion type → coverage substring used for matching Base Rate rows
+BASE_RATE_COVERAGE: dict[str, str] = {
+    "base_rate_bi":   "Bodily Injury",
+    "base_rate_pd":   "Property Damage",
+    "base_rate_coll": "Collision",
+    "base_rate_comp": "Comprehensive",
+    "base_rate_med":  "Medical",
 }
 
 # ---------------------------------------------------------------------------
@@ -60,6 +73,24 @@ def _coverage_premiums(flow: dict) -> dict[str, float]:
         .get("business_values", {})
         .get("coverage_premiums", {})
     )
+
+
+def _base_rates(flow: dict) -> dict[str, float]:
+    rows = (
+        flow.get("rating_factors", {})
+        .get("business_values", {})
+        .get("base_rates", [])
+    )
+    result: dict[str, float] = {}
+    for r in rows:
+        cov = str(r.get("coverage", "")).strip()
+        val = r.get("value")
+        if cov and val is not None:
+            try:
+                result[cov] = float(str(val).replace(",", ""))
+            except (ValueError, TypeError):
+                pass
+    return result
 
 
 def _total_cost(flow: dict) -> float | None:
@@ -127,6 +158,7 @@ def _build_snapshot(
         total_premium=_total_premium(flow),
         total_cost=_total_cost(flow),
         coverage_premiums=_coverage_premiums(flow),
+        base_rates=_base_rates(flow),
         uw_conditions=_uw_conditions(flow),
         blocked=bool(flow.get("blocked_reason")),
         blocked_reason=flow.get("blocked_reason", ""),
@@ -236,7 +268,12 @@ def _fmt_assert(
     passed: bool,
     message: str,
 ) -> str:
-    actual = snap.total_premium if assertion_type == "premium" else snap.total_cost
+    if assertion_type == "premium":
+        actual = snap.total_premium
+    elif assertion_type in BASE_RATE_COVERAGE:
+        actual = snap.base_rates.get(BASE_RATE_COVERAGE[assertion_type])
+    else:
+        actual = snap.total_cost
     actual_str = f"${actual:,.2f}" if actual is not None else "N/A"
     status = "✅ PASS" if passed else "❌ FAIL"
 
@@ -388,149 +425,15 @@ def assert_flow(
     snap = _build_snapshot(persona_description, persona, flow, assertion_type, lob)
     store.save(snap)
 
-    actual = snap.total_premium if assertion_type == "premium" else snap.total_cost
+    if assertion_type == "premium":
+        actual = snap.total_premium
+    elif assertion_type in BASE_RATE_COVERAGE:
+        actual = snap.base_rates.get(BASE_RATE_COVERAGE[assertion_type])
+    else:
+        actual = snap.total_cost
     passed, message = _assert(actual, expected_value, operator, tolerance_pct)
 
     return _fmt_assert(snap, assertion_type, expected_value, operator, tolerance_pct, passed, message)
-
-
-# ---------------------------------------------------------------------------
-# Regression sweep report formatter
-# ---------------------------------------------------------------------------
-
-def _fmt_sweep(sweep: SweepResult) -> str:
-    base_str = f"${sweep.baseline_premium:,.2f}" if sweep.baseline_premium else "N/A"
-    status = "✅ ALL PASS" if sweep.passed else f"❌ {sweep.fail_count} FAILED"
-    lines = [
-        f"## Regression Sweep `{sweep.sweep_id}` — {status}",
-        f"**Baseline:** {sweep.baseline_description}",
-        f"**Baseline premium:** {base_str} via `{sweep.baseline_premium_source or 'unavailable'}`",
-        f"**Variants:** {len(sweep.results)} total | ✅ {sweep.pass_count}  ❌ {sweep.fail_count}",
-        "",
-    ]
-    if sweep.baseline_premium_mismatch:
-        lines += [
-            (
-                "**Premium diagnostic:** Rating Detail coverage sum "
-                f"${sweep.baseline_rating_detail_premium:,.2f} does not match "
-                f"Premium Summary {base_str}; assertions use Premium Summary."
-            ),
-            "",
-        ]
-    lines += [
-        (
-            "**Comparison source:** Premium Summary UI for baseline and variants. "
-            "Editable soft-UW referrals are accepted and re-rated before comparison."
-        ),
-        "",
-    ]
-
-    # Group results by category
-    categories = ["risk_adding", "ladder", "discount", "hard_stop"]
-    cat_labels = {
-        "risk_adding": "RISK ADDING",
-        "ladder":      "LADDER (monotonic)",
-        "discount":    "DISCOUNTS",
-        "hard_stop":   "HARD STOPS",
-    }
-
-    for cat in categories:
-        cat_results = [r for r in sweep.results if r.variant.category == cat]
-        if not cat_results:
-            continue
-        lines.append(f"### {cat_labels.get(cat, cat.upper())}")
-        lines += ["| Variant | Premium | Delta | Direction | Magnitude | Result |",
-                  "|---|---|---|---|---|---|"]
-        for r in cat_results:
-            if r.error:
-                lines.append(f"| {r.variant.label} | — | — | — | — | ❌ `{r.error[:50]}` |")
-                continue
-            actual = f"${r.actual_premium:,.2f}" if r.actual_premium else ("blocked" if r.blocked else "N/A")
-            delta = f"{r.delta_pct:+.1f}%" if r.delta_pct is not None else "—"
-            dir_ok = "✅" if r.direction_passed else f"❌ expected {r.variant.expected_direction}"
-            mag_ok = "✅" if r.magnitude_passed else ("—" if r.magnitude_passed is None else "❌")
-            ok = "✅" if r.passed else "❌"
-            msg = f" `{r.message}`" if r.message and not r.passed else ""
-            lines.append(f"| {r.variant.label} | {actual} | {delta} | {dir_ok} | {mag_ok} | {ok}{msg} |")
-        lines.append("")
-
-    mismatch_results = [result for result in sweep.results if result.premium_mismatch]
-    if mismatch_results:
-        lines.append("### Premium Diagnostics")
-        for result in mismatch_results:
-            lines.append(
-                f"- **{result.variant.label}:** Premium Summary "
-                f"${result.actual_premium:,.2f} vs Rating Detail sum "
-                f"${result.rating_detail_premium:,.2f}; comparison used Premium Summary."
-            )
-        lines.append("")
-
-    # Ladder monotonic check inline
-    from dashboard.backend.api_assertions.regression_sweep import _check_ladder_monotonic
-    ladder_violations = _check_ladder_monotonic(sweep.results)
-    if ladder_violations:
-        lines += ["### Ladder Violations"] + [f"- ❌ {v}" for v in ladder_violations] + [""]
-
-    # AI analysis
-    if sweep.analysis:
-        a = sweep.analysis
-        lines.append("### AI Analysis")
-        if a.patterns:
-            lines.append("**Patterns detected:**")
-            lines += [f"- {p}" for p in a.patterns]
-            lines.append("")
-        if a.root_causes:
-            lines.append("**Likely root causes:**")
-            lines += [f"- {c}" for c in a.root_causes]
-            lines.append("")
-        if a.follow_up_variants:
-            lines.append("**Suggested follow-up variants:**")
-            for v in a.follow_up_variants:
-                mag = ""
-                if v.min_delta_pct is not None:
-                    mag = f", min {v.min_delta_pct}%"
-                if v.max_delta_pct is not None:
-                    mag += f" max {v.max_delta_pct}%"
-                lines.append(f"- **{v.label}** — expected `{v.expected_direction}`{mag}")
-            lines.append("")
-
-    lines.append(f"_sweep_id: `{sweep.sweep_id}`  |  baseline run_id: `{sweep.baseline_run_id}`_")
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# MCP tool: batch_regression_sweep
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def batch_regression_sweep(
-    baseline_description: str,
-    lob: str = "auto",
-    focus: str | None = None,
-) -> str:
-    """
-    Full AI-driven premium regression sweep against a clean baseline persona.
-
-    Phase 1 — AI generates a variant list covering risk-adding mutations,
-               discounts, hard stops, and ladder sequences.
-    Phase 2 — Baseline snapshot captured via OneShield API replay.
-    Phase 3 — All variants run in parallel; rule assertions check premium
-               direction (gt/lt/blocked) and magnitude bands.
-    Phase 4 — AI reads the full result table and identifies cross-row patterns,
-               likely root causes, and follow-up variants to probe anomalies.
-
-    Args:
-        baseline_description: Plain-English clean baseline persona, e.g.
-            "35-year-old married driver, Gold coverage, clean record, pleasure use"
-        lob:    Line of business — currently only "auto" is supported.
-        focus:  Optional category filter. One of: "risk_adding", "discount",
-                "hard_stop", "ladder". Omit for a full sweep across all categories.
-    """
-    try:
-        sweep = run_sweep(baseline_description, lob=lob, focus=focus)
-    except Exception as exc:
-        return f"❌ Sweep failed: {exc}"
-    return _fmt_sweep(sweep)
 
 
 if __name__ == "__main__":

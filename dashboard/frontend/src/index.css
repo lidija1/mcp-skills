@@ -3911,6 +3911,17 @@ code.asr-val-code.fail {
     color: var(--text);
 }
 
+.af-panel-note {
+    margin: 10px 0 0;
+    padding: 10px 14px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
 .af-panel-empty {
     color: var(--muted);
     font-size: 14px;

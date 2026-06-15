@@ -235,7 +235,12 @@ Each LOB has a JSON data file in `testdata/static/`. Every file must include:
 
 ## Adding a New LOB
 
-Use the `lob-recorder` MCP server to auto-generate the scaffold (`start_recording` → interact → `scan_page` per page → `generate_scaffold_files`), or create manually:
+Use `tools/lob_scaffold.py` to generate a first scaffold from a live OneShield workflow, or create the files manually:
+
+```bash
+python tools/lob_scaffold.py --lob "Term Life" --program "Term Life" --headed
+python tools/lob_scaffold.py --lob "Term Life" --program "Term Life" --dry-run
+```
 
 1. **Page objects** — `ui/pages/<lob>/` extending `BasePage`
 2. **Feature file** — `ui/features/<lob>/<lob>_creation.feature`
@@ -257,7 +262,7 @@ docker-compose up --build
 docker-compose -f docker-compose.windows.yml up
 ```
 
-See `DOCKER_GUIDE.md` for full details.
+See `FRAMEWORK_GUIDE.md` for current setup, execution, and artifact details.
 
 ---
 
@@ -271,7 +276,7 @@ flake8 .
 
 ## Security
 
-See `SECURITY.md` for the security policy and responsible disclosure process.
+Keep `.env`, dashboard databases, screenshots, API replay artifacts, logs, and generated reports out of commits because they can contain credentials, session data, or PII.
 
 ---
 
@@ -279,8 +284,8 @@ See `SECURITY.md` for the security policy and responsible disclosure process.
 
 | File | Contents |
 |------|---------|
-| `CLAUDE.md` | Detailed guidance for AI coding agents working in this repo |
 | `FRAMEWORK_GUIDE.md` | In-depth framework patterns and examples |
-| `MCP_TOOLS_OVERVIEW.md` | MCP server reference |
-| `DOCKER_GUIDE.md` | Docker setup and deployment |
-| `DASHBOARD_DIRECT_ASSERT_GUIDE.md` | Direct assertion patterns for the dashboard |
+| `TECHNICAL_OVERVIEW.md` | Beginner-friendly system map for frontend, backend, MCP, AI, Playwright, database, jobs, and reports |
+| `api_tests/guide.md` | API test notes and examples |
+| `docs/ONESHIELD_EXPLORATION_BEST_PRACTICES.md` | OneShield exploration practices |
+| `docs/ONESHIELD_APP_KNOWLEDGE.md` | Application knowledge captured during discovery |

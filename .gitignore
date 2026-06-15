@@ -50,6 +50,7 @@ Thumbs.db
 dashboard/backend/data/dashboard.db
 
 *.md
+!TECHNICAL_OVERVIEW.md
 !api_tests/guide.md
 !docs/ONESHIELD_APP_KNOWLEDGE.md
 !docs/ONESHIELD_EXPLORATION_BEST_PRACTICES.md

@@ -426,7 +426,7 @@ def get_job(job_id: str, request: Request):
 @app.delete("/api/jobs/{job_id}")
 def delete_job_ep(job_id: str, request: Request):
     user = user_from_request(request)
-    job = _job_store.get_job(job_id)
+    job = _job_store.get_job(job_id, user=user)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -446,7 +446,7 @@ def delete_job_ep(job_id: str, request: Request):
 @app.post("/api/jobs/{job_id}/cancel")
 def cancel_job_ep(job_id: str, request: Request):
     user = user_from_request(request)
-    job = _job_store.get_job(job_id)
+    job = _job_store.get_job(job_id, user=user)
 
     if not job:
         raise HTTPException(status_code=404)
@@ -460,7 +460,7 @@ def cancel_job_ep(job_id: str, request: Request):
     _job_store.cancel_job(job_id)
     _job_store.mark_canceled(job_id)
 
-    return {"ok": True, "job": _job_store.get_job(job_id)}
+    return {"ok": True, "job": _job_store.get_job(job_id, user=user)}
 
 
 ASSERT_RERUN_TYPES = {
@@ -870,7 +870,8 @@ def _rerun_assert_job(job_id: str, execution_type: str, payload: dict, bg: Backg
 
 @app.post("/api/jobs/{job_id}/rerun")
 def rerun_job(job_id: str, bg: BackgroundTasks, request: Request):
-    job = _job_store.get_job(job_id)
+    user = user_from_request(request)
+    job = _job_store.get_job(job_id, user=user)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -878,7 +879,6 @@ def rerun_job(job_id: str, bg: BackgroundTasks, request: Request):
     metadata = job.get("metadata") or {}
     payload = metadata.get("rerun_payload")
     execution_type = job.get("execution_type")
-    user = user_from_request(request)
 
     if not payload:
         if execution_type in {"quick_run", "create_persona"} and metadata.get("description"):

@@ -311,22 +311,23 @@ export default function ApiAssertionsPanel({
                 <p>Configure a driver profile, set your expected value and operator, then run — you get a clear PASS or FAIL with per-coverage breakdown.</p>
               </div>
 
-              <div className="suite-form-grid">
+              <div className="suite-form-grid dense">
                 <FieldSelect
                   label="Driver profile"
                   value={assertBuilder.driverProfile}
                   onChange={v => updateAssertBuilder('driverProfile', v)}
                   options={DRIVER_PROFILES.map(i => ({value: i.value, label: i.label}))}
                 />
-                <FieldInput
-                  label="Exact age"
-                  value={assertBuilder.customAge}
-                  disabled={assertBuilder.driverProfile !== 'custom'}
-                  onChange={v => updateAssertBuilder('customAge', v)}
-                  type="number"
-                  min="16"
-                  max="90"
-                />
+                {assertBuilder.driverProfile === 'custom' && (
+                  <FieldInput
+                    label="Exact age"
+                    value={assertBuilder.customAge}
+                    onChange={v => updateAssertBuilder('customAge', v)}
+                    type="number"
+                    min="16"
+                    max="90"
+                  />
+                )}
                 <FieldSelect
                   label="Coverage"
                   value={assertBuilder.coverage}
@@ -357,7 +358,7 @@ export default function ApiAssertionsPanel({
                 <Target size={15}/>
                 Assertion
               </div>
-              <div className="suite-form-grid">
+              <div className="suite-form-grid dense">
                 <FieldSelect
                   label="Assertion type"
                   value={assertType}

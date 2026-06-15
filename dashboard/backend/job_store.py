@@ -8,6 +8,14 @@ _jobs: dict = {}
 _lock = threading.Lock()
 _cancel_flags: dict[str, bool] = {}
 
+
+def _can_access_job(job: dict | None, user: dict | None = None) -> bool:
+    if not job:
+        return False
+    if user is None or user.get("role") == "admin":
+        return True
+    return job.get("created_by") == user.get("id")
+
 def cancel_job(jid: str):
     with _lock:
         _cancel_flags[jid] = True
@@ -120,7 +128,8 @@ def get_job(jid: str, user: dict | None = None) -> dict | None:
             _jobs[jid] = persisted
         return persisted
     with _lock:
-        return _jobs.get(jid)
+        job = _jobs.get(jid)
+        return job if _can_access_job(job, user=user) else None
 
 
 def list_jobs(user: dict | None = None) -> list:
@@ -131,7 +140,8 @@ def list_jobs(user: dict | None = None) -> list:
                 _jobs[job["id"]] = job
         return persisted
     with _lock:
-        return sorted(_jobs.values(), key=lambda j: j["started"], reverse=True)
+        visible_jobs = [job for job in _jobs.values() if _can_access_job(job, user=user)]
+        return sorted(visible_jobs, key=lambda j: j["started"], reverse=True)
 
 
 def delete_job(jid: str, user: dict | None = None) -> bool:

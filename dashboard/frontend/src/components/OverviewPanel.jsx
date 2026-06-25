@@ -4,14 +4,12 @@ import {
     CheckCircle2,
     Sparkles,
 } from 'lucide-react'
+import {getJobStatusCounts} from '../utils/jobStatus'
 import {shouldShowRerunAction} from '../utils/jobRerun'
 import {fullJobTitle, jobDisplayLabel} from '../utils/jobDisplay'
 
 export default function OverviewPanel({backendOk, jobs, onOpenReport, onCancelJob, onRerunJob}) {
-    const completed = jobs.filter(job => job.status === 'done').length
-    const running = jobs.filter(job => job.status === 'running').length
-    const failed = jobs.filter(job => job.status === 'error').length
-    const canceled = jobs.filter(job => job.status === 'canceled').length
+    const {completed, failed, canceled, running} = getJobStatusCounts(jobs)
     const feedItems = buildActivityFeed(jobs)
 
     return (

@@ -69,7 +69,7 @@ export default function App() {
     const [navCollapsed, setNavCollapsed] = useState(false)
     const [navMobileOpen, setNavMobileOpen] = useState(false)
     const [isNarrowNav, setIsNarrowNav] = useState(false)
-    const [validationTab, setValidationTab] = useState('sweep')
+    const [validationTab, setValidationTab] = useState('assert')
     const [validationHistoryFilter, setValidationHistoryFilter] = useState('all')
     const [validationExpandedReportId, setValidationExpandedReportId] = useState(null)
     const [chatView, setChatView] = useState(() => localStorage.getItem('chatView') || 'sidebar')

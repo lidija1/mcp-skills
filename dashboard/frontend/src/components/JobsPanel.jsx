@@ -2,7 +2,7 @@ import {canRerunJob, inferExecutionType, shouldShowRerunAction} from '../utils/j
 import {resolveJobLobDisplay, sortLobGroupKeys} from '../utils/jobLob'
 import {fullJobTitle, jobDisplayLabel} from '../utils/jobDisplay'
 import {useEffect, useState} from 'react'
-import { getDisplayStatus } from '../utils/jobStatus.js'
+import {getDisplayStatus, getJobStatusCounts} from '../utils/jobStatus.js'
 import {api} from '../utils/api'
 import ConfirmDeleteModal from './ConfirmDeleteModal'
 import {BriefcaseBusiness, CalendarDays, ChevronRight, FileText, RotateCw, Trash2, X} from 'lucide-react'
@@ -64,16 +64,7 @@ function canDeleteJob(job, currentUser) {
 export default function JobsPanel({jobs, currentUser, onSelect, onClearHistory, onRefreshJobs, onUpdateJob, onDeleteJob}) {
     const grouped = groupJobs(jobs)
     const total = jobs.length
-    // const running = jobs.filter(job => job.status === 'running').length
-    // const completed = jobs.filter(job => job.status === 'done').length
-    // const failed = jobs.filter(job => job.status === 'error').length
-    // const canceled = jobs.filter(job => job.status === 'canceled').length
-
-
-    const completed = jobs.filter(j => getDisplayStatus(j) === 'done').length
-    const failed = jobs.filter(j => getDisplayStatus(j) === 'failed' || getDisplayStatus(j) === 'error').length
-    const canceled = jobs.filter(j => getDisplayStatus(j) === 'canceled').length
-    const running = jobs.filter(j => getDisplayStatus(j) === 'running').length
+    const {completed, failed, canceled, running} = getJobStatusCounts(jobs)
 
 
     async function handleRerun(job) {

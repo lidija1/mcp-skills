@@ -74,6 +74,38 @@ const DEFAULT_BUILDER = {
   ownership: 'Owned',
 }
 
+const DIRECT_ASSERT_STATE_KEY = 'directAssertState'
+
+const DEFAULT_DIRECT_ASSERT_STATE = {
+  advancedOpen: false,
+  builder: DEFAULT_BUILDER,
+  type: 'premium',
+  expected: '',
+  operator: 'approx',
+  tolerance: '5',
+}
+
+function loadDirectAssertState() {
+  try {
+    const saved = localStorage.getItem(DIRECT_ASSERT_STATE_KEY)
+    if (!saved) return DEFAULT_DIRECT_ASSERT_STATE
+    const parsed = JSON.parse(saved)
+
+    return {
+      ...DEFAULT_DIRECT_ASSERT_STATE,
+      ...parsed,
+      builder: {
+        ...DEFAULT_BUILDER,
+        ...(parsed.builder || {}),
+      },
+      expected: parsed.expected ?? DEFAULT_DIRECT_ASSERT_STATE.expected,
+      tolerance: parsed.tolerance ?? DEFAULT_DIRECT_ASSERT_STATE.tolerance,
+    }
+  } catch {
+    return DEFAULT_DIRECT_ASSERT_STATE
+  }
+}
+
 export default function ApiAssertionsPanel({
   submitJob,
   activeTab = 'assert',
@@ -114,14 +146,26 @@ export default function ApiAssertionsPanel({
   }
 
   // Direct Assert tab
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [assertBuilder, setAssertBuilder] = useState(DEFAULT_BUILDER)
-  const [assertType, setAssertType] = useState('premium')
-  const [assertExpected, setAssertExpected] = useState('')
-  const [assertOperator, setAssertOperator] = useState('approx')
-  const [assertTolerance, setAssertTolerance] = useState('5')
+  const [initialDirectAssertState] = useState(loadDirectAssertState)
+  const [advancedOpen, setAdvancedOpen] = useState(initialDirectAssertState.advancedOpen)
+  const [assertBuilder, setAssertBuilder] = useState(initialDirectAssertState.builder)
+  const [assertType, setAssertType] = useState(initialDirectAssertState.type)
+  const [assertExpected, setAssertExpected] = useState(initialDirectAssertState.expected)
+  const [assertOperator, setAssertOperator] = useState(initialDirectAssertState.operator)
+  const [assertTolerance, setAssertTolerance] = useState(initialDirectAssertState.tolerance)
   const [loadingAssert, setLoadingAssert] = useState(false)
   const [submittedAssert, setSubmittedAssert] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem(DIRECT_ASSERT_STATE_KEY, JSON.stringify({
+      advancedOpen,
+      builder: assertBuilder,
+      type: assertType,
+      expected: assertExpected,
+      operator: assertOperator,
+      tolerance: assertTolerance,
+    }))
+  }, [advancedOpen, assertBuilder, assertExpected, assertOperator, assertTolerance, assertType])
 
   const handleRunAssertFlow = async () => {
     const expected = parseFloat(assertExpected)

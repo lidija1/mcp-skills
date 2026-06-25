@@ -6235,6 +6235,66 @@ code.asr-val-code.fail {
     background: var(--surface-soft);
 }
 
+:is([data-theme='dark'], [data-theme='black']) .help-backdrop {
+    background: rgba(2, 6, 23, 0.72);
+    backdrop-filter: blur(6px);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-modal {
+    box-shadow: 0 28px 72px rgba(0, 0, 0, 0.46);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-modal-header {
+    background: color-mix(in srgb, var(--surface) 90%, var(--surface-soft));
+    border-color: var(--border);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-modal-close:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--surface-soft) 72%, var(--blue) 28%);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-section {
+    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+    border-color: color-mix(in srgb, var(--border) 86%, var(--blue) 14%);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-section h3 {
+    color: color-mix(in srgb, var(--blue) 82%, var(--text));
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-field-tips {
+    border-color: var(--border);
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-field-tips strong {
+    color: color-mix(in srgb, var(--text) 92%, var(--blue));
+}
+
+:is([data-theme='dark'], [data-theme='black']) .help-note {
+    color: color-mix(in srgb, var(--text) 90%, var(--blue));
+    background: color-mix(in srgb, var(--blue-soft) 62%, var(--surface-soft));
+    border-color: color-mix(in srgb, var(--blue) 36%, var(--border));
+}
+
+[data-theme='black'] .help-backdrop {
+    background: rgba(0, 0, 0, 0.82);
+}
+
+[data-theme='black'] .help-modal {
+    background: #050505;
+    box-shadow: 0 28px 76px rgba(0, 0, 0, 0.74);
+}
+
+[data-theme='black'] .help-section {
+    background: #0b0b0c;
+    border-color: #242428;
+}
+
+[data-theme='black'] .help-note {
+    background: rgba(147, 197, 253, 0.12);
+}
+
 :is([data-theme='dark'], [data-theme='black']) .backend-chip {
     color: #bbf7d0;
     background: rgba(22, 163, 74, 0.14);
@@ -10344,4 +10404,3 @@ button.jobs-group-row {
         display: none;
     }
 }
-

@@ -8,13 +8,21 @@ import sqlite3
 import time
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 import re
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _BACKEND_DIR = Path(__file__).resolve().parent
 _DEFAULT_DB = _BACKEND_DIR / "data" / "dashboard.db"
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_PROJECT_ROOT / ".env", override=False)
+except Exception:
+    pass
+_DATABASE_URL = os.environ.get("DASHBOARD_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
+_USE_POSTGRES = _DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 
 def _resolve_db_path() -> Path:
@@ -30,13 +38,110 @@ def _resolve_db_path() -> Path:
 
 
 DB_PATH = _resolve_db_path()
-# provera
-print("DB PATH:", DB_PATH.resolve())
-print("ACTIVE DB:", DB_PATH.resolve())
+if _USE_POSTGRES:
+    print("ACTIVE DB: PostgreSQL")
+else:
+    print("DB PATH:", DB_PATH.resolve())
+    print("ACTIVE DB:", DB_PATH.resolve())
 _current_user: ContextVar[dict[str, Any] | None] = ContextVar("dashboard_current_user", default=None)
 
 
-def connect() -> sqlite3.Connection:
+def active_db_label() -> str:
+    return "PostgreSQL" if _USE_POSTGRES else str(DB_PATH)
+
+
+def _translate_sql(query: str) -> str:
+    sql = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    sql = re.sub(r"\bREAL\b", "DOUBLE PRECISION", sql)
+    sql = sql.replace("INSERT OR REPLACE INTO executions", "INSERT INTO executions")
+    if "INSERT INTO executions" in sql and "ON CONFLICT" not in sql:
+        sql = sql.rstrip()
+        sql += """
+            ON CONFLICT (id) DO UPDATE SET
+                execution_type = EXCLUDED.execution_type,
+                execution_name = EXCLUDED.execution_name,
+                status = EXCLUDED.status,
+                created_by = EXCLUDED.created_by,
+                created_at = EXCLUDED.created_at,
+                updated_at = EXCLUDED.updated_at,
+                logs_json = EXCLUDED.logs_json,
+                metadata_json = EXCLUDED.metadata_json
+        """
+
+    if (
+        sql.lstrip().upper().startswith("INSERT INTO")
+        and "RETURNING" not in sql.upper()
+        and any(table in sql for table in ("chat_sessions", "chat_messages", "saved_suites", "assertion_results"))
+    ):
+        sql = sql.rstrip() + " RETURNING id"
+
+    return sql.replace("?", "%s")
+
+
+class _PostgresCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.lastrowid = None
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is not None and "id" in row:
+            self.lastrowid = row["id"]
+        return row
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+
+class _PostgresConnection:
+    def __init__(self):
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:
+            raise RuntimeError(
+                "PostgreSQL support requires psycopg. Install backend requirements first: "
+                "pip install -r dashboard/backend/requirements.txt"
+            ) from exc
+        self._conn = psycopg.connect(_DATABASE_URL, row_factory=dict_row)
+
+    def __enter__(self):
+        self._conn.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._conn.__exit__(exc_type, exc, tb)
+
+    def execute(self, query: str, params: Iterable[Any] | None = None):
+        cursor = self._conn.execute(_translate_sql(query), params or ())
+        wrapped = _PostgresCursor(cursor)
+        is_insert = query.lstrip().upper().startswith("INSERT")
+        column_name = getattr(cursor.description[0], "name", None) if cursor.description else None
+        if is_insert and cursor.description and len(cursor.description) == 1 and column_name == "id":
+            row = wrapped.fetchone()
+            if row is not None:
+                wrapped._cursor = _SingleRowCursor(row)
+        return wrapped
+
+
+class _SingleRowCursor:
+    def __init__(self, row):
+        self._row = row
+
+    def fetchone(self):
+        row = self._row
+        self._row = None
+        return row
+
+    def fetchall(self):
+        row = self.fetchone()
+        return [] if row is None else [row]
+
+
+def connect() -> sqlite3.Connection | _PostgresConnection:
+    if _USE_POSTGRES:
+        return _PostgresConnection()
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -175,6 +280,7 @@ def init_db() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_updated ON chat_sessions(user_id, updated_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created ON chat_messages(chat_session_id, created_at)")
+        _ensure_postgres_numeric_precision(conn)
 
 
 def _chat_title_from_message(message: str, max_chars: int = 56) -> str:
@@ -490,13 +596,55 @@ def _row_to_assertion_result(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
-    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if _USE_POSTGRES:
+        definition = re.sub(r"\bREAL\b", "DOUBLE PRECISION", definition)
+    if _USE_POSTGRES:
+        rows = conn.execute(
+            """
+            SELECT column_name AS name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = %s
+            """,
+            (table,),
+        ).fetchall()
+    else:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    columns = {row["name"] for row in rows}
     if column not in columns:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+def _ensure_postgres_numeric_precision(conn: sqlite3.Connection) -> None:
+    if not _USE_POSTGRES:
+        return
+
+    columns = {
+        "users": ["created_at"],
+        "sessions": ["created_at", "expires_at", "revoked_at"],
+        "executions": ["created_at", "updated_at", "finished_at"],
+        "saved_suites": ["created_at"],
+        "assertion_results": ["expected_value", "actual_value", "tolerance_pct", "created_at"],
+        "chat_sessions": ["created_at", "updated_at"],
+        "chat_messages": ["created_at"],
+    }
+    for table, table_columns in columns.items():
+        for column in table_columns:
+            conn.execute(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE DOUBLE PRECISION")
+
+
 def _migrate_legacy_password_column(conn: sqlite3.Connection) -> None:
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+    if _USE_POSTGRES:
+        rows = conn.execute(
+            """
+            SELECT column_name AS name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = %s
+            """,
+            ("users",),
+        ).fetchall()
+    else:
+        rows = conn.execute("PRAGMA table_info(users)").fetchall()
+    columns = {row["name"] for row in rows}
     if "password" in columns and "password_hash" in columns:
         conn.execute(
             "UPDATE users SET password_hash = password WHERE (password_hash IS NULL OR password_hash = '') AND password IS NOT NULL"

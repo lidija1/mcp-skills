@@ -1,0 +1,6 @@
+
+> insurance-dashboard@1.0.2 serve
+> node serve-dist.mjs
+
+Frontend preview running at http://127.0.0.1:5173
+Proxying API requests to http://127.0.0.1:8000

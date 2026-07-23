@@ -1,0 +1,19 @@
+{
+  "archetypes": [
+    {"name": "young_driver", "aliases": ["under 25"], "description": "DOB between @@UNDER_25_CUTOFF@@ and today (age 19-24)", "summary": "under 25, potential SR-22/license issues, UW referral likely"},
+    {"name": "teen_driver", "description": "DOB ~16-18 years ago", "summary": "16-18 years old, first-time driver"},
+    {"name": "high_risk_driver", "description": "SR22=\"Yes\", LicenseStatus=\"Revoked\"", "summary": "SR-22 + revoked licence, strong UW trigger"},
+    {"name": "triple_risk", "description": "SR22=\"Yes\", LicenseStatus=\"Revoked\", DOB after @@UNDER_25_CUTOFF@@", "summary": "SR-22 + revoked licence + under 25, all three UW triggers"},
+    {"name": "clean_standard", "description": "SR22=\"No\", LicenseStatus=\"Active License\", DamageInfo=\"No\"", "summary": "middle-aged driver, clean record, owned vehicle"},
+    {"name": "senior_driver", "description": "DOB ~65-80 years ago, clean record", "summary": "65-80 years old, clean record, commute use"},
+    {"name": "business_driver", "description": "VehicleUse=\"Business\", EmploymentCategory=\"Employed\"", "summary": "business-use vehicle, employed, moderate risk"},
+    {"name": "leased_luxury", "description": "Ownership=\"Leased\", LossPayeeType=\"Leased\", LossPayeeName=\"BMW Financial Services\"", "summary": "leased BMW, financed, loss payee required"},
+    {"name": "multiple_accidents", "description": "DamageInfo=\"Yes\", DescribeDamage=\"Multiple prior accident damage on front and rear bumper\"", "summary": "pre-existing vehicle damage, prior claims"},
+    {"name": "full_coverage", "description": "PolicyCoverage=\"Platinum\""},
+    {"name": "minimum_coverage", "description": "PolicyCoverage=\"Bronze\""},
+    {"name": "good_student", "description": "DOB after @@UNDER_25_CUTOFF@@ (age 19-24), EmploymentCategory=\"Student\", FullTimeStudent=\"Yes\", VehicleWithStudentAtSchool=\"No\", GoodStudent=\"Yes\""},
+    {"name": "defensive_driver", "description": "DefensiveDriver=\"Yes\" (any age)"},
+    {"name": "low_mileage_commuter", "description": "VehicleUse=\"Commute\", DistanceToWork=\"5\""},
+    {"name": "high_mileage_commuter", "description": "VehicleUse=\"Commute\", DistanceToWork=\"50\""}
+  ]
+}

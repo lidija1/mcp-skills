@@ -14,7 +14,6 @@ from typing import Any, Callable
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
-
 _DASHBOARD_BACKEND = _PROJECT_ROOT / "dashboard" / "backend"
 if str(_DASHBOARD_BACKEND) not in sys.path:
     sys.path.insert(0, str(_DASHBOARD_BACKEND))
@@ -23,7 +22,7 @@ import job_store
 
 from dotenv import load_dotenv  # noqa: E402
 
-load_dotenv(_PROJECT_ROOT / "..env")
+load_dotenv(_PROJECT_ROOT / ".env")
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 

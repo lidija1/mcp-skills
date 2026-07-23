@@ -1,0 +1,41 @@
+{
+  "testCases": [
+    {
+      "TC_ID": "RUN_E2E_20260724131000",
+      "CustomerType": "Individual",
+      "FirstName": "Daniel",
+      "LastName": "Reed",
+      "DOB": "07/24/1998",
+      "PhoneNum": "413-555-2810",
+      "Email": "daniel_20260724131000@uwtest.com",
+      "Address": "230 Old Taunton Ave",
+      "ZIP": "01101",
+      "State": "Massachusetts",
+      "City": "Springfield",
+      "Producer": "Janis Irey",
+      "EffectiveDate": "07/25/2026",
+      "Program": "Personal Auto",
+      "BillingMethod": "Direct Billed",
+      "PaymentPlan": "Pay In Full",
+      "FalseInfo": "No",
+      "DamageInfo": "No",
+      "Gender": "Male",
+      "MaritalStatus": "Single",
+      "DriverStatus": "Active (rated)",
+      "EmploymentCategory": "Employed",
+      "Occupation": "Professional/Managerial",
+      "LicenseStatus": "Active License",
+      "SR22": "No",
+      "VehicleType": "Private Passenger Auto",
+      "Year": "2018",
+      "Make": "BMW",
+      "Model": "M3",
+      "Spec": "Convertible 2-Door | 2WD | 4.0 Ltrs | 4x2",
+      "VehicleUse": "Pleasure",
+      "Ownership": "Owned",
+      "PolicyCoverage": "Gold",
+      "_lob": "auto",
+      "_persona_type": "clean_standard"
+    }
+  ]
+}

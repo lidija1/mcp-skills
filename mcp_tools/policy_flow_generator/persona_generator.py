@@ -327,10 +327,10 @@ FIELD SCHEMA — use ONLY the listed values (case-sensitive)
   "Gender":             "Male" | "Female",
   "MaritalStatus":      "Single" | "Married" | "Divorced" | "Widowed",
   "DriverStatus":       "Active (rated)",
-  "EmploymentCategory": "Employed" | "Unemployed" | "Retired" | "Student",
+  "EmploymentCategory": "Employed" | "Unemployed" | "Retired" | "Disabled",
   "SR22":               "Yes" | "No",
   "SR22FilingState":    "Massachusetts",        // REQUIRED when SR22="Yes"; otherwise omit
-  "Occupation":         "Day Care",
+  "Occupation":         "Arts/Entertainment" | "Attorney/Paralegal,Etc." | "Banking/Mortgage" | "Business Owner/Self Employed" | "Carpenter" | "Clergy/Religion" | "Clerical/Administration" | "Computer Personnel" | "Construction" | "Contractor" | "Customer Service" | "Day Care" | "Delivery Person" | "Educator" | "Electrician" | "Engineer/Architect" | "Food Service" | "Health Care" | "Homemaker" | "Insurance" | "Landscaping/Lawn Care" | "Law Enforcement" | "Marketing" | "Military/Defense" | "Non Profit/Volunteer" | "Painter" | "Plumber" | "Professional/Managerial" | "Real Estate" | "Sales/lnside" | "Sales/Outside" | "Social/Mental Health Worker" | "Student" | "Truck Driver",
   "LicenseStatus":      "Active License" | "Suspended" | "Revoked",
   "LicenseYear":        string,    // 4-digit year first licensed; derive from DOB+16 (e.g. DOB 1990 → "2006"); cap at current year
   "LicenseNumber":      string,    // format "MA" + 8 zero-padded digits (e.g. "MA00012345")
@@ -872,7 +872,7 @@ def _fast_auto_persona(description: str, vehicle: dict | None) -> dict:
         ownership = "Financed"
 
     vehicle_use = "Business" if "business" in text else "Commute" if "commute" in text else "Pleasure"
-    employment = "Retired" if "retired" in text else "Student" if "student" in text or age < 23 else "Employed"
+    employment = "Retired" if "retired" in text else "Unemployed" if "unemployed" in text else "Employed" if "employed" in text else "Disabled"
     damage = _contains_any(text, "damage", "accident", "claim", "loss")
     if vehicle is None:
         sampled = _sample_vehicles(1)

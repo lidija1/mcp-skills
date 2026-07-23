@@ -54,6 +54,7 @@ dashboard/backend/data/dashboard.db
 !api_tests/guide.md
 !docs/ONESHIELD_APP_KNOWLEDGE.md
 !docs/ONESHIELD_EXPLORATION_BEST_PRACTICES.md
+!docs/DATABASE_GUIDE.md
 .policy_summary/
 
 .reports/

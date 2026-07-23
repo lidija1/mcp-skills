@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "generated_on": "2026-07-02",
+  "source_root": "C:\\Users\\LidijaDubovac\\OneDrive - Inforce Technologies\\Documents\\Projects\\sendbox-playwright",
+  "scope": {
+    "framework_type": "python",
+    "lob_filter": "all",
+    "feature_roots": [],
+    "code_roots": [
+      "tests"
+    ],
+    "test_data_roots": [],
+    "max_rows_per_sheet": 250
+  },
+  "summary": {
+    "lob_count": 1,
+    "feature_file_count": 0,
+    "scenario_count": 0,
+    "code_file_count": 2,
+    "java_file_count": 0,
+    "python_file_count": 2,
+    "workbook_count": 0
+  },
+  "lobs": {
+    "shared": {
+      "feature_files": [],
+      "code_files": [
+        "tests/test_api_assertion_parser.py",
+        "tests/test_persona_generator_fast.py"
+      ],
+      "page_classes": [
+        "tests/test_api_assertion_parser.py",
+        "tests/test_persona_generator_fast.py"
+      ],
+      "step_classes": [],
+      "scenario_count": 0,
+      "data_fields": [
+        "Loses",
+        "Ownership",
+        "PolicyCoverage",
+        "Program",
+        "Renovation",
+        "SR22",
+        "WindstormDeductable",
+        "_persona_type",
+        "_provider"
+      ],
+      "test_data_references": []
+    }
+  },
+  "features": [],
+  "code_files": [
+    {
+      "path": "tests/test_api_assertion_parser.py",
+      "language": "python",
+      "lob": "",
+      "class": "test_api_assertion_parser",
+      "classes": [],
+      "step_definitions": [],
+      "data_fields": [],
+      "method_names": [
+        "test_negative_underwriting_assertions_fail_on_underwriting_page",
+        "test_negative_underwriting_assertions_pass_on_premium_page_without_uw_rows",
+        "test_negative_underwriting_prompt_does_not_create_positive_page_assertion"
+      ]
+    },
+    {
+      "path": "tests/test_persona_generator_fast.py",
+      "language": "python",
+      "lob": "",
+      "class": "test_persona_generator_fast",
+      "classes": [],
+      "step_definitions": [],
+      "data_fields": [
+        "Loses",
+        "Ownership",
+        "PolicyCoverage",
+        "Program",
+        "Renovation",
+        "SR22",
+        "WindstormDeductable",
+        "_persona_type",
+        "_provider"
+      ],
+      "method_names": [
+        "_model_persona",
+        "fail_model",
+        "test_auto_model_output_is_validated_and_normalized",
+        "test_batch_personas_do_not_fall_back_when_model_fails",
+        "test_homeowner_model_output_is_validated",
+        "test_invalid_model_output_returns_validation_error_without_fallback",
+        "test_model_failure_returns_error_without_fallback"
+      ]
+    }
+  ],
+  "java_files": [],
+  "python_files": [
+    {
+      "path": "tests/test_api_assertion_parser.py",
+      "language": "python",
+      "lob": "",
+      "class": "test_api_assertion_parser",
+      "classes": [],
+      "step_definitions": [],
+      "data_fields": [],
+      "method_names": [
+        "test_negative_underwriting_assertions_fail_on_underwriting_page",
+        "test_negative_underwriting_assertions_pass_on_premium_page_without_uw_rows",
+        "test_negative_underwriting_prompt_does_not_create_positive_page_assertion"
+      ]
+    },
+    {
+      "path": "tests/test_persona_generator_fast.py",
+      "language": "python",
+      "lob": "",
+      "class": "test_persona_generator_fast",
+      "classes": [],
+      "step_definitions": [],
+      "data_fields": [
+        "Loses",
+        "Ownership",
+        "PolicyCoverage",
+        "Program",
+        "Renovation",
+        "SR22",
+        "WindstormDeductable",
+        "_persona_type",
+        "_provider"
+      ],
+      "method_names": [
+        "_model_persona",
+        "fail_model",
+        "test_auto_model_output_is_validated_and_normalized",
+        "test_batch_personas_do_not_fall_back_when_model_fails",
+        "test_homeowner_model_output_is_validated",
+        "test_invalid_model_output_returns_validation_error_without_fallback",
+        "test_model_failure_returns_error_without_fallback"
+      ]
+    }
+  ],
+  "workbooks": []
+}
